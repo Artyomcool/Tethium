@@ -78,9 +78,10 @@ public final class SessionStore implements AutoCloseable {
                 discardAutonomousQueue(id);execute("INSERT INTO session_autonomy VALUES(?,?,?,'active','',?) ON CONFLICT(session_id) DO UPDATE SET goal_id=excluded.goal_id,goal=excluded.goal,state='active',reason='',updated_at=excluded.updated_at",id,UUID.randomUUID().toString(),goal.strip(),System.currentTimeMillis());
             }else{
                 if(previous.path("state").asText().equals("off"))return previous;
-                if(!action.equals("pause")&&!Objects.equals(goalId,previous.path("goalId").asText()))throw new IllegalArgumentException("Цель уже изменилась; перечитайте её состояние");
+                if(!Set.of("pause","disable").contains(action)&&!Objects.equals(goalId,previous.path("goalId").asText()))throw new IllegalArgumentException("Цель уже изменилась; перечитайте её состояние");
                 state=switch(action){case "complete"->"complete";case "blocked"->"blocked";case "pause"->"paused";case "disable"->"off";case "wait"->"waiting";case "resume"->"active";default->throw new IllegalArgumentException("Неизвестное действие автономии");};
                 if(Set.of("complete","blocked","waiting").contains(state)&&(reason==null||reason.isBlank()))throw new IllegalArgumentException("Укажите результат или причину");
+                if(state.equals("waiting")){try(var q=connection.prepareStatement("SELECT 1 FROM jobs WHERE source_id=? AND status IN ('QUEUED','RUNNING') LIMIT 1")){q.setString(1,id);try(var r=q.executeQuery()){if(!r.next())state="active";}}}
                 execute("UPDATE session_autonomy SET state=?,reason=?,updated_at=? WHERE session_id=?",state,reason==null?"":reason,System.currentTimeMillis(),id);if(action.equals("resume"))execute("UPDATE session_autonomy SET goal_id=? WHERE session_id=?",UUID.randomUUID().toString(),id);if(!state.equals("active"))discardAutonomousQueue(id);
             }return autonomy(id);
         });

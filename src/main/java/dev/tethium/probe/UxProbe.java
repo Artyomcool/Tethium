@@ -107,6 +107,20 @@ public final class UxProbe {
                 call(frame[0], "stop", new Class<?>[]{});
             });
             await(() -> !state(client, id).path("sessions").get(0).path("running").asBoolean(), "stop"); Thread.sleep(700);
+            String pid=state(client,id).path("sessions").get(0).path("projectId").asText();
+            String other=client.post("/sessions",Json.object("projectId",pid,"title","Preview restoration")).path("id").asText();
+            Path manual=Files.copy(imagePath,workspace.resolve("unpublished image.png"));
+            SwingUtilities.invokeAndWait(()->call(frame[0],"openArtifact",new Class<?>[]{Path.class},manual));
+            await(()->image(frame[0])!=null,"manual preview");Thread.sleep(700);
+            SwingUtilities.invokeAndWait(()->call(frame[0],"selectSession",new Class<?>[]{String.class},other));
+            await(()->other.equals(frame[0].selectedSession())&&read(frame[0],"restoreViewFor")==null,"other session loaded");
+            SwingUtilities.invokeAndWait(()->{require(!Boolean.TRUE.equals(read(frame[0],"previewOpen")),"New session inherited old preview");call(frame[0],"selectSession",new Class<?>[]{String.class},id);});
+            await(()->Boolean.TRUE.equals(read(frame[0],"previewOpen"))&&image(frame[0])!=null,"preview restored after session switch");
+            SwingUtilities.invokeAndWait(()->{require(((JComboBox<?>)read(frame[0],"artifacts")).getSelectedItem().toString().contains("unpublished"),"Manual file selection lost");call(frame[0],"showPreview",new Class<?>[]{boolean.class},false);call(frame[0],"selectSession",new Class<?>[]{String.class},other);});
+            await(()->read(frame[0],"restoreViewFor")==null,"second switch");
+            SwingUtilities.invokeAndWait(()->call(frame[0],"selectSession",new Class<?>[]{String.class},id));
+            await(()->read(frame[0],"restoreViewFor")==null,"closed preview restored");
+            SwingUtilities.invokeAndWait(()->{require(!Boolean.TRUE.equals(read(frame[0],"previewOpen")),"Closed preview reopened");call(frame[0],"showPreview",new Class<?>[]{boolean.class},true);});
             var stopped = state(client, id);
             require(stopped.path("conversation").path("queued").size() == 2, "Stop lost queue");
             String longAddition = "Сохрани абзацы, чтобы было понятно, где заканчивается одна мысль и начинается следующая. ".repeat(8)

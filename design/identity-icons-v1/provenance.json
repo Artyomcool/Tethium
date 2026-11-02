@@ -1,0 +1,23 @@
+{
+  "generator": "built-in image_gen",
+  "calls": 1,
+  "atlas_size": [
+    1254,
+    1254
+  ],
+  "atlas_sha256": "2698026cb9d82fbc52c0a93546ae4ad58db60cb463bd73b545fabb9e34281a06",
+  "slicing": "alpha gaps, per-row columns; borders checked",
+  "active_projects": 4,
+  "unique_active_session_names": 5,
+  "reserved_icons": 7,
+  "display_size": 22,
+  "hidpi_sizes": [
+    22,
+    28,
+    33,
+    44,
+    66,
+    88
+  ],
+  "mapping": "src/main/resources/dev/tethium/desktop/identity/v1/names.properties"
+}

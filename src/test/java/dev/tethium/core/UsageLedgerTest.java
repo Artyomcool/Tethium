@@ -23,4 +23,16 @@ class UsageLedgerTest {
     @Test void lateHistoricalSamplesReplaceAnUnknownBaselineWithoutDoubleCounting()throws Exception{
         try(var ledger=new UsageLedger(dir.resolve("usage.db"))){ledger.sample("a","p","thread",300,count(300),count(50));assertEquals(50,ledger.report("all",null,null).path("tokens").asLong());ledger.sample("a","p","thread",100,count(100),count(100));ledger.sample("a","p","thread",250,count(250),count(150));assertEquals(300,ledger.report("all",null,null).path("tokens").asLong());assertFalse(ledger.report("all",null,null).path("partial").asBoolean());}
     }
+    @Test void cpuCountersSurviveHandoffAndNeverChargePreviousDaemonOwner()throws Exception{
+        long now=System.currentTimeMillis();Path db=dir.resolve("cpu.db");
+        try(var l=new UsageLedger(db)){
+            l.cpuSample("1:1",1,1,"a","p",100,now,"child",false);
+            l.cpuSample("1:1",1,1,"a","p",150,now+1,"child",false);
+            l.cpuSample("1:1",1,1,"a","p",150,now+2,"child",false);
+            l.cpuSample("1:1",1,1,"b","q",200,now+3,"shared",false);
+            l.cpuSample("1:1",1,1,"b","q",230,now+4,"shared",false);
+        }
+        Thread.sleep(10);
+        try(var l=new UsageLedger(db)){l.cpuSample("1:1",1,1,"b","q",250,now+5,"shared",false);var r=l.report("all","","");assertEquals(100,r.path("cpu").path("totalNanos").asLong());assertEquals(50,r.path("cpu").path("sessions").path("a").asLong());assertEquals(50,r.path("cpu").path("sessions").path("b").asLong());l.resetBoundary("manual");assertEquals(0,l.report("since-reset","","").path("cpu").path("totalNanos").asLong());assertEquals(100,l.report("all","","").path("cpu").path("totalNanos").asLong());}
+    }
 }

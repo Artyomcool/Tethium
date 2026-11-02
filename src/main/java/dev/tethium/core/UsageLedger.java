@@ -19,6 +19,9 @@ public final class UsageLedger implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS quota_wait(session_id TEXT PRIMARY KEY,auto_resume INTEGER NOT NULL DEFAULT 0,waiting INTEGER NOT NULL DEFAULT 0,blocked_at INTEGER NOT NULL DEFAULT 0)");
             s.execute("CREATE TABLE IF NOT EXISTS quota_redemptions(id TEXT PRIMARY KEY,result TEXT,created_at INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS quota_reset_boundaries(id TEXT PRIMARY KEY,at INTEGER NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS cpu_processes(process_key TEXT PRIMARY KEY,pid INTEGER NOT NULL,started INTEGER NOT NULL,session_id TEXT,project_id TEXT,counter INTEGER NOT NULL,at INTEGER NOT NULL,kind TEXT NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS cpu_samples(process_key TEXT NOT NULL,counter INTEGER NOT NULL,session_id TEXT NOT NULL,project_id TEXT NOT NULL,at INTEGER NOT NULL,nanos INTEGER NOT NULL,PRIMARY KEY(process_key,counter))");
+            s.execute("CREATE INDEX IF NOT EXISTS cpu_time ON cpu_samples(at)");
         }
     }
     private void exec(String sql,Object...args)throws SQLException{try(var q=db.prepareStatement(sql)){for(int i=0;i<args.length;i++)q.setObject(i+1,args[i]);q.executeUpdate();}}
@@ -40,11 +43,14 @@ public final class UsageLedger implements AutoCloseable {
             long end=w.path("resetsAt").asLong()*1000,duration=w.path("durationMinutes").asLong()*60_000;if(end<=at||duration<=0)continue;
             long start=end-duration;try(var q=db.prepareStatement("SELECT MAX(at) FROM quota_reset_boundaries WHERE at<=?")){q.setLong(1,at);try(var r=q.executeQuery()){if(r.next())start=Math.max(start,r.getLong(1));}}
             String id=bucket.path("id").asText()+":"+w.path("kind").asText()+":"+end+":"+start;
-            exec("INSERT OR IGNORE INTO usage_windows VALUES(?,?,?,?,?,?,?)",id,bucket.path("id").asText(),w.path("kind").asText(),bucket.path("label").asText()+" · "+(duration==604_800_000?"Неделя":duration/3_600_000+" ч"),start,end,at);
+            exec("INSERT INTO usage_windows VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET observed=MAX(observed,excluded.observed)",id,bucket.path("id").asText(),w.path("kind").asText(),bucket.path("label").asText()+" · "+(duration==604_800_000?"Неделя":duration/3_600_000+" ч"),start,end,at);
         }
     }
     public synchronized JsonNode report(String period,String project,String session)throws Exception{
-        var periods=Json.MAPPER.createArrayNode();
+        var periods=Json.MAPPER.createArrayNode();long resetStart=0,resetEnd=System.currentTimeMillis()+1;
+        try(var q=db.createStatement();var r=q.executeQuery("SELECT MAX(start),MIN(end) FROM usage_windows WHERE bucket='codex' AND observed=(SELECT MAX(observed) FROM usage_windows WHERE bucket='codex')")){if(r.next()){resetStart=r.getLong(1);resetEnd=Math.max(resetEnd,r.getLong(2));}}
+        try(var q=db.createStatement();var r=q.executeQuery("SELECT MAX(at) FROM quota_reset_boundaries")){if(r.next())resetStart=Math.max(resetStart,r.getLong(1));}
+        periods.add(Json.object("id","since-reset","label","С последнего сброса","start",resetStart,"end",resetEnd));
         try(var q=db.createStatement();var r=q.executeQuery("SELECT * FROM usage_windows ORDER BY end DESC,kind DESC")){while(r.next())periods.add(Json.object("id",r.getString("id"),"label",r.getString("label"),"start",r.getLong("start"),"end",r.getLong("end")));}
         long start=0,end=System.currentTimeMillis()+1;String selected="all";
         for(var p:periods)if((period==null||period.isBlank())&&selected.equals("all")||p.path("id").asText().equals(period)){selected=p.path("id").asText();start=p.path("start").asLong();end=p.path("end").asLong();if(period==null||period.isBlank())break;}
@@ -57,7 +63,29 @@ public final class UsageLedger implements AutoCloseable {
             if((project==null||project.isBlank()||project.equals(pid))&&(session==null||session.isBlank()||session.equals(sid))){own+=delta;input+=Math.max(0,r.getLong("di"));cached+=Math.max(0,r.getLong("dc"));output+=Math.max(0,r.getLong("doutput"));reasoning+=Math.max(0,r.getLong("dr"));points.merge(at/300_000*300_000,delta,Long::sum);}
         }}
         var series=Json.MAPPER.createArrayNode();long cumulative=0;for(var p:points.entrySet()){cumulative+=p.getValue();series.add(Json.object("at",p.getKey(),"tokens",cumulative));}
-        return Json.object("periods",periods,"period",selected,"start",start,"end",end,"total",total,"tokens",own,"share",total==0?0:100.0*own/total,"input",input,"cached",cached,"output",output,"reasoning",reasoning,"projects",byProject,"sessions",bySession,"series",series,"observedSince",first,"partial",partial,"scope","Токены разговоров Tethium; доля среди учтённых токенов, не процент квоты аккаунта");
+        var cpuProjects=new LinkedHashMap<String,Long>();var cpuSessions=new LinkedHashMap<String,Long>();var cpuPoints=new TreeMap<Long,Long>();long cpuTotal=0,cpuOwn=0,cpuSince=0;
+        try(var q=db.prepareStatement("SELECT * FROM cpu_samples WHERE at>=? AND at<? ORDER BY at")){q.setLong(1,start);q.setLong(2,end);try(var r=q.executeQuery()){while(r.next()){long n=r.getLong("nanos");cpuTotal+=n;String pid=r.getString("project_id"),sid=r.getString("session_id");cpuProjects.merge(pid,n,Long::sum);cpuSessions.merge(sid,n,Long::sum);if((project==null||project.isBlank()||project.equals(pid))&&(session==null||session.isBlank()||session.equals(sid))){cpuOwn+=n;cpuPoints.merge(r.getLong("at")/300_000*300_000,n,Long::sum);}}}}
+        try(var q=db.createStatement();var r=q.executeQuery("SELECT MIN(at) FROM cpu_samples")){if(r.next())cpuSince=r.getLong(1);}
+        var cpuSeries=Json.MAPPER.createArrayNode();long cpuCumulative=0;for(var point:cpuPoints.entrySet()){cpuCumulative+=point.getValue();cpuSeries.add(Json.object("at",point.getKey(),"nanos",cpuCumulative));}
+        var cpu=Json.object("totalNanos",cpuTotal,"nanos",cpuOwn,"share",cpuTotal==0?0:100.0*cpuOwn/cpuTotal,"projects",cpuProjects,"sessions",cpuSessions,"series",cpuSeries,"observedSince",cpuSince,"sampled",true);
+        return Json.object("cpu",cpu,"periods",periods,"period",selected,"start",start,"end",end,"total",total,"tokens",own,"share",total==0?0:100.0*own/total,"input",input,"cached",cached,"output",output,"reasoning",reasoning,"projects",byProject,"sessions",bySession,"series",series,"observedSince",first,"partial",partial,"scope","Токены разговоров Tethium; доля среди учтённых токенов, не процент квоты аккаунта");
+    }
+    private JsonNode sidebarCache;private long sidebarAt;
+    public synchronized JsonNode sidebar()throws Exception{
+        long now=System.currentTimeMillis();if(sidebarCache==null||now-sidebarAt>=3000){var r=report("since-reset","","");sidebarCache=Json.object("period",r.path("period"),"start",r.path("start"),"total",r.path("total"),"projects",r.path("projects"),"sessions",r.path("sessions"),"cpu",r.path("cpu"));sidebarAt=now;}return sidebarCache;
+    }
+    public synchronized java.util.List<JsonNode> cpuProcesses()throws SQLException{
+        var values=new ArrayList<JsonNode>();try(var q=db.createStatement();var r=q.executeQuery("SELECT * FROM cpu_processes")){while(r.next())values.add(Json.object("key",r.getString("process_key"),"pid",r.getLong("pid"),"started",r.getLong("started"),"session",r.getString("session_id"),"project",r.getString("project_id"),"counter",r.getLong("counter"),"at",r.getLong("at"),"kind",r.getString("kind")));}return values;
+    }
+    /** Persist a cumulative baseline and its measured delta atomically, so a new host cannot count it twice. */
+    public synchronized void cpuSample(String key,long pid,long started,String session,String project,long counter,long at,String kind,boolean fresh)throws Exception{
+        db.setAutoCommit(false);try{
+            Long previous=null;String owner=null;try(var q=db.prepareStatement("SELECT counter,session_id FROM cpu_processes WHERE process_key=?")){q.setString(1,key);try(var r=q.executeQuery()){if(r.next()){previous=r.getLong(1);owner=r.getString(2);}}}
+            long delta=previous==null?(fresh?counter:0):Math.max(0,counter-previous);
+            if(previous!=null&&!Objects.equals(owner,session))delta=0; // A shared daemon changed owners between observations; do not guess the boundary.
+            if(session!=null&&project!=null&&delta>0)exec("INSERT OR IGNORE INTO cpu_samples VALUES(?,?,?,?,?,?)",key,counter,session,project,at,delta);
+            exec("INSERT INTO cpu_processes VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(process_key) DO UPDATE SET session_id=excluded.session_id,project_id=excluded.project_id,counter=excluded.counter,at=excluded.at,kind=excluded.kind",key,pid,started,session,project,counter,at,kind);db.commit();
+        }catch(Exception e){db.rollback();throw e;}finally{db.setAutoCommit(true);}
     }
     public synchronized JsonNode waitState(String session)throws SQLException{
         try(var q=db.prepareStatement("SELECT * FROM quota_wait WHERE session_id=?")){q.setString(1,session);try(var r=q.executeQuery()){return r.next()?Json.object("autoResume",r.getBoolean("auto_resume"),"waiting",r.getBoolean("waiting"),"blockedAt",r.getLong("blocked_at")):Json.object("autoResume",false,"waiting",false,"blockedAt",0);}}
@@ -68,7 +96,7 @@ public final class UsageLedger implements AutoCloseable {
     public synchronized void beginRedemption(String id)throws SQLException{UUID.fromString(id);exec("INSERT OR IGNORE INTO quota_redemptions VALUES(?,NULL,?)",id,System.currentTimeMillis());}
     public synchronized void finishRedemption(String id,JsonNode result)throws SQLException{exec("UPDATE quota_redemptions SET result=? WHERE id=?",result.toString(),id);}
     public synchronized void resetBoundary(String id)throws SQLException{
-        long at=System.currentTimeMillis();try(var q=db.prepareStatement("SELECT at FROM quota_reset_boundaries WHERE id=?")){q.setString(1,id);try(var r=q.executeQuery()){if(r.next())return;}}
+        sidebarAt=0;long at=System.currentTimeMillis();try(var q=db.prepareStatement("SELECT at FROM quota_reset_boundaries WHERE id=?")){q.setString(1,id);try(var r=q.executeQuery()){if(r.next())return;}}
         exec("INSERT INTO quota_reset_boundaries VALUES(?,?)",id,at);exec("UPDATE usage_windows SET end=? WHERE start<? AND end>?",at,at,at);
     }
     @Override public synchronized void close()throws SQLException{db.close();}

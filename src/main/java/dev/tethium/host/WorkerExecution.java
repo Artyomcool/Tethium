@@ -101,6 +101,10 @@ final class WorkerExecution implements AutoCloseable {
         store.workerReply(run.runId(),sequence,answer);
         journal.reply(sequence,store.workerReply(run.runId(),sequence));
     }
+    CpuSampler.Root cpuRoot(String project)throws Exception{
+        String pid=journal.state("pid"),start=journal.state("processStart");
+        return pid==null||start==null?null:new CpuSampler.Root(Long.parseLong(pid),java.time.Instant.parse(start).toEpochMilli(),new CpuSampler.Owner(run.sessionId(),project));
+    }
     void cancel()throws Exception{journal.state("cancel","true");}
     @Override public void close()throws Exception{journal.close();}
 }

@@ -20,6 +20,7 @@ public final class HostService implements AutoCloseable {
     public static final String VERSION = "0.2.1";
     private final SessionStore store;
     private final UsageLedger usage;
+    private CpuSampler cpu;
     private final ScheduledExecutorService quotaMonitor=Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
     private long quotaObserved;
     private final HttpServer server;
@@ -80,6 +81,7 @@ public final class HostService implements AutoCloseable {
         }
         for (var project : store.projects()) for (var session : store.list(project.id())) schedule(session.id());
         quotaMonitor.scheduleWithFixedDelay(this::observeQuota,0,15,TimeUnit.SECONDS);
+        if(detachedEnabled)cpu=new CpuSampler(usage,()->{var roots=new ArrayList<CpuSampler.Root>();for(var entry:running.entrySet())try{var worker=entry.getValue().worker;if(worker!=null){var root=worker.cpuRoot(store.get(entry.getKey()).projectId());if(root!=null)roots.add(root);}}catch(Exception ignored){}return roots;});
     }
     public JsonNode descriptor() { return Json.object("port", server.getAddress().getPort(), "token", token, "version", VERSION, "protocol", BuildInfo.PROTOCOL, "build", BuildInfo.BUILD, "hostBuild", BuildInfo.HOST, "pid", ProcessHandle.current().pid()); }
     private JsonNode health() { return Json.object("version", VERSION, "protocol", BuildInfo.PROTOCOL, "build", BuildInfo.BUILD, "hostBuild", BuildInfo.HOST, "draining", draining, "running", running.size(), "workerProtocol",dev.tethium.worker.WorkerJournal.PROTOCOL,"handoffReady",running.values().stream().noneMatch(r->r.inProcessStarted)); }
@@ -230,7 +232,7 @@ public final class HostService implements AutoCloseable {
         var sessions = new ArrayList<JsonNode>();
         var projects = store.projects();
         for (var project : projects) for (var session : store.list(project.id())) sessions.add(sessionJson(session));
-        var result = Json.object("revision", revision.get(), "projects", projects, "sessions", sessions, "quota", quota.snapshot(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
+        var result = Json.object("resourceUsage",usage.sidebar(),"revision", revision.get(), "projects", projects, "sessions", sessions, "quota", quota.snapshot(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
         if (selected != null && sessions.stream().anyMatch(s -> s.path("id").asText().equals(selected))) {
             var messages = new ArrayList<SessionStore.Message>(); long cursor = 0;
             while (true) { var page = store.messages(selected, cursor, 1000); messages.addAll(page); if (page.size() < 1000) break; cursor = page.getLast().sequence(); }
@@ -464,6 +466,6 @@ public final class HostService implements AutoCloseable {
         if(!handoff){for(String id:running.keySet())stopRunning(id);}
         server.stop(0); workers.shutdown();
         if (!workers.awaitTermination(15, TimeUnit.SECONDS)) workers.shutdownNow();
-        usage.close();store.close();
+        if(cpu!=null)cpu.close();usage.close();store.close();
     }
 }

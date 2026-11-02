@@ -112,12 +112,13 @@ public final class WorkspaceFrame extends JFrame {
         addWindowListener(new WindowAdapter() { @Override public void windowClosing(WindowEvent e) { closeWindow(); } });
         poller.scheduleWithFixedDelay(this::poll, 0, 500, TimeUnit.MILLISECONDS);
     }
-    private static JTree tree() {
+    private JsonNode resourceUsage=Json.object();
+    private JTree tree() {
         var tree = new JTree(new DefaultMutableTreeNode("root")) { @Override public boolean getScrollableTracksViewportWidth() { return true; } };
-        tree.setRootVisible(false); tree.setShowsRootHandles(true); tree.setRowHeight(28);
+        tree.setRootVisible(false); tree.setShowsRootHandles(true); tree.setRowHeight(32);
         tree.setBorder(new EmptyBorder(Theme.GAP, Theme.GAP, Theme.GAP, Theme.GAP)); tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         tree.setCellRenderer(new DefaultTreeCellRenderer() {
-            private final JPanel rowPanel = new JPanel(new BorderLayout(Theme.GAP,0));
+            private final ResourceBars rowPanel = new ResourceBars();
             private final JLabel dot = new JLabel("●");
             @Override public Component getTreeCellRendererComponent(JTree t, Object value, boolean selected, boolean expanded, boolean leaf, int row, boolean focus) {
                 var label = (JLabel) super.getTreeCellRendererComponent(t, value, selected, expanded, leaf, row, focus);
@@ -125,7 +126,7 @@ public final class WorkspaceFrame extends JFrame {
                 var user = ((DefaultMutableTreeNode) value).getUserObject();
                 if (user instanceof Node n) {
                     label.setText(n.title); label.setFont(t.getFont().deriveFont(n.project ? Font.BOLD : Font.PLAIN));
-                    label.setIcon(Theme.icon(n.project ? "folder" : n.running ? "activity" : "session")); label.setIconTextGap(Theme.GAP);
+                    label.setIcon(IdentityIcons.of(n.project, n.title, n.path)); label.setIconTextGap(Theme.GAP);
                     label.setForeground(n.running ? Theme.ACCENT : n.status.equals("FAILED") ? Theme.RED : Theme.TEXT);
                     label.setToolTipText(n.path); label.setBorder(new EmptyBorder(0, Theme.UNIT, 0, Theme.UNIT));
                     rowPanel.removeAll(); rowPanel.setBackground(selected?Theme.SELECTED:Theme.SIDEBAR); rowPanel.add(label);
@@ -133,8 +134,12 @@ public final class WorkspaceFrame extends JFrame {
                     dot.setVisible(!n.attention.isEmpty()); dot.setBorder(new EmptyBorder(0,0,0,Theme.GAP));
                     dot.setToolTipText(n.attention.equals("question")?"Ждёт ответа":"Работа завершена · новый результат");
                     rowPanel.add(dot,BorderLayout.EAST); rowPanel.setToolTipText(n.path+(n.attention.isEmpty()?"":" · "+dot.getToolTipText()));
+                    String pid=n.project?n.id:sessions.getOrDefault(n.id,Json.object()).path("projectId").asText();
+                    rowPanel.share=ResourceBars.share(resourceUsage,n.id,n.project,pid);
+                    String hint=n.path+" · "+rowPanel.share.tooltip()+" · с последнего сброса; CPU измеряется с момента включения учёта";
+                    rowPanel.setToolTipText(hint);label.setToolTipText(hint);
                     rowPanel.setPreferredSize(null); var size=rowPanel.getPreferredSize();
-                    if(t.getWidth()>0)size.width=Math.min(size.width,Math.max(48,t.getWidth()-((DefaultMutableTreeNode)value).getLevel()*20-Theme.GUTTER));
+                    if(t.getWidth()>0)size.width=Math.max(48,t.getWidth()-((DefaultMutableTreeNode)value).getLevel()*20-Theme.GUTTER);
                     rowPanel.setPreferredSize(size);return rowPanel;
                 }
                 return label;
@@ -345,6 +350,7 @@ public final class WorkspaceFrame extends JFrame {
     private void apply(JsonNode state, String target) {
         if (disposed) return;
         quota.update(state.path("quota"));
+        if(!resourceUsage.equals(state.path("resourceUsage"))){resourceUsage=state.path("resourceUsage");active.repaint();inactive.repaint();}
         queueEditingAvailable = state.path("queueEditing").asBoolean();
         groupingAvailable=state.path("queueGrouping").asBoolean();imagesAvailable=state.path("imageAttachments").asBoolean();interruptAvailable=state.path("priorityInterrupt").asBoolean();
         runStatus.setGroupingAvailable(groupingAvailable);runStatus.setQueueEditing(queueEditingAvailable, pendingTake != null || grouping);

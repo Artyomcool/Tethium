@@ -1,0 +1,35 @@
+Use case: stylized-concept. Generate ONE square atlas, EXACTLY 16 columns by 16 rows, 256 small application sidebar icon style samples. Transparent RGBA background. This is a curated STYLE EXPLORATION, not a production uniform set. Each ROW uses a distinctly different rendering medium listed below; each COLUMN repeats the same recognizable subject, listed below. Keep all 256 cells in strict row-major order. One complete centered icon per cell, each fits inside middle 70% of cell, wide transparent gutters. No labels, numbers, text, grid lines, cards, background tiles, cast shadows or decorations. Calm sophisticated quiet desktop application identity. Muted dusty colors, sage, slate blue, warm sand, muted terracotta, pewter, dusty lavender. Clearly colored but low saturation. No neon, sparkles, glow, glossy candy, oversaturated game loot, busy tiny details. Clean readable silhouettes and sharp antialiased edges, minimal elements, ample breathing room. Different materials should be visibly distinct, not just color variations. Prefer light-mid value objects that read on charcoal. Maximum available resolution.
+Rows top to bottom:
+1. thin precise colored monoline
+2. rounded medium outline with tiny muted fill accents
+3. flat solid silhouettes with negative-space cuts
+4. two-tone flat editorial pictograms
+5. strict geometric Bauhaus minimal shapes
+6. soft rounded Scandinavian flat design
+7. isometric flat vector with only three planes
+8. folded matte paper origami
+9. shallow layered paper cutouts
+10. matte ceramic sculptural miniatures
+11. soft clay simple rounded volumes
+12. frosted translucent glass with muted edges
+13. brushed satin metal with restrained colored enamel
+14. woodcut stamp simplified clean shapes
+15. restrained pixel art with crisp intentional pixels
+16. low-poly faceted matte shapes
+Columns left to right, identically repeated for each of the 16 style rows:
+1. jellyfish
+2. phoenix bird
+3. six-sided dice with one sword
+4. ringed planet
+5. artist palette and brush
+6. three connected logic nodes
+7. shield with check mark
+8. ascending progress chart
+9. small toolbox
+10. speech bubble
+11. project folder
+12. magnifying glass over document
+13. experiment flask
+14. open book
+15. wrench and gear
+16. branching architecture nodes
