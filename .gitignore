@@ -1,0 +1,13 @@
+.gradle/
+build/
+.local/
+.idea/
+*.iml
+hs_err_pid*.log
+android/.gradle/
+android/**/build/
+android/local.properties
+src/main/resources/mobile/tethium.apk
+/.nimbalyst/transcript-images/
+/.nimbalyst/scratch/
+

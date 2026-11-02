@@ -1,0 +1,171 @@
+plugins {
+    id 'java'
+    id 'application'
+}
+
+group = 'dev.tethium'
+version = '0.1.0-SNAPSHOT'
+
+repositories { mavenCentral() }
+
+java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
+
+dependencies {
+    implementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
+    implementation 'org.xerial:sqlite-jdbc:3.50.3.0'
+    implementation 'me.friwi:jcefmaven:152.0.6'
+    implementation 'com.formdev:flatlaf:3.6.2'
+    implementation 'org.commonmark:commonmark:0.26.0'
+    implementation 'org.commonmark:commonmark-ext-gfm-tables:0.26.0'
+    implementation 'org.bouncycastle:bcpkix-jdk18on:1.80'
+    implementation 'com.google.zxing:core:3.5.3'
+    runtimeOnly 'org.slf4j:slf4j-nop:2.0.17'
+    testImplementation platform('org.junit:junit-bom:5.13.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+application {
+    mainClass = 'dev.tethium.desktop.DesktopMain'
+    applicationDefaultJvmArgs = ['--enable-native-access=ALL-UNNAMED']
+}
+
+def buildMetadata = layout.buildDirectory.dir('generated/buildInfo')
+tasks.register('generateBuildInfo') {
+    inputs.files(fileTree('src/main'), file('build.gradle'), file('scripts/enable_mobile_firewall.ps1'))
+    outputs.dir(buildMetadata)
+    doLast {
+        def digest = { files ->
+            def hash = java.security.MessageDigest.getInstance('SHA-256')
+            files.sort { it.path }.each { file -> hash.update(relativePath(file).getBytes('UTF-8')); hash.update(file.bytes) }
+            hash.digest().encodeHex().toString()
+        }
+        def all = (fileTree('src/main').files + file('build.gradle') + file('scripts/enable_mobile_firewall.ps1')) as List
+        def host = all.findAll { !it.path.replace('\\', '/').contains('/desktop/') && !it.path.replace('\\', '/').contains('/probe/') }
+        def output = new File(buildMetadata.get().asFile, 'tethium-build.properties'); output.parentFile.mkdirs()
+        output.text = "build=${digest(all)}\nhost=${digest(host)}\n"
+    }
+}
+sourceSets.main.resources.srcDir(buildMetadata)
+tasks.named('processResources') { dependsOn 'generateBuildInfo' }
+tasks.named('processResources') { from('scripts') { include 'enable_mobile_firewall.ps1'; into 'mobile' } }
+
+tasks.register('agentProbe', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.probe.AgentProbe'
+    args providers.gradleProperty('agent').getOrElse('codex')
+}
+
+tasks.register('host', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.host.HostMain'
+}
+
+tasks.register('desktopProbe', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.probe.DesktopProbe'
+    if (providers.gradleProperty('real').isPresent()) args 'real'
+}
+
+tasks.register('uxProbe', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.probe.UxProbe'
+}
+
+tasks.register('quotaProbe', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.probe.QuotaProbe'
+}
+tasks.register('mobileProbe', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.probe.MobileProbe'
+}
+
+tasks.register('styleProbe', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.probe.StyleProbe'
+}
+
+tasks.register('packageDesktop', Exec) {
+    dependsOn installDist
+    inputs.files(fileTree(layout.buildDirectory.dir('install/tethium/lib')))
+    inputs.file('build.gradle')
+    inputs.file('src/main/resources/dev/tethium/desktop/branding/tethium.ico')
+    def destination = providers.gradleProperty('desktopDestination').getOrElse('desktop')
+    outputs.dir(layout.buildDirectory.dir("${destination}/Tethium"))
+    doFirst {
+        if (!file('src/main/resources/mobile/tethium.apk').exists()) throw new GradleException('Build the Android installer first: powershell -File scripts/build_android.ps1')
+        def jdk = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }.get().metadata.installationPath.asFile
+        def output = layout.buildDirectory.dir("${destination}/Tethium").get().asFile.canonicalFile
+        def buildRoot = layout.buildDirectory.get().asFile.canonicalFile
+        if (!output.toPath().startsWith(buildRoot.toPath()) || output.name != 'Tethium') throw new GradleException('Invalid desktop output path')
+        def inUse = ProcessHandle.allProcesses().anyMatch { process ->
+            process.info().command().map { command -> new File(command).toPath().toAbsolutePath().normalize().startsWith(output.toPath()) }.orElse(false)
+        }
+        if (inUse) throw new GradleException('Desktop output is running. Choose a different -PdesktopDestination to preserve the active application.')
+        if (output.exists()) delete(output)
+        commandLine new File(jdk, 'bin/jpackage.exe'), '--type', 'app-image', '--name', 'Tethium',
+                '--dest', output.parentFile,
+                '--input', layout.buildDirectory.dir('install/tethium/lib').get().asFile,
+                '--main-jar', "tethium-${project.version}.jar", '--main-class', application.mainClass.get(),
+                '--app-version', '0.1.0', '--vendor', 'Tethium',
+                '--icon', file('src/main/resources/dev/tethium/desktop/branding/tethium.ico'),
+                '--jlink-options', '--strip-debug --no-man-pages --no-header-files',
+                '--java-options', '--enable-native-access=ALL-UNNAMED',
+                '--add-modules', 'java.base,java.desktop,java.sql,java.net.http,jdk.httpserver,java.management,java.naming,java.logging,jdk.crypto.ec,jdk.unsupported,jdk.management,java.security.jgss'
+    }
+}
+
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
+
+// The remote distribution has no HostMain, adapters, session store or CLI launcher entry point.
+tasks.register('remoteJar', Jar) {
+    dependsOn classes
+    archiveBaseName = 'tethium-remote'
+    from(sourceSets.main.output) {
+        include 'dev/tethium/desktop/**', 'dev/tethium/remote/**', 'dev/tethium/json/**', 'dev/tethium/artifact/**',
+                'dev/tethium/host/HostClient*', 'dev/tethium/host/AppPaths*', 'dev/tethium/update/BuildInfo*', 'dev/tethium/core/ImageAttachments*', 'tethium-build.properties'
+        exclude 'dev/tethium/desktop/DesktopMain*', 'dev/tethium/desktop/DesktopControl*', 'dev/tethium/desktop/MobileConnectDialog*'
+    }
+}
+tasks.register('remoteLibraries', Sync) {
+    dependsOn remoteJar
+    into layout.buildDirectory.dir('remote-libs')
+    from tasks.named('remoteJar')
+    from(configurations.runtimeClasspath) { exclude 'sqlite-*', 'bcpkix-*', 'bcprov-*', 'bcutil-*', 'core-3.5.3.jar' }
+}
+tasks.register('packageRemote', Exec) {
+    dependsOn remoteLibraries
+    def destination=providers.gradleProperty('remoteDestination').getOrElse('remote-client')
+    outputs.dir(layout.buildDirectory.dir("${destination}/Tethium Remote"))
+    doFirst {
+        def output=layout.buildDirectory.dir("${destination}/Tethium Remote").get().asFile.canonicalFile
+        if(!output.toPath().startsWith(layout.buildDirectory.get().asFile.canonicalFile.toPath()) || (output.exists() && output.list().length>0)) throw new GradleException('Choose a new remoteDestination; existing packages are retained')
+        if(output.exists()&&!output.delete())throw new GradleException('Cannot prepare empty remote output directory')
+        def jdk=javaToolchains.launcherFor {languageVersion=JavaLanguageVersion.of(25)}.get().metadata.installationPath.asFile
+        commandLine new File(jdk,'bin/jpackage.exe'),'--type','app-image','--name','Tethium Remote','--dest',output.parentFile,
+                '--input',layout.buildDirectory.dir('remote-libs').get().asFile,'--main-jar',tasks.named('remoteJar').get().archiveFileName.get(),
+                '--main-class','dev.tethium.desktop.RemoteMain','--app-version','0.3.0','--vendor','Tethium',
+                '--icon',file('src/main/resources/dev/tethium/desktop/branding/client/tethium.ico'),
+                '--java-options','--enable-native-access=ALL-UNNAMED','--jlink-options','--strip-debug --no-man-pages --no-header-files',
+                '--add-modules','java.base,java.desktop,java.sql,java.scripting,java.instrument,java.net.http,jdk.httpserver,jdk.zipfs,java.management,java.naming,java.logging,jdk.crypto.ec,jdk.unsupported,jdk.management,java.security.jgss'
+    }
+}
+tasks.withType(JavaExec).configureEach {
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+}
+test {
+    useJUnitPlatform()
+    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    systemProperty 'tethium.test.classpath', sourceSets.test.runtimeClasspath.asPath
+}
+
+tasks.register('previewProbe', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.probe.PreviewProbe'
+    jvmArgs '--add-exports=java.base/java.lang=ALL-UNNAMED',
+            '--add-exports=java.desktop/sun.awt=ALL-UNNAMED',
+            '--add-exports=java.desktop/sun.java2d=ALL-UNNAMED'
+}
+

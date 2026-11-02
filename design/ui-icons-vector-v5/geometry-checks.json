@@ -1,0 +1,450 @@
+[
+  {
+    "id": "project-folder",
+    "bounds": [
+      36,
+      52,
+      348,
+      332
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "project-add",
+    "bounds": [
+      36,
+      52,
+      348,
+      332
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "session-chat",
+    "bounds": [
+      36,
+      44,
+      348,
+      340
+    ],
+    "offset": [
+      0.0,
+      -0.5
+    ],
+    "scale": 1
+  },
+  {
+    "id": "session-running",
+    "bounds": [
+      36,
+      44,
+      348,
+      340
+    ],
+    "offset": [
+      0.0,
+      -0.5
+    ],
+    "scale": 1
+  },
+  {
+    "id": "session-new",
+    "bounds": [
+      36,
+      44,
+      348,
+      340
+    ],
+    "offset": [
+      0.0,
+      -0.5
+    ],
+    "scale": 1
+  },
+  {
+    "id": "session-archive",
+    "bounds": [
+      36,
+      52,
+      348,
+      332
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "artifact-gallery",
+    "bounds": [
+      36,
+      36,
+      348,
+      348
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "session-actions",
+    "bounds": [
+      52,
+      164,
+      332,
+      220
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "send-message",
+    "bounds": [
+      36,
+      36,
+      348,
+      348
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "stop-run",
+    "bounds": [
+      68,
+      68,
+      316,
+      316
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "attach-file",
+    "bounds": [
+      32,
+      42,
+      352,
+      343
+    ],
+    "offset": [
+      0.03076923076923066,
+      1.9384615384615387
+    ],
+    "scale": 0.9846153846153847
+  },
+  {
+    "id": "preview-expand",
+    "bounds": [
+      52,
+      52,
+      332,
+      332
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "preview-collapse",
+    "bounds": [
+      52,
+      52,
+      332,
+      332
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "artifact-reload",
+    "bounds": [
+      57,
+      37,
+      327,
+      347
+    ],
+    "offset": [
+      -0.3125,
+      0.0625
+    ],
+    "scale": 1
+  },
+  {
+    "id": "preview-close",
+    "bounds": [
+      84,
+      84,
+      300,
+      300
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "quota-gauge",
+    "bounds": [
+      36,
+      100,
+      348,
+      284
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "quota-refresh",
+    "bounds": [
+      68,
+      36,
+      316,
+      348
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "action-history",
+    "bounds": [
+      36,
+      36,
+      348,
+      348
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "queue-resume",
+    "bounds": [
+      36,
+      69,
+      348,
+      315
+    ],
+    "offset": [
+      0.0,
+      0.0625
+    ],
+    "scale": 1
+  },
+  {
+    "id": "queue-expand",
+    "bounds": [
+      36,
+      45,
+      348,
+      339
+    ],
+    "offset": [
+      0.0,
+      -1.4375
+    ],
+    "scale": 1
+  },
+  {
+    "id": "queue-delete",
+    "bounds": [
+      36,
+      36,
+      348,
+      348
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "queue-up",
+    "bounds": [
+      84,
+      36,
+      300,
+      348
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "queue-down",
+    "bounds": [
+      84,
+      36,
+      300,
+      348
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "queue-return-last",
+    "bounds": [
+      52,
+      68,
+      332,
+      316
+    ],
+    "offset": [
+      1.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "preview-fit",
+    "bounds": [
+      36,
+      36,
+      348,
+      348
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "preview-actual-size",
+    "bounds": [
+      52,
+      52,
+      332,
+      332
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "model-select",
+    "bounds": [
+      38,
+      38,
+      346,
+      346
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "reasoning-level",
+    "bounds": [
+      68,
+      44,
+      316,
+      340
+    ],
+    "offset": [
+      0.0,
+      0.5
+    ],
+    "scale": 1
+  },
+  {
+    "id": "send-separate",
+    "bounds": [
+      37,
+      37,
+      347,
+      347
+    ],
+    "offset": [
+      0.0625,
+      0.0625
+    ],
+    "scale": 1
+  },
+  {
+    "id": "send-append",
+    "bounds": [
+      36,
+      36,
+      348,
+      348
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "queue-pause",
+    "bounds": [
+      116,
+      52,
+      268,
+      332
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  },
+  {
+    "id": "session-rename",
+    "bounds": [
+      52,
+      52,
+      332,
+      332
+    ],
+    "offset": [
+      0.0,
+      0.0
+    ],
+    "scale": 1
+  }
+]

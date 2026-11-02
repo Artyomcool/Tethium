@@ -1,0 +1,66 @@
+[
+  {
+    "id": "folder",
+    "display_height": 20
+  },
+  {
+    "id": "session",
+    "display_height": 20
+  },
+  {
+    "id": "plus",
+    "display_height": 20
+  },
+  {
+    "id": "archive",
+    "display_height": 20
+  },
+  {
+    "id": "send",
+    "display_height": 20
+  },
+  {
+    "id": "stop",
+    "display_height": 20
+  },
+  {
+    "id": "image",
+    "display_height": 20
+  },
+  {
+    "id": "expand",
+    "display_height": 20
+  },
+  {
+    "id": "refresh",
+    "display_height": 20
+  },
+  {
+    "id": "close",
+    "display_height": 20
+  },
+  {
+    "id": "more",
+    "display_height": 20
+  },
+  {
+    "id": "play",
+    "display_height": 20
+  },
+  {
+    "id": "activity",
+    "display_height": 20
+  },
+  {
+    "id": "attachment",
+    "display_height": 20
+  },
+  {
+    "id": "settings",
+    "display_height": 20
+  },
+  {
+    "id": "help",
+    "display_height": 20
+  }
+]

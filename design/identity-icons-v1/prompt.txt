@@ -1,0 +1,17 @@
+Create ONE square 4x4 atlas of 16 distinct colorful premium desktop sidebar identity icons. Each icon appears at 20-24px in the app but needs high resolution source, render highest available resolution with each cell approx 300px. Cohesive sophisticated minimal softly faceted 3D illustration style: bold clean recognizable silhouette, restrained shallow depth, subtle planar shading, bright saturated coordinated colors, smooth antialiased edges, crisp large forms, very few small details. Transparent RGBA background, no labels, numbers, text, grid, cards or floor shadows. Exactly 4 columns 4 rows, equal invisible cells with 15% transparent gutters inside EVERY cell. One entire centered isolated icon per cell, nothing crosses its cell. Front-facing or slight 3/4 view, consistent upper-left lighting, no diffuse glow. Readable on dark and light background. Explicit left-to-right row order:
+Row 1, column 1: silver white low-poly jellyfish with graceful short ribbon tentacles, Tethium workspace.
+Row 1, column 2: fiery orange gold phoenix with uplifted wings, H3Phoenix2 game reverse engineering.
+Row 1, column 3: emerald and gold twenty-sided tabletop die with tiny crossed swords, SBG tabletop game.
+Row 1, column 4: deep blue planet with two bright gold stars and a violet orbital ring, UnclaimedStars space game.
+Row 2, column 1: violet and cyan artist palette with one clean diagonal paintbrush, graphics session.
+Row 2, column 2: cobalt and teal interlocking logic circuit blocks, logic programming session.
+Row 2, column 3: mint green shield with a bold ivory checkmark, verification session.
+Row 2, column 4: orange ascending bar chart with an upward gold arrow, progress session.
+Row 3, column 1: warm yellow small toolkit with a tiny blue screwdriver, small tasks session.
+Row 3, column 2: blue speech bubble with a white star, general new session.
+Row 3, column 3: teal open project folder with a gold tab, general project.
+Row 3, column 4: coral magnifying glass over a document, research session.
+Row 4, column 1: violet flask with cyan liquid, experiments session.
+Row 4, column 2: blue open book with gold bookmark, documentation session.
+Row 4, column 3: orange wrench and small gray gear, maintenance session.
+Row 4, column 4: turquoise branching nodes with one bright central node, architecture session.

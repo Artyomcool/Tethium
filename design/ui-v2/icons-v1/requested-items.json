@@ -1,0 +1,81 @@
+[
+  {
+    "id": "folder",
+    "display_height": 20,
+    "description": "open folder with short tab"
+  },
+  {
+    "id": "session",
+    "display_height": 20,
+    "description": "rounded conversation bubble with two short horizontal text strokes"
+  },
+  {
+    "id": "plus",
+    "display_height": 20,
+    "description": "simple plus sign"
+  },
+  {
+    "id": "archive",
+    "display_height": 20,
+    "description": "archive tray with lid and short centered handle"
+  },
+  {
+    "id": "send",
+    "display_height": 20,
+    "description": "arrow pointing straight upward"
+  },
+  {
+    "id": "stop",
+    "display_height": 20,
+    "description": "single solid softly rounded square stop symbol"
+  },
+  {
+    "id": "image",
+    "display_height": 20,
+    "description": "rounded landscape frame with one mountain line and small sun"
+  },
+  {
+    "id": "expand",
+    "display_height": 20,
+    "description": "four outward pointing corner brackets for fullscreen"
+  },
+  {
+    "id": "refresh",
+    "display_height": 20,
+    "description": "circular refresh arrow"
+  },
+  {
+    "id": "close",
+    "display_height": 20,
+    "description": "simple diagonal X close mark"
+  },
+  {
+    "id": "more",
+    "display_height": 20,
+    "description": "three horizontal solid dots"
+  },
+  {
+    "id": "check",
+    "display_height": 20,
+    "description": "solid right-pointing play triangle"
+  },
+  {
+    "id": "play",
+    "display_height": 20,
+    "description": "three vertical equal-width activity bars with different heights"
+  },
+  {
+    "id": "activity",
+    "display_height": 20,
+    "description": "diagonal paperclip"
+  },
+  {
+    "id": "attachment",
+    "display_height": 20,
+    "description": "simple gear with six teeth and circular center"
+  },
+  {
+    "id": "settings",
+    "display_height": 20
+  }
+]

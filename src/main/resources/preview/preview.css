@@ -1,0 +1,9 @@
+:root { color-scheme: dark; font: 16px system-ui,sans-serif; background:#111820; color:#e7edf4; }
+body { margin:0; } main { padding:40px; max-width:640px; }
+.eyebrow { color:#62d4b7; font-size:11px; letter-spacing:2px; }
+h1 { font-size:32px; font-weight:600; margin:18px 0 8px; }
+p { color:#9daec0; line-height:1.5; }
+.card { display:flex; align-items:center; gap:24px; background:#1b2734; border:1px solid #324253; border-radius:12px; margin:24px 0; padding:20px; }
+.card p { font-size:13px; } b { color:#62d4b7; }
+button { background:#2f665b; color:#fff; border:0; border-radius:6px; padding:10px 18px; font:inherit; }
+

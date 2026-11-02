@@ -1,0 +1,19 @@
+<resources>
+    <style name="TethiumTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:fontFamily">sans</item>
+        <item name="android:colorAccent">#B8ADFF</item>
+        <item name="android:windowBackground">#111318</item>
+        <item name="android:colorBackground">#1C2028</item>
+        <item name="android:textColorPrimary">#EDF0F7</item>
+        <item name="android:textColorSecondary">#A4ADBF</item>
+        <item name="android:statusBarColor">#111318</item>
+        <item name="android:navigationBarColor">#111318</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowActionModeOverlay">true</item>
+        <item name="android:buttonBarButtonStyle">@style/TethiumDialogButton</item>
+    </style>
+    <style name="TethiumDialogButton" parent="android:style/Widget.Material.Button.Borderless.Colored">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">48dp</item>
+    </style>
+</resources>

@@ -1,0 +1,4889 @@
+{
+  "method": "alpha-gap rows and independent per-row alpha-gap columns; all original RGBA retained",
+  "rows": [
+    0,
+    81,
+    156,
+    231,
+    307,
+    383,
+    457,
+    535,
+    613,
+    690,
+    765,
+    840,
+    915,
+    994,
+    1070,
+    1135,
+    1254
+  ],
+  "items": [
+    {
+      "id": "project-folder",
+      "region": [
+        0,
+        0,
+        90,
+        81
+      ],
+      "source_bounds": [
+        0,
+        4,
+        90,
+        81
+      ],
+      "pixel_size": [
+        98,
+        85
+      ]
+    },
+    {
+      "id": "project-add",
+      "region": [
+        90,
+        0,
+        170,
+        81
+      ],
+      "source_bounds": [
+        90,
+        0,
+        170,
+        81
+      ],
+      "pixel_size": [
+        88,
+        89
+      ]
+    },
+    {
+      "id": "session-chat",
+      "region": [
+        170,
+        0,
+        243,
+        81
+      ],
+      "source_bounds": [
+        170,
+        0,
+        243,
+        81
+      ],
+      "pixel_size": [
+        81,
+        89
+      ]
+    },
+    {
+      "id": "session-running",
+      "region": [
+        243,
+        0,
+        323,
+        81
+      ],
+      "source_bounds": [
+        243,
+        0,
+        323,
+        81
+      ],
+      "pixel_size": [
+        88,
+        89
+      ]
+    },
+    {
+      "id": "session-new",
+      "region": [
+        323,
+        0,
+        400,
+        81
+      ],
+      "source_bounds": [
+        323,
+        0,
+        400,
+        81
+      ],
+      "pixel_size": [
+        85,
+        89
+      ]
+    },
+    {
+      "id": "session-archive",
+      "region": [
+        400,
+        0,
+        475,
+        81
+      ],
+      "source_bounds": [
+        400,
+        0,
+        475,
+        81
+      ],
+      "pixel_size": [
+        83,
+        89
+      ]
+    },
+    {
+      "id": "artifact-gallery",
+      "region": [
+        475,
+        0,
+        551,
+        81
+      ],
+      "source_bounds": [
+        475,
+        0,
+        551,
+        81
+      ],
+      "pixel_size": [
+        84,
+        89
+      ]
+    },
+    {
+      "id": "session-actions",
+      "region": [
+        551,
+        0,
+        629,
+        81
+      ],
+      "source_bounds": [
+        551,
+        0,
+        629,
+        81
+      ],
+      "pixel_size": [
+        86,
+        89
+      ]
+    },
+    {
+      "id": "send-message",
+      "region": [
+        629,
+        0,
+        706,
+        81
+      ],
+      "source_bounds": [
+        629,
+        0,
+        706,
+        81
+      ],
+      "pixel_size": [
+        85,
+        89
+      ]
+    },
+    {
+      "id": "stop-run",
+      "region": [
+        706,
+        0,
+        782,
+        81
+      ],
+      "source_bounds": [
+        706,
+        0,
+        782,
+        81
+      ],
+      "pixel_size": [
+        84,
+        89
+      ]
+    },
+    {
+      "id": "attach-file",
+      "region": [
+        782,
+        0,
+        857,
+        81
+      ],
+      "source_bounds": [
+        782,
+        0,
+        857,
+        81
+      ],
+      "pixel_size": [
+        83,
+        89
+      ]
+    },
+    {
+      "id": "preview-expand",
+      "region": [
+        857,
+        0,
+        936,
+        81
+      ],
+      "source_bounds": [
+        857,
+        0,
+        936,
+        81
+      ],
+      "pixel_size": [
+        87,
+        89
+      ]
+    },
+    {
+      "id": "preview-collapse",
+      "region": [
+        936,
+        0,
+        1014,
+        81
+      ],
+      "source_bounds": [
+        936,
+        0,
+        1014,
+        81
+      ],
+      "pixel_size": [
+        86,
+        89
+      ]
+    },
+    {
+      "id": "artifact-reload",
+      "region": [
+        1014,
+        0,
+        1089,
+        81
+      ],
+      "source_bounds": [
+        1014,
+        0,
+        1089,
+        81
+      ],
+      "pixel_size": [
+        83,
+        89
+      ]
+    },
+    {
+      "id": "preview-close",
+      "region": [
+        1089,
+        0,
+        1168,
+        81
+      ],
+      "source_bounds": [
+        1089,
+        1,
+        1168,
+        81
+      ],
+      "pixel_size": [
+        87,
+        88
+      ]
+    },
+    {
+      "id": "quota-gauge",
+      "region": [
+        1168,
+        0,
+        1254,
+        81
+      ],
+      "source_bounds": [
+        1168,
+        0,
+        1254,
+        81
+      ],
+      "pixel_size": [
+        94,
+        89
+      ]
+    },
+    {
+      "id": "quota-refresh",
+      "region": [
+        0,
+        81,
+        89,
+        156
+      ],
+      "source_bounds": [
+        0,
+        81,
+        89,
+        156
+      ],
+      "pixel_size": [
+        97,
+        83
+      ]
+    },
+    {
+      "id": "action-history",
+      "region": [
+        89,
+        81,
+        169,
+        156
+      ],
+      "source_bounds": [
+        89,
+        81,
+        169,
+        156
+      ],
+      "pixel_size": [
+        88,
+        83
+      ]
+    },
+    {
+      "id": "queue-resume",
+      "region": [
+        169,
+        81,
+        242,
+        156
+      ],
+      "source_bounds": [
+        169,
+        81,
+        242,
+        156
+      ],
+      "pixel_size": [
+        81,
+        83
+      ]
+    },
+    {
+      "id": "queue-expand",
+      "region": [
+        242,
+        81,
+        320,
+        156
+      ],
+      "source_bounds": [
+        242,
+        81,
+        320,
+        156
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "queue-delete",
+      "region": [
+        320,
+        81,
+        398,
+        156
+      ],
+      "source_bounds": [
+        320,
+        81,
+        398,
+        156
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "queue-up",
+      "region": [
+        398,
+        81,
+        473,
+        156
+      ],
+      "source_bounds": [
+        398,
+        81,
+        473,
+        156
+      ],
+      "pixel_size": [
+        83,
+        83
+      ]
+    },
+    {
+      "id": "queue-down",
+      "region": [
+        473,
+        81,
+        550,
+        156
+      ],
+      "source_bounds": [
+        473,
+        81,
+        550,
+        156
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "queue-return-last",
+      "region": [
+        550,
+        81,
+        627,
+        156
+      ],
+      "source_bounds": [
+        550,
+        81,
+        627,
+        156
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "preview-fit",
+      "region": [
+        627,
+        81,
+        705,
+        156
+      ],
+      "source_bounds": [
+        627,
+        81,
+        705,
+        156
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "preview-actual-size",
+      "region": [
+        705,
+        81,
+        781,
+        156
+      ],
+      "source_bounds": [
+        705,
+        81,
+        781,
+        156
+      ],
+      "pixel_size": [
+        84,
+        83
+      ]
+    },
+    {
+      "id": "model-select",
+      "region": [
+        781,
+        81,
+        860,
+        156
+      ],
+      "source_bounds": [
+        781,
+        81,
+        860,
+        156
+      ],
+      "pixel_size": [
+        87,
+        83
+      ]
+    },
+    {
+      "id": "reasoning-level",
+      "region": [
+        860,
+        81,
+        935,
+        156
+      ],
+      "source_bounds": [
+        860,
+        81,
+        935,
+        156
+      ],
+      "pixel_size": [
+        83,
+        83
+      ]
+    },
+    {
+      "id": "send-separate",
+      "region": [
+        935,
+        81,
+        1013,
+        156
+      ],
+      "source_bounds": [
+        935,
+        81,
+        1013,
+        156
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "send-append",
+      "region": [
+        1013,
+        81,
+        1094,
+        156
+      ],
+      "source_bounds": [
+        1013,
+        81,
+        1094,
+        156
+      ],
+      "pixel_size": [
+        89,
+        83
+      ]
+    },
+    {
+      "id": "queue-pause",
+      "region": [
+        1094,
+        81,
+        1165,
+        156
+      ],
+      "source_bounds": [
+        1094,
+        81,
+        1165,
+        156
+      ],
+      "pixel_size": [
+        79,
+        83
+      ]
+    },
+    {
+      "id": "session-rename",
+      "region": [
+        1165,
+        81,
+        1254,
+        156
+      ],
+      "source_bounds": [
+        1165,
+        81,
+        1254,
+        156
+      ],
+      "pixel_size": [
+        97,
+        83
+      ]
+    },
+    {
+      "id": "project-open",
+      "region": [
+        0,
+        156,
+        89,
+        231
+      ],
+      "source_bounds": [
+        0,
+        156,
+        89,
+        231
+      ],
+      "pixel_size": [
+        97,
+        83
+      ]
+    },
+    {
+      "id": "project-remove",
+      "region": [
+        89,
+        156,
+        167,
+        231
+      ],
+      "source_bounds": [
+        89,
+        156,
+        167,
+        231
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "project-settings",
+      "region": [
+        167,
+        156,
+        241,
+        231
+      ],
+      "source_bounds": [
+        167,
+        156,
+        241,
+        231
+      ],
+      "pixel_size": [
+        82,
+        83
+      ]
+    },
+    {
+      "id": "project-pin",
+      "region": [
+        241,
+        156,
+        319,
+        231
+      ],
+      "source_bounds": [
+        241,
+        156,
+        319,
+        231
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "project-unpin",
+      "region": [
+        319,
+        156,
+        396,
+        231
+      ],
+      "source_bounds": [
+        319,
+        156,
+        396,
+        231
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "project-search",
+      "region": [
+        396,
+        156,
+        472,
+        231
+      ],
+      "source_bounds": [
+        396,
+        156,
+        472,
+        231
+      ],
+      "pixel_size": [
+        84,
+        83
+      ]
+    },
+    {
+      "id": "project-recent",
+      "region": [
+        472,
+        156,
+        550,
+        231
+      ],
+      "source_bounds": [
+        472,
+        156,
+        550,
+        231
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "project-import",
+      "region": [
+        550,
+        156,
+        627,
+        231
+      ],
+      "source_bounds": [
+        550,
+        156,
+        627,
+        231
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "project-export",
+      "region": [
+        627,
+        156,
+        704,
+        231
+      ],
+      "source_bounds": [
+        627,
+        156,
+        704,
+        231
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "project-root",
+      "region": [
+        704,
+        156,
+        782,
+        231
+      ],
+      "source_bounds": [
+        704,
+        156,
+        782,
+        231
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "project-branch",
+      "region": [
+        782,
+        156,
+        857,
+        231
+      ],
+      "source_bounds": [
+        782,
+        156,
+        857,
+        231
+      ],
+      "pixel_size": [
+        83,
+        83
+      ]
+    },
+    {
+      "id": "project-collapse",
+      "region": [
+        857,
+        156,
+        937,
+        231
+      ],
+      "source_bounds": [
+        857,
+        156,
+        937,
+        231
+      ],
+      "pixel_size": [
+        88,
+        83
+      ]
+    },
+    {
+      "id": "project-expand",
+      "region": [
+        937,
+        156,
+        1014,
+        231
+      ],
+      "source_bounds": [
+        937,
+        156,
+        1014,
+        231
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "project-favorite",
+      "region": [
+        1014,
+        156,
+        1089,
+        231
+      ],
+      "source_bounds": [
+        1014,
+        156,
+        1089,
+        231
+      ],
+      "pixel_size": [
+        83,
+        83
+      ]
+    },
+    {
+      "id": "project-terminal",
+      "region": [
+        1089,
+        156,
+        1168,
+        231
+      ],
+      "source_bounds": [
+        1089,
+        156,
+        1168,
+        231
+      ],
+      "pixel_size": [
+        87,
+        83
+      ]
+    },
+    {
+      "id": "project-status",
+      "region": [
+        1168,
+        156,
+        1254,
+        231
+      ],
+      "source_bounds": [
+        1168,
+        156,
+        1253,
+        231
+      ],
+      "pixel_size": [
+        93,
+        83
+      ]
+    },
+    {
+      "id": "session-duplicate",
+      "region": [
+        0,
+        231,
+        89,
+        307
+      ],
+      "source_bounds": [
+        0,
+        231,
+        89,
+        307
+      ],
+      "pixel_size": [
+        97,
+        84
+      ]
+    },
+    {
+      "id": "session-restore",
+      "region": [
+        89,
+        231,
+        166,
+        307
+      ],
+      "source_bounds": [
+        89,
+        231,
+        166,
+        307
+      ],
+      "pixel_size": [
+        85,
+        84
+      ]
+    },
+    {
+      "id": "session-delete",
+      "region": [
+        166,
+        231,
+        242,
+        307
+      ],
+      "source_bounds": [
+        166,
+        231,
+        242,
+        307
+      ],
+      "pixel_size": [
+        84,
+        84
+      ]
+    },
+    {
+      "id": "session-search",
+      "region": [
+        242,
+        231,
+        320,
+        307
+      ],
+      "source_bounds": [
+        242,
+        231,
+        320,
+        307
+      ],
+      "pixel_size": [
+        86,
+        84
+      ]
+    },
+    {
+      "id": "session-pin",
+      "region": [
+        320,
+        231,
+        396,
+        307
+      ],
+      "source_bounds": [
+        320,
+        231,
+        396,
+        307
+      ],
+      "pixel_size": [
+        84,
+        84
+      ]
+    },
+    {
+      "id": "session-unpin",
+      "region": [
+        396,
+        231,
+        472,
+        307
+      ],
+      "source_bounds": [
+        396,
+        231,
+        472,
+        307
+      ],
+      "pixel_size": [
+        84,
+        84
+      ]
+    },
+    {
+      "id": "session-export",
+      "region": [
+        472,
+        231,
+        550,
+        307
+      ],
+      "source_bounds": [
+        472,
+        231,
+        550,
+        307
+      ],
+      "pixel_size": [
+        86,
+        84
+      ]
+    },
+    {
+      "id": "session-import",
+      "region": [
+        550,
+        231,
+        627,
+        307
+      ],
+      "source_bounds": [
+        550,
+        231,
+        627,
+        307
+      ],
+      "pixel_size": [
+        85,
+        84
+      ]
+    },
+    {
+      "id": "session-activate",
+      "region": [
+        627,
+        231,
+        705,
+        307
+      ],
+      "source_bounds": [
+        627,
+        231,
+        705,
+        307
+      ],
+      "pixel_size": [
+        86,
+        84
+      ]
+    },
+    {
+      "id": "session-deactivate",
+      "region": [
+        705,
+        231,
+        784,
+        307
+      ],
+      "source_bounds": [
+        705,
+        231,
+        784,
+        307
+      ],
+      "pixel_size": [
+        87,
+        84
+      ]
+    },
+    {
+      "id": "session-fork",
+      "region": [
+        784,
+        231,
+        857,
+        307
+      ],
+      "source_bounds": [
+        784,
+        231,
+        857,
+        307
+      ],
+      "pixel_size": [
+        81,
+        84
+      ]
+    },
+    {
+      "id": "session-child",
+      "region": [
+        857,
+        231,
+        936,
+        307
+      ],
+      "source_bounds": [
+        857,
+        231,
+        936,
+        307
+      ],
+      "pixel_size": [
+        87,
+        84
+      ]
+    },
+    {
+      "id": "session-parent",
+      "region": [
+        936,
+        231,
+        1014,
+        307
+      ],
+      "source_bounds": [
+        936,
+        231,
+        1014,
+        307
+      ],
+      "pixel_size": [
+        86,
+        84
+      ]
+    },
+    {
+      "id": "session-link",
+      "region": [
+        1014,
+        231,
+        1090,
+        307
+      ],
+      "source_bounds": [
+        1014,
+        231,
+        1090,
+        307
+      ],
+      "pixel_size": [
+        84,
+        84
+      ]
+    },
+    {
+      "id": "session-copy-id",
+      "region": [
+        1090,
+        231,
+        1168,
+        307
+      ],
+      "source_bounds": [
+        1090,
+        231,
+        1168,
+        307
+      ],
+      "pixel_size": [
+        86,
+        84
+      ]
+    },
+    {
+      "id": "session-info",
+      "region": [
+        1168,
+        231,
+        1254,
+        307
+      ],
+      "source_bounds": [
+        1168,
+        231,
+        1254,
+        307
+      ],
+      "pixel_size": [
+        94,
+        84
+      ]
+    },
+    {
+      "id": "message-edit",
+      "region": [
+        0,
+        307,
+        89,
+        383
+      ],
+      "source_bounds": [
+        0,
+        307,
+        89,
+        383
+      ],
+      "pixel_size": [
+        97,
+        84
+      ]
+    },
+    {
+      "id": "message-copy",
+      "region": [
+        89,
+        307,
+        165,
+        383
+      ],
+      "source_bounds": [
+        89,
+        307,
+        165,
+        383
+      ],
+      "pixel_size": [
+        84,
+        84
+      ]
+    },
+    {
+      "id": "message-delete",
+      "region": [
+        165,
+        307,
+        241,
+        383
+      ],
+      "source_bounds": [
+        165,
+        307,
+        241,
+        383
+      ],
+      "pixel_size": [
+        84,
+        84
+      ]
+    },
+    {
+      "id": "message-retry",
+      "region": [
+        241,
+        307,
+        318,
+        383
+      ],
+      "source_bounds": [
+        241,
+        307,
+        318,
+        383
+      ],
+      "pixel_size": [
+        85,
+        84
+      ]
+    },
+    {
+      "id": "message-quote",
+      "region": [
+        318,
+        307,
+        396,
+        383
+      ],
+      "source_bounds": [
+        318,
+        307,
+        396,
+        383
+      ],
+      "pixel_size": [
+        86,
+        84
+      ]
+    },
+    {
+      "id": "message-reply",
+      "region": [
+        396,
+        307,
+        473,
+        383
+      ],
+      "source_bounds": [
+        396,
+        307,
+        473,
+        383
+      ],
+      "pixel_size": [
+        85,
+        84
+      ]
+    },
+    {
+      "id": "message-bookmark",
+      "region": [
+        473,
+        307,
+        549,
+        383
+      ],
+      "source_bounds": [
+        473,
+        307,
+        549,
+        383
+      ],
+      "pixel_size": [
+        84,
+        84
+      ]
+    },
+    {
+      "id": "message-search",
+      "region": [
+        549,
+        307,
+        627,
+        383
+      ],
+      "source_bounds": [
+        549,
+        307,
+        627,
+        383
+      ],
+      "pixel_size": [
+        86,
+        84
+      ]
+    },
+    {
+      "id": "message-expand",
+      "region": [
+        627,
+        307,
+        704,
+        383
+      ],
+      "source_bounds": [
+        627,
+        307,
+        704,
+        383
+      ],
+      "pixel_size": [
+        85,
+        84
+      ]
+    },
+    {
+      "id": "message-collapse",
+      "region": [
+        704,
+        307,
+        781,
+        383
+      ],
+      "source_bounds": [
+        704,
+        307,
+        781,
+        383
+      ],
+      "pixel_size": [
+        85,
+        84
+      ]
+    },
+    {
+      "id": "message-user",
+      "region": [
+        781,
+        307,
+        858,
+        383
+      ],
+      "source_bounds": [
+        781,
+        307,
+        858,
+        383
+      ],
+      "pixel_size": [
+        85,
+        84
+      ]
+    },
+    {
+      "id": "message-agent",
+      "region": [
+        858,
+        307,
+        934,
+        383
+      ],
+      "source_bounds": [
+        858,
+        307,
+        934,
+        383
+      ],
+      "pixel_size": [
+        84,
+        84
+      ]
+    },
+    {
+      "id": "message-system",
+      "region": [
+        934,
+        307,
+        1014,
+        383
+      ],
+      "source_bounds": [
+        934,
+        307,
+        1014,
+        383
+      ],
+      "pixel_size": [
+        88,
+        84
+      ]
+    },
+    {
+      "id": "message-error",
+      "region": [
+        1014,
+        307,
+        1090,
+        383
+      ],
+      "source_bounds": [
+        1014,
+        307,
+        1090,
+        383
+      ],
+      "pixel_size": [
+        84,
+        84
+      ]
+    },
+    {
+      "id": "message-success",
+      "region": [
+        1090,
+        307,
+        1169,
+        383
+      ],
+      "source_bounds": [
+        1090,
+        307,
+        1169,
+        383
+      ],
+      "pixel_size": [
+        87,
+        84
+      ]
+    },
+    {
+      "id": "message-pending",
+      "region": [
+        1169,
+        307,
+        1254,
+        383
+      ],
+      "source_bounds": [
+        1169,
+        307,
+        1254,
+        383
+      ],
+      "pixel_size": [
+        93,
+        84
+      ]
+    },
+    {
+      "id": "queue-add",
+      "region": [
+        0,
+        383,
+        92,
+        457
+      ],
+      "source_bounds": [
+        0,
+        383,
+        92,
+        457
+      ],
+      "pixel_size": [
+        100,
+        82
+      ]
+    },
+    {
+      "id": "queue-clear",
+      "region": [
+        92,
+        383,
+        168,
+        457
+      ],
+      "source_bounds": [
+        92,
+        383,
+        168,
+        457
+      ],
+      "pixel_size": [
+        84,
+        82
+      ]
+    },
+    {
+      "id": "queue-first",
+      "region": [
+        168,
+        383,
+        243,
+        457
+      ],
+      "source_bounds": [
+        168,
+        383,
+        243,
+        457
+      ],
+      "pixel_size": [
+        83,
+        82
+      ]
+    },
+    {
+      "id": "queue-last",
+      "region": [
+        243,
+        383,
+        319,
+        457
+      ],
+      "source_bounds": [
+        243,
+        383,
+        319,
+        457
+      ],
+      "pixel_size": [
+        84,
+        82
+      ]
+    },
+    {
+      "id": "queue-priority",
+      "region": [
+        319,
+        383,
+        396,
+        457
+      ],
+      "source_bounds": [
+        319,
+        383,
+        396,
+        457
+      ],
+      "pixel_size": [
+        85,
+        82
+      ]
+    },
+    {
+      "id": "queue-reorder",
+      "region": [
+        396,
+        383,
+        472,
+        457
+      ],
+      "source_bounds": [
+        396,
+        383,
+        472,
+        457
+      ],
+      "pixel_size": [
+        84,
+        82
+      ]
+    },
+    {
+      "id": "queue-item",
+      "region": [
+        472,
+        383,
+        549,
+        457
+      ],
+      "source_bounds": [
+        472,
+        383,
+        549,
+        457
+      ],
+      "pixel_size": [
+        85,
+        82
+      ]
+    },
+    {
+      "id": "queue-batch",
+      "region": [
+        549,
+        383,
+        626,
+        457
+      ],
+      "source_bounds": [
+        549,
+        383,
+        626,
+        457
+      ],
+      "pixel_size": [
+        85,
+        82
+      ]
+    },
+    {
+      "id": "queue-merge",
+      "region": [
+        626,
+        383,
+        705,
+        457
+      ],
+      "source_bounds": [
+        626,
+        383,
+        705,
+        457
+      ],
+      "pixel_size": [
+        87,
+        82
+      ]
+    },
+    {
+      "id": "queue-split",
+      "region": [
+        705,
+        383,
+        783,
+        457
+      ],
+      "source_bounds": [
+        705,
+        383,
+        783,
+        457
+      ],
+      "pixel_size": [
+        86,
+        82
+      ]
+    },
+    {
+      "id": "queue-scheduled",
+      "region": [
+        783,
+        383,
+        864,
+        457
+      ],
+      "source_bounds": [
+        783,
+        383,
+        864,
+        457
+      ],
+      "pixel_size": [
+        89,
+        82
+      ]
+    },
+    {
+      "id": "queue-waiting",
+      "region": [
+        864,
+        383,
+        934,
+        457
+      ],
+      "source_bounds": [
+        864,
+        383,
+        934,
+        457
+      ],
+      "pixel_size": [
+        78,
+        82
+      ]
+    },
+    {
+      "id": "queue-running",
+      "region": [
+        934,
+        383,
+        1014,
+        457
+      ],
+      "source_bounds": [
+        934,
+        383,
+        1014,
+        457
+      ],
+      "pixel_size": [
+        88,
+        82
+      ]
+    },
+    {
+      "id": "queue-complete",
+      "region": [
+        1014,
+        383,
+        1091,
+        457
+      ],
+      "source_bounds": [
+        1014,
+        383,
+        1091,
+        457
+      ],
+      "pixel_size": [
+        85,
+        82
+      ]
+    },
+    {
+      "id": "queue-failed",
+      "region": [
+        1091,
+        383,
+        1168,
+        457
+      ],
+      "source_bounds": [
+        1091,
+        383,
+        1168,
+        457
+      ],
+      "pixel_size": [
+        85,
+        82
+      ]
+    },
+    {
+      "id": "queue-restore",
+      "region": [
+        1168,
+        383,
+        1254,
+        457
+      ],
+      "source_bounds": [
+        1168,
+        383,
+        1254,
+        457
+      ],
+      "pixel_size": [
+        94,
+        82
+      ]
+    },
+    {
+      "id": "file-text",
+      "region": [
+        0,
+        457,
+        87,
+        535
+      ],
+      "source_bounds": [
+        0,
+        457,
+        87,
+        535
+      ],
+      "pixel_size": [
+        95,
+        86
+      ]
+    },
+    {
+      "id": "file-code",
+      "region": [
+        87,
+        457,
+        166,
+        535
+      ],
+      "source_bounds": [
+        87,
+        457,
+        166,
+        535
+      ],
+      "pixel_size": [
+        87,
+        86
+      ]
+    },
+    {
+      "id": "file-image",
+      "region": [
+        166,
+        457,
+        242,
+        535
+      ],
+      "source_bounds": [
+        166,
+        457,
+        242,
+        535
+      ],
+      "pixel_size": [
+        84,
+        86
+      ]
+    },
+    {
+      "id": "file-html",
+      "region": [
+        242,
+        457,
+        320,
+        535
+      ],
+      "source_bounds": [
+        242,
+        457,
+        320,
+        535
+      ],
+      "pixel_size": [
+        86,
+        86
+      ]
+    },
+    {
+      "id": "file-pdf",
+      "region": [
+        320,
+        457,
+        396,
+        535
+      ],
+      "source_bounds": [
+        320,
+        457,
+        396,
+        535
+      ],
+      "pixel_size": [
+        84,
+        86
+      ]
+    },
+    {
+      "id": "file-table",
+      "region": [
+        396,
+        457,
+        473,
+        535
+      ],
+      "source_bounds": [
+        396,
+        457,
+        473,
+        535
+      ],
+      "pixel_size": [
+        85,
+        86
+      ]
+    },
+    {
+      "id": "file-archive",
+      "region": [
+        473,
+        457,
+        549,
+        535
+      ],
+      "source_bounds": [
+        473,
+        457,
+        549,
+        535
+      ],
+      "pixel_size": [
+        84,
+        86
+      ]
+    },
+    {
+      "id": "file-audio",
+      "region": [
+        549,
+        457,
+        627,
+        535
+      ],
+      "source_bounds": [
+        549,
+        457,
+        627,
+        535
+      ],
+      "pixel_size": [
+        86,
+        86
+      ]
+    },
+    {
+      "id": "file-video",
+      "region": [
+        627,
+        457,
+        705,
+        535
+      ],
+      "source_bounds": [
+        627,
+        457,
+        705,
+        535
+      ],
+      "pixel_size": [
+        86,
+        86
+      ]
+    },
+    {
+      "id": "file-markdown",
+      "region": [
+        705,
+        457,
+        784,
+        535
+      ],
+      "source_bounds": [
+        705,
+        457,
+        784,
+        535
+      ],
+      "pixel_size": [
+        87,
+        86
+      ]
+    },
+    {
+      "id": "file-json",
+      "region": [
+        784,
+        457,
+        860,
+        535
+      ],
+      "source_bounds": [
+        784,
+        457,
+        860,
+        535
+      ],
+      "pixel_size": [
+        84,
+        86
+      ]
+    },
+    {
+      "id": "file-log",
+      "region": [
+        860,
+        457,
+        934,
+        535
+      ],
+      "source_bounds": [
+        860,
+        457,
+        934,
+        535
+      ],
+      "pixel_size": [
+        82,
+        86
+      ]
+    },
+    {
+      "id": "file-diff",
+      "region": [
+        934,
+        457,
+        1014,
+        535
+      ],
+      "source_bounds": [
+        934,
+        457,
+        1014,
+        535
+      ],
+      "pixel_size": [
+        88,
+        86
+      ]
+    },
+    {
+      "id": "file-executable",
+      "region": [
+        1014,
+        457,
+        1091,
+        535
+      ],
+      "source_bounds": [
+        1014,
+        457,
+        1091,
+        535
+      ],
+      "pixel_size": [
+        85,
+        86
+      ]
+    },
+    {
+      "id": "file-unknown",
+      "region": [
+        1091,
+        457,
+        1169,
+        535
+      ],
+      "source_bounds": [
+        1091,
+        457,
+        1169,
+        535
+      ],
+      "pixel_size": [
+        86,
+        86
+      ]
+    },
+    {
+      "id": "file-link",
+      "region": [
+        1169,
+        457,
+        1254,
+        535
+      ],
+      "source_bounds": [
+        1169,
+        457,
+        1254,
+        535
+      ],
+      "pixel_size": [
+        93,
+        86
+      ]
+    },
+    {
+      "id": "file-open",
+      "region": [
+        0,
+        535,
+        89,
+        613
+      ],
+      "source_bounds": [
+        0,
+        535,
+        89,
+        613
+      ],
+      "pixel_size": [
+        97,
+        86
+      ]
+    },
+    {
+      "id": "file-save",
+      "region": [
+        89,
+        535,
+        164,
+        613
+      ],
+      "source_bounds": [
+        89,
+        535,
+        164,
+        613
+      ],
+      "pixel_size": [
+        83,
+        86
+      ]
+    },
+    {
+      "id": "file-save-as",
+      "region": [
+        164,
+        535,
+        243,
+        613
+      ],
+      "source_bounds": [
+        164,
+        535,
+        243,
+        613
+      ],
+      "pixel_size": [
+        87,
+        86
+      ]
+    },
+    {
+      "id": "file-download",
+      "region": [
+        243,
+        535,
+        319,
+        613
+      ],
+      "source_bounds": [
+        243,
+        535,
+        319,
+        613
+      ],
+      "pixel_size": [
+        84,
+        86
+      ]
+    },
+    {
+      "id": "file-upload",
+      "region": [
+        319,
+        535,
+        395,
+        613
+      ],
+      "source_bounds": [
+        319,
+        535,
+        395,
+        613
+      ],
+      "pixel_size": [
+        84,
+        86
+      ]
+    },
+    {
+      "id": "file-copy-path",
+      "region": [
+        395,
+        535,
+        471,
+        613
+      ],
+      "source_bounds": [
+        395,
+        535,
+        471,
+        613
+      ],
+      "pixel_size": [
+        84,
+        86
+      ]
+    },
+    {
+      "id": "file-reveal",
+      "region": [
+        471,
+        535,
+        549,
+        613
+      ],
+      "source_bounds": [
+        471,
+        535,
+        549,
+        613
+      ],
+      "pixel_size": [
+        86,
+        86
+      ]
+    },
+    {
+      "id": "file-preview",
+      "region": [
+        549,
+        535,
+        627,
+        613
+      ],
+      "source_bounds": [
+        549,
+        535,
+        627,
+        613
+      ],
+      "pixel_size": [
+        86,
+        86
+      ]
+    },
+    {
+      "id": "file-remove-attachment",
+      "region": [
+        627,
+        535,
+        706,
+        613
+      ],
+      "source_bounds": [
+        627,
+        535,
+        706,
+        613
+      ],
+      "pixel_size": [
+        87,
+        86
+      ]
+    },
+    {
+      "id": "file-add-folder",
+      "region": [
+        706,
+        535,
+        783,
+        613
+      ],
+      "source_bounds": [
+        706,
+        535,
+        783,
+        613
+      ],
+      "pixel_size": [
+        85,
+        86
+      ]
+    },
+    {
+      "id": "file-recent",
+      "region": [
+        783,
+        535,
+        860,
+        613
+      ],
+      "source_bounds": [
+        783,
+        535,
+        860,
+        613
+      ],
+      "pixel_size": [
+        85,
+        86
+      ]
+    },
+    {
+      "id": "file-search",
+      "region": [
+        860,
+        535,
+        935,
+        613
+      ],
+      "source_bounds": [
+        860,
+        535,
+        935,
+        613
+      ],
+      "pixel_size": [
+        83,
+        86
+      ]
+    },
+    {
+      "id": "file-rename",
+      "region": [
+        935,
+        535,
+        1014,
+        613
+      ],
+      "source_bounds": [
+        935,
+        535,
+        1014,
+        613
+      ],
+      "pixel_size": [
+        87,
+        86
+      ]
+    },
+    {
+      "id": "file-move",
+      "region": [
+        1014,
+        535,
+        1091,
+        613
+      ],
+      "source_bounds": [
+        1014,
+        535,
+        1091,
+        613
+      ],
+      "pixel_size": [
+        85,
+        86
+      ]
+    },
+    {
+      "id": "file-copy",
+      "region": [
+        1091,
+        535,
+        1168,
+        613
+      ],
+      "source_bounds": [
+        1091,
+        535,
+        1168,
+        613
+      ],
+      "pixel_size": [
+        85,
+        86
+      ]
+    },
+    {
+      "id": "file-properties",
+      "region": [
+        1168,
+        535,
+        1254,
+        613
+      ],
+      "source_bounds": [
+        1168,
+        535,
+        1253,
+        613
+      ],
+      "pixel_size": [
+        93,
+        86
+      ]
+    },
+    {
+      "id": "artifact-image",
+      "region": [
+        0,
+        613,
+        89,
+        690
+      ],
+      "source_bounds": [
+        0,
+        613,
+        89,
+        690
+      ],
+      "pixel_size": [
+        97,
+        85
+      ]
+    },
+    {
+      "id": "artifact-html",
+      "region": [
+        89,
+        613,
+        168,
+        690
+      ],
+      "source_bounds": [
+        89,
+        613,
+        168,
+        690
+      ],
+      "pixel_size": [
+        87,
+        85
+      ]
+    },
+    {
+      "id": "artifact-document",
+      "region": [
+        168,
+        613,
+        240,
+        690
+      ],
+      "source_bounds": [
+        168,
+        613,
+        240,
+        690
+      ],
+      "pixel_size": [
+        80,
+        85
+      ]
+    },
+    {
+      "id": "artifact-chart",
+      "region": [
+        240,
+        613,
+        318,
+        690
+      ],
+      "source_bounds": [
+        240,
+        613,
+        318,
+        690
+      ],
+      "pixel_size": [
+        86,
+        85
+      ]
+    },
+    {
+      "id": "artifact-code",
+      "region": [
+        318,
+        613,
+        395,
+        690
+      ],
+      "source_bounds": [
+        318,
+        613,
+        395,
+        690
+      ],
+      "pixel_size": [
+        85,
+        85
+      ]
+    },
+    {
+      "id": "artifact-table",
+      "region": [
+        395,
+        613,
+        471,
+        690
+      ],
+      "source_bounds": [
+        395,
+        613,
+        471,
+        690
+      ],
+      "pixel_size": [
+        84,
+        85
+      ]
+    },
+    {
+      "id": "artifact-open-browser",
+      "region": [
+        471,
+        613,
+        551,
+        690
+      ],
+      "source_bounds": [
+        471,
+        613,
+        551,
+        690
+      ],
+      "pixel_size": [
+        88,
+        85
+      ]
+    },
+    {
+      "id": "artifact-download",
+      "region": [
+        551,
+        613,
+        628,
+        690
+      ],
+      "source_bounds": [
+        551,
+        613,
+        628,
+        690
+      ],
+      "pixel_size": [
+        85,
+        85
+      ]
+    },
+    {
+      "id": "artifact-copy",
+      "region": [
+        628,
+        613,
+        705,
+        690
+      ],
+      "source_bounds": [
+        628,
+        613,
+        705,
+        690
+      ],
+      "pixel_size": [
+        85,
+        85
+      ]
+    },
+    {
+      "id": "artifact-previous",
+      "region": [
+        705,
+        613,
+        782,
+        690
+      ],
+      "source_bounds": [
+        705,
+        613,
+        782,
+        690
+      ],
+      "pixel_size": [
+        85,
+        85
+      ]
+    },
+    {
+      "id": "artifact-next",
+      "region": [
+        782,
+        613,
+        858,
+        690
+      ],
+      "source_bounds": [
+        782,
+        613,
+        858,
+        690
+      ],
+      "pixel_size": [
+        84,
+        85
+      ]
+    },
+    {
+      "id": "artifact-zoom-in",
+      "region": [
+        858,
+        613,
+        936,
+        690
+      ],
+      "source_bounds": [
+        858,
+        613,
+        936,
+        690
+      ],
+      "pixel_size": [
+        86,
+        85
+      ]
+    },
+    {
+      "id": "artifact-zoom-out",
+      "region": [
+        936,
+        613,
+        1014,
+        690
+      ],
+      "source_bounds": [
+        936,
+        613,
+        1014,
+        690
+      ],
+      "pixel_size": [
+        86,
+        85
+      ]
+    },
+    {
+      "id": "artifact-reset",
+      "region": [
+        1014,
+        613,
+        1088,
+        690
+      ],
+      "source_bounds": [
+        1014,
+        613,
+        1088,
+        690
+      ],
+      "pixel_size": [
+        82,
+        85
+      ]
+    },
+    {
+      "id": "artifact-background-light",
+      "region": [
+        1088,
+        613,
+        1169,
+        690
+      ],
+      "source_bounds": [
+        1088,
+        613,
+        1169,
+        690
+      ],
+      "pixel_size": [
+        89,
+        85
+      ]
+    },
+    {
+      "id": "artifact-background-dark",
+      "region": [
+        1169,
+        613,
+        1254,
+        690
+      ],
+      "source_bounds": [
+        1169,
+        613,
+        1254,
+        690
+      ],
+      "pixel_size": [
+        93,
+        85
+      ]
+    },
+    {
+      "id": "tool-terminal",
+      "region": [
+        0,
+        690,
+        89,
+        765
+      ],
+      "source_bounds": [
+        0,
+        690,
+        89,
+        765
+      ],
+      "pixel_size": [
+        97,
+        83
+      ]
+    },
+    {
+      "id": "tool-search",
+      "region": [
+        89,
+        690,
+        164,
+        765
+      ],
+      "source_bounds": [
+        89,
+        690,
+        164,
+        765
+      ],
+      "pixel_size": [
+        83,
+        83
+      ]
+    },
+    {
+      "id": "tool-read",
+      "region": [
+        164,
+        690,
+        242,
+        765
+      ],
+      "source_bounds": [
+        164,
+        690,
+        242,
+        765
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "tool-write",
+      "region": [
+        242,
+        690,
+        318,
+        765
+      ],
+      "source_bounds": [
+        242,
+        690,
+        318,
+        765
+      ],
+      "pixel_size": [
+        84,
+        83
+      ]
+    },
+    {
+      "id": "tool-patch",
+      "region": [
+        318,
+        690,
+        395,
+        765
+      ],
+      "source_bounds": [
+        318,
+        690,
+        395,
+        765
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "tool-browser",
+      "region": [
+        395,
+        690,
+        474,
+        765
+      ],
+      "source_bounds": [
+        395,
+        690,
+        474,
+        765
+      ],
+      "pixel_size": [
+        87,
+        83
+      ]
+    },
+    {
+      "id": "tool-imagegen",
+      "region": [
+        474,
+        690,
+        551,
+        765
+      ],
+      "source_bounds": [
+        474,
+        690,
+        551,
+        765
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "tool-test",
+      "region": [
+        551,
+        690,
+        626,
+        765
+      ],
+      "source_bounds": [
+        551,
+        690,
+        626,
+        765
+      ],
+      "pixel_size": [
+        83,
+        83
+      ]
+    },
+    {
+      "id": "tool-build",
+      "region": [
+        626,
+        690,
+        704,
+        765
+      ],
+      "source_bounds": [
+        626,
+        690,
+        704,
+        765
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "tool-git",
+      "region": [
+        704,
+        690,
+        781,
+        765
+      ],
+      "source_bounds": [
+        704,
+        690,
+        781,
+        765
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "tool-database",
+      "region": [
+        781,
+        690,
+        858,
+        765
+      ],
+      "source_bounds": [
+        781,
+        690,
+        858,
+        765
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "tool-network",
+      "region": [
+        858,
+        690,
+        936,
+        765
+      ],
+      "source_bounds": [
+        858,
+        690,
+        936,
+        765
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "tool-clock",
+      "region": [
+        936,
+        690,
+        1014,
+        765
+      ],
+      "source_bounds": [
+        936,
+        690,
+        1014,
+        765
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "tool-calculator",
+      "region": [
+        1014,
+        690,
+        1091,
+        765
+      ],
+      "source_bounds": [
+        1014,
+        690,
+        1091,
+        765
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "tool-inspect",
+      "region": [
+        1091,
+        690,
+        1166,
+        765
+      ],
+      "source_bounds": [
+        1091,
+        690,
+        1166,
+        765
+      ],
+      "pixel_size": [
+        83,
+        83
+      ]
+    },
+    {
+      "id": "tool-automation",
+      "region": [
+        1166,
+        690,
+        1254,
+        765
+      ],
+      "source_bounds": [
+        1166,
+        690,
+        1253,
+        765
+      ],
+      "pixel_size": [
+        95,
+        83
+      ]
+    },
+    {
+      "id": "run-start",
+      "region": [
+        0,
+        765,
+        89,
+        840
+      ],
+      "source_bounds": [
+        0,
+        765,
+        89,
+        840
+      ],
+      "pixel_size": [
+        97,
+        83
+      ]
+    },
+    {
+      "id": "run-pause",
+      "region": [
+        89,
+        765,
+        165,
+        840
+      ],
+      "source_bounds": [
+        89,
+        765,
+        165,
+        840
+      ],
+      "pixel_size": [
+        84,
+        83
+      ]
+    },
+    {
+      "id": "run-resume",
+      "region": [
+        165,
+        765,
+        242,
+        840
+      ],
+      "source_bounds": [
+        165,
+        765,
+        242,
+        840
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "run-stop",
+      "region": [
+        242,
+        765,
+        320,
+        840
+      ],
+      "source_bounds": [
+        242,
+        765,
+        320,
+        840
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "run-retry",
+      "region": [
+        320,
+        765,
+        394,
+        840
+      ],
+      "source_bounds": [
+        320,
+        765,
+        394,
+        840
+      ],
+      "pixel_size": [
+        82,
+        83
+      ]
+    },
+    {
+      "id": "run-success",
+      "region": [
+        394,
+        765,
+        472,
+        840
+      ],
+      "source_bounds": [
+        394,
+        765,
+        472,
+        840
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "run-error",
+      "region": [
+        472,
+        765,
+        549,
+        840
+      ],
+      "source_bounds": [
+        472,
+        765,
+        549,
+        840
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "run-warning",
+      "region": [
+        549,
+        765,
+        630,
+        840
+      ],
+      "source_bounds": [
+        549,
+        765,
+        630,
+        840
+      ],
+      "pixel_size": [
+        89,
+        83
+      ]
+    },
+    {
+      "id": "run-waiting",
+      "region": [
+        630,
+        765,
+        704,
+        840
+      ],
+      "source_bounds": [
+        630,
+        765,
+        704,
+        840
+      ],
+      "pixel_size": [
+        82,
+        83
+      ]
+    },
+    {
+      "id": "run-draining",
+      "region": [
+        704,
+        765,
+        782,
+        840
+      ],
+      "source_bounds": [
+        704,
+        765,
+        782,
+        840
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "run-duration",
+      "region": [
+        782,
+        765,
+        858,
+        840
+      ],
+      "source_bounds": [
+        782,
+        765,
+        858,
+        840
+      ],
+      "pixel_size": [
+        84,
+        83
+      ]
+    },
+    {
+      "id": "run-progress",
+      "region": [
+        858,
+        765,
+        936,
+        840
+      ],
+      "source_bounds": [
+        858,
+        765,
+        936,
+        840
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "run-log",
+      "region": [
+        936,
+        765,
+        1013,
+        840
+      ],
+      "source_bounds": [
+        936,
+        765,
+        1013,
+        840
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "run-details",
+      "region": [
+        1013,
+        765,
+        1090,
+        840
+      ],
+      "source_bounds": [
+        1013,
+        765,
+        1090,
+        840
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "run-cancel",
+      "region": [
+        1090,
+        765,
+        1168,
+        840
+      ],
+      "source_bounds": [
+        1090,
+        765,
+        1168,
+        840
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "run-queued",
+      "region": [
+        1168,
+        765,
+        1254,
+        840
+      ],
+      "source_bounds": [
+        1168,
+        765,
+        1254,
+        840
+      ],
+      "pixel_size": [
+        94,
+        83
+      ]
+    },
+    {
+      "id": "agent-main",
+      "region": [
+        0,
+        840,
+        89,
+        915
+      ],
+      "source_bounds": [
+        0,
+        840,
+        89,
+        915
+      ],
+      "pixel_size": [
+        97,
+        83
+      ]
+    },
+    {
+      "id": "agent-child",
+      "region": [
+        89,
+        840,
+        164,
+        915
+      ],
+      "source_bounds": [
+        89,
+        840,
+        164,
+        915
+      ],
+      "pixel_size": [
+        83,
+        83
+      ]
+    },
+    {
+      "id": "agent-team",
+      "region": [
+        164,
+        840,
+        242,
+        915
+      ],
+      "source_bounds": [
+        164,
+        840,
+        242,
+        915
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "agent-assign",
+      "region": [
+        242,
+        840,
+        319,
+        915
+      ],
+      "source_bounds": [
+        242,
+        840,
+        319,
+        915
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "agent-handoff",
+      "region": [
+        319,
+        840,
+        397,
+        915
+      ],
+      "source_bounds": [
+        319,
+        840,
+        397,
+        915
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "agent-message",
+      "region": [
+        397,
+        840,
+        472,
+        915
+      ],
+      "source_bounds": [
+        397,
+        840,
+        472,
+        915
+      ],
+      "pixel_size": [
+        83,
+        83
+      ]
+    },
+    {
+      "id": "agent-idle",
+      "region": [
+        472,
+        840,
+        550,
+        915
+      ],
+      "source_bounds": [
+        472,
+        840,
+        550,
+        915
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "agent-busy",
+      "region": [
+        550,
+        840,
+        626,
+        915
+      ],
+      "source_bounds": [
+        550,
+        840,
+        626,
+        915
+      ],
+      "pixel_size": [
+        84,
+        83
+      ]
+    },
+    {
+      "id": "agent-complete",
+      "region": [
+        626,
+        840,
+        706,
+        915
+      ],
+      "source_bounds": [
+        626,
+        840,
+        706,
+        915
+      ],
+      "pixel_size": [
+        88,
+        83
+      ]
+    },
+    {
+      "id": "agent-blocked",
+      "region": [
+        706,
+        840,
+        781,
+        915
+      ],
+      "source_bounds": [
+        706,
+        840,
+        781,
+        915
+      ],
+      "pixel_size": [
+        83,
+        83
+      ]
+    },
+    {
+      "id": "agent-interrupt",
+      "region": [
+        781,
+        840,
+        858,
+        915
+      ],
+      "source_bounds": [
+        781,
+        840,
+        858,
+        915
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "agent-followup",
+      "region": [
+        858,
+        840,
+        936,
+        915
+      ],
+      "source_bounds": [
+        858,
+        840,
+        936,
+        915
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "agent-tree",
+      "region": [
+        936,
+        840,
+        1014,
+        915
+      ],
+      "source_bounds": [
+        936,
+        840,
+        1014,
+        915
+      ],
+      "pixel_size": [
+        86,
+        83
+      ]
+    },
+    {
+      "id": "agent-context",
+      "region": [
+        1014,
+        840,
+        1091,
+        915
+      ],
+      "source_bounds": [
+        1014,
+        840,
+        1091,
+        915
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "agent-memory",
+      "region": [
+        1091,
+        840,
+        1168,
+        915
+      ],
+      "source_bounds": [
+        1091,
+        840,
+        1168,
+        915
+      ],
+      "pixel_size": [
+        85,
+        83
+      ]
+    },
+    {
+      "id": "agent-capabilities",
+      "region": [
+        1168,
+        840,
+        1254,
+        915
+      ],
+      "source_bounds": [
+        1168,
+        840,
+        1254,
+        915
+      ],
+      "pixel_size": [
+        94,
+        83
+      ]
+    },
+    {
+      "id": "settings-general",
+      "region": [
+        0,
+        915,
+        89,
+        994
+      ],
+      "source_bounds": [
+        0,
+        915,
+        89,
+        994
+      ],
+      "pixel_size": [
+        97,
+        87
+      ]
+    },
+    {
+      "id": "settings-appearance",
+      "region": [
+        89,
+        915,
+        166,
+        994
+      ],
+      "source_bounds": [
+        89,
+        915,
+        166,
+        994
+      ],
+      "pixel_size": [
+        85,
+        87
+      ]
+    },
+    {
+      "id": "settings-model",
+      "region": [
+        166,
+        915,
+        240,
+        994
+      ],
+      "source_bounds": [
+        166,
+        915,
+        240,
+        994
+      ],
+      "pixel_size": [
+        82,
+        87
+      ]
+    },
+    {
+      "id": "settings-provider",
+      "region": [
+        240,
+        915,
+        319,
+        994
+      ],
+      "source_bounds": [
+        240,
+        915,
+        319,
+        994
+      ],
+      "pixel_size": [
+        87,
+        87
+      ]
+    },
+    {
+      "id": "settings-keyboard",
+      "region": [
+        319,
+        915,
+        396,
+        994
+      ],
+      "source_bounds": [
+        319,
+        915,
+        396,
+        994
+      ],
+      "pixel_size": [
+        85,
+        87
+      ]
+    },
+    {
+      "id": "settings-language",
+      "region": [
+        396,
+        915,
+        473,
+        994
+      ],
+      "source_bounds": [
+        396,
+        915,
+        473,
+        994
+      ],
+      "pixel_size": [
+        85,
+        87
+      ]
+    },
+    {
+      "id": "settings-notifications",
+      "region": [
+        473,
+        915,
+        549,
+        994
+      ],
+      "source_bounds": [
+        473,
+        915,
+        549,
+        994
+      ],
+      "pixel_size": [
+        84,
+        87
+      ]
+    },
+    {
+      "id": "settings-storage",
+      "region": [
+        549,
+        915,
+        627,
+        994
+      ],
+      "source_bounds": [
+        549,
+        915,
+        627,
+        994
+      ],
+      "pixel_size": [
+        86,
+        87
+      ]
+    },
+    {
+      "id": "settings-network",
+      "region": [
+        627,
+        915,
+        706,
+        994
+      ],
+      "source_bounds": [
+        627,
+        915,
+        706,
+        994
+      ],
+      "pixel_size": [
+        87,
+        87
+      ]
+    },
+    {
+      "id": "settings-security",
+      "region": [
+        706,
+        915,
+        782,
+        994
+      ],
+      "source_bounds": [
+        706,
+        915,
+        782,
+        994
+      ],
+      "pixel_size": [
+        84,
+        87
+      ]
+    },
+    {
+      "id": "settings-tools",
+      "region": [
+        782,
+        915,
+        858,
+        994
+      ],
+      "source_bounds": [
+        782,
+        915,
+        858,
+        994
+      ],
+      "pixel_size": [
+        84,
+        87
+      ]
+    },
+    {
+      "id": "settings-prompts",
+      "region": [
+        858,
+        915,
+        935,
+        994
+      ],
+      "source_bounds": [
+        858,
+        915,
+        935,
+        994
+      ],
+      "pixel_size": [
+        85,
+        87
+      ]
+    },
+    {
+      "id": "settings-layout",
+      "region": [
+        935,
+        915,
+        1014,
+        994
+      ],
+      "source_bounds": [
+        935,
+        915,
+        1014,
+        994
+      ],
+      "pixel_size": [
+        87,
+        87
+      ]
+    },
+    {
+      "id": "settings-accessibility",
+      "region": [
+        1014,
+        915,
+        1089,
+        994
+      ],
+      "source_bounds": [
+        1014,
+        915,
+        1089,
+        994
+      ],
+      "pixel_size": [
+        83,
+        87
+      ]
+    },
+    {
+      "id": "settings-advanced",
+      "region": [
+        1089,
+        915,
+        1168,
+        994
+      ],
+      "source_bounds": [
+        1089,
+        915,
+        1168,
+        994
+      ],
+      "pixel_size": [
+        87,
+        87
+      ]
+    },
+    {
+      "id": "settings-reset",
+      "region": [
+        1168,
+        915,
+        1254,
+        994
+      ],
+      "source_bounds": [
+        1168,
+        915,
+        1254,
+        994
+      ],
+      "pixel_size": [
+        94,
+        87
+      ]
+    },
+    {
+      "id": "account-profile",
+      "region": [
+        0,
+        994,
+        88,
+        1070
+      ],
+      "source_bounds": [
+        0,
+        994,
+        88,
+        1070
+      ],
+      "pixel_size": [
+        96,
+        84
+      ]
+    },
+    {
+      "id": "account-login",
+      "region": [
+        88,
+        994,
+        164,
+        1070
+      ],
+      "source_bounds": [
+        88,
+        994,
+        164,
+        1070
+      ],
+      "pixel_size": [
+        84,
+        84
+      ]
+    },
+    {
+      "id": "account-logout",
+      "region": [
+        164,
+        994,
+        241,
+        1070
+      ],
+      "source_bounds": [
+        164,
+        994,
+        241,
+        1070
+      ],
+      "pixel_size": [
+        85,
+        84
+      ]
+    },
+    {
+      "id": "account-switch",
+      "region": [
+        241,
+        994,
+        319,
+        1070
+      ],
+      "source_bounds": [
+        241,
+        994,
+        319,
+        1070
+      ],
+      "pixel_size": [
+        86,
+        84
+      ]
+    },
+    {
+      "id": "quota-daily",
+      "region": [
+        319,
+        994,
+        396,
+        1070
+      ],
+      "source_bounds": [
+        319,
+        994,
+        396,
+        1070
+      ],
+      "pixel_size": [
+        85,
+        84
+      ]
+    },
+    {
+      "id": "quota-weekly",
+      "region": [
+        396,
+        994,
+        472,
+        1070
+      ],
+      "source_bounds": [
+        396,
+        994,
+        472,
+        1070
+      ],
+      "pixel_size": [
+        84,
+        84
+      ]
+    },
+    {
+      "id": "quota-remaining",
+      "region": [
+        472,
+        994,
+        550,
+        1070
+      ],
+      "source_bounds": [
+        472,
+        994,
+        550,
+        1070
+      ],
+      "pixel_size": [
+        86,
+        84
+      ]
+    },
+    {
+      "id": "quota-used",
+      "region": [
+        550,
+        994,
+        627,
+        1070
+      ],
+      "source_bounds": [
+        550,
+        994,
+        627,
+        1070
+      ],
+      "pixel_size": [
+        85,
+        84
+      ]
+    },
+    {
+      "id": "quota-reset-time",
+      "region": [
+        627,
+        994,
+        703,
+        1070
+      ],
+      "source_bounds": [
+        627,
+        994,
+        703,
+        1070
+      ],
+      "pixel_size": [
+        84,
+        84
+      ]
+    },
+    {
+      "id": "quota-limit",
+      "region": [
+        703,
+        994,
+        782,
+        1070
+      ],
+      "source_bounds": [
+        703,
+        994,
+        782,
+        1070
+      ],
+      "pixel_size": [
+        87,
+        84
+      ]
+    },
+    {
+      "id": "quota-warning",
+      "region": [
+        782,
+        994,
+        857,
+        1070
+      ],
+      "source_bounds": [
+        782,
+        994,
+        857,
+        1070
+      ],
+      "pixel_size": [
+        83,
+        84
+      ]
+    },
+    {
+      "id": "usage-tokens",
+      "region": [
+        857,
+        994,
+        935,
+        1070
+      ],
+      "source_bounds": [
+        857,
+        994,
+        935,
+        1070
+      ],
+      "pixel_size": [
+        86,
+        84
+      ]
+    },
+    {
+      "id": "usage-cost",
+      "region": [
+        935,
+        994,
+        1015,
+        1070
+      ],
+      "source_bounds": [
+        935,
+        994,
+        1015,
+        1070
+      ],
+      "pixel_size": [
+        88,
+        84
+      ]
+    },
+    {
+      "id": "usage-history",
+      "region": [
+        1015,
+        994,
+        1091,
+        1070
+      ],
+      "source_bounds": [
+        1015,
+        994,
+        1091,
+        1070
+      ],
+      "pixel_size": [
+        84,
+        84
+      ]
+    },
+    {
+      "id": "provider-connected",
+      "region": [
+        1091,
+        994,
+        1168,
+        1070
+      ],
+      "source_bounds": [
+        1091,
+        994,
+        1168,
+        1070
+      ],
+      "pixel_size": [
+        85,
+        84
+      ]
+    },
+    {
+      "id": "provider-offline",
+      "region": [
+        1168,
+        994,
+        1254,
+        1070
+      ],
+      "source_bounds": [
+        1168,
+        994,
+        1254,
+        1070
+      ],
+      "pixel_size": [
+        94,
+        84
+      ]
+    },
+    {
+      "id": "permission-allow",
+      "region": [
+        0,
+        1070,
+        89,
+        1135
+      ],
+      "source_bounds": [
+        0,
+        1070,
+        89,
+        1135
+      ],
+      "pixel_size": [
+        97,
+        73
+      ]
+    },
+    {
+      "id": "permission-deny",
+      "region": [
+        89,
+        1070,
+        166,
+        1135
+      ],
+      "source_bounds": [
+        89,
+        1070,
+        166,
+        1135
+      ],
+      "pixel_size": [
+        85,
+        73
+      ]
+    },
+    {
+      "id": "permission-session",
+      "region": [
+        166,
+        1070,
+        241,
+        1135
+      ],
+      "source_bounds": [
+        166,
+        1070,
+        241,
+        1135
+      ],
+      "pixel_size": [
+        83,
+        73
+      ]
+    },
+    {
+      "id": "permission-folder",
+      "region": [
+        241,
+        1070,
+        320,
+        1135
+      ],
+      "source_bounds": [
+        241,
+        1070,
+        320,
+        1135
+      ],
+      "pixel_size": [
+        87,
+        73
+      ]
+    },
+    {
+      "id": "permission-network",
+      "region": [
+        320,
+        1070,
+        397,
+        1135
+      ],
+      "source_bounds": [
+        320,
+        1070,
+        397,
+        1135
+      ],
+      "pixel_size": [
+        85,
+        73
+      ]
+    },
+    {
+      "id": "permission-execute",
+      "region": [
+        397,
+        1070,
+        472,
+        1135
+      ],
+      "source_bounds": [
+        397,
+        1070,
+        472,
+        1135
+      ],
+      "pixel_size": [
+        83,
+        73
+      ]
+    },
+    {
+      "id": "question-answer",
+      "region": [
+        472,
+        1070,
+        549,
+        1135
+      ],
+      "source_bounds": [
+        472,
+        1070,
+        549,
+        1135
+      ],
+      "pixel_size": [
+        85,
+        73
+      ]
+    },
+    {
+      "id": "question-choice",
+      "region": [
+        549,
+        1070,
+        628,
+        1135
+      ],
+      "source_bounds": [
+        549,
+        1070,
+        628,
+        1135
+      ],
+      "pixel_size": [
+        87,
+        73
+      ]
+    },
+    {
+      "id": "question-text",
+      "region": [
+        628,
+        1070,
+        705,
+        1135
+      ],
+      "source_bounds": [
+        628,
+        1070,
+        705,
+        1135
+      ],
+      "pixel_size": [
+        85,
+        73
+      ]
+    },
+    {
+      "id": "question-submit",
+      "region": [
+        705,
+        1070,
+        782,
+        1135
+      ],
+      "source_bounds": [
+        705,
+        1070,
+        782,
+        1135
+      ],
+      "pixel_size": [
+        85,
+        73
+      ]
+    },
+    {
+      "id": "notification-info",
+      "region": [
+        782,
+        1070,
+        858,
+        1135
+      ],
+      "source_bounds": [
+        782,
+        1070,
+        858,
+        1135
+      ],
+      "pixel_size": [
+        84,
+        73
+      ]
+    },
+    {
+      "id": "notification-success",
+      "region": [
+        858,
+        1070,
+        935,
+        1135
+      ],
+      "source_bounds": [
+        858,
+        1070,
+        935,
+        1135
+      ],
+      "pixel_size": [
+        85,
+        73
+      ]
+    },
+    {
+      "id": "notification-warning",
+      "region": [
+        935,
+        1070,
+        1013,
+        1135
+      ],
+      "source_bounds": [
+        935,
+        1070,
+        1013,
+        1135
+      ],
+      "pixel_size": [
+        86,
+        73
+      ]
+    },
+    {
+      "id": "notification-error",
+      "region": [
+        1013,
+        1070,
+        1090,
+        1135
+      ],
+      "source_bounds": [
+        1013,
+        1070,
+        1090,
+        1135
+      ],
+      "pixel_size": [
+        85,
+        73
+      ]
+    },
+    {
+      "id": "notification-muted",
+      "region": [
+        1090,
+        1070,
+        1166,
+        1135
+      ],
+      "source_bounds": [
+        1090,
+        1070,
+        1166,
+        1135
+      ],
+      "pixel_size": [
+        84,
+        73
+      ]
+    },
+    {
+      "id": "notification-inbox",
+      "region": [
+        1166,
+        1070,
+        1254,
+        1135
+      ],
+      "source_bounds": [
+        1166,
+        1070,
+        1240,
+        1135
+      ],
+      "pixel_size": [
+        82,
+        73
+      ]
+    },
+    {
+      "id": "navigation-back",
+      "region": [
+        0,
+        1135,
+        89,
+        1254
+      ],
+      "source_bounds": [
+        31,
+        1135,
+        86,
+        1243
+      ],
+      "pixel_size": [
+        63,
+        116
+      ]
+    },
+    {
+      "id": "navigation-forward",
+      "region": [
+        89,
+        1135,
+        166,
+        1254
+      ],
+      "source_bounds": [
+        92,
+        1135,
+        165,
+        1254
+      ],
+      "pixel_size": [
+        81,
+        127
+      ]
+    },
+    {
+      "id": "navigation-home",
+      "region": [
+        166,
+        1135,
+        241,
+        1254
+      ],
+      "source_bounds": [
+        166,
+        1135,
+        241,
+        1220
+      ],
+      "pixel_size": [
+        83,
+        93
+      ]
+    },
+    {
+      "id": "navigation-top",
+      "region": [
+        241,
+        1135,
+        318,
+        1254
+      ],
+      "source_bounds": [
+        241,
+        1135,
+        318,
+        1238
+      ],
+      "pixel_size": [
+        85,
+        111
+      ]
+    },
+    {
+      "id": "navigation-bottom",
+      "region": [
+        318,
+        1135,
+        396,
+        1254
+      ],
+      "source_bounds": [
+        318,
+        1135,
+        396,
+        1222
+      ],
+      "pixel_size": [
+        86,
+        95
+      ]
+    },
+    {
+      "id": "sidebar-show",
+      "region": [
+        396,
+        1135,
+        473,
+        1254
+      ],
+      "source_bounds": [
+        396,
+        1135,
+        473,
+        1222
+      ],
+      "pixel_size": [
+        85,
+        95
+      ]
+    },
+    {
+      "id": "sidebar-hide",
+      "region": [
+        473,
+        1135,
+        552,
+        1254
+      ],
+      "source_bounds": [
+        473,
+        1135,
+        552,
+        1230
+      ],
+      "pixel_size": [
+        87,
+        103
+      ]
+    },
+    {
+      "id": "panel-split",
+      "region": [
+        552,
+        1135,
+        625,
+        1254
+      ],
+      "source_bounds": [
+        552,
+        1135,
+        625,
+        1254
+      ],
+      "pixel_size": [
+        81,
+        127
+      ]
+    },
+    {
+      "id": "panel-merge",
+      "region": [
+        625,
+        1135,
+        702,
+        1254
+      ],
+      "source_bounds": [
+        626,
+        1135,
+        701,
+        1236
+      ],
+      "pixel_size": [
+        83,
+        109
+      ]
+    },
+    {
+      "id": "window-new",
+      "region": [
+        702,
+        1135,
+        782,
+        1254
+      ],
+      "source_bounds": [
+        704,
+        1135,
+        782,
+        1242
+      ],
+      "pixel_size": [
+        86,
+        115
+      ]
+    },
+    {
+      "id": "window-restore",
+      "region": [
+        782,
+        1135,
+        857,
+        1254
+      ],
+      "source_bounds": [
+        782,
+        1135,
+        857,
+        1254
+      ],
+      "pixel_size": [
+        83,
+        127
+      ]
+    },
+    {
+      "id": "update-available",
+      "region": [
+        857,
+        1135,
+        937,
+        1254
+      ],
+      "source_bounds": [
+        857,
+        1135,
+        933,
+        1254
+      ],
+      "pixel_size": [
+        84,
+        127
+      ]
+    },
+    {
+      "id": "update-download",
+      "region": [
+        937,
+        1135,
+        1014,
+        1254
+      ],
+      "source_bounds": [
+        939,
+        1135,
+        1014,
+        1254
+      ],
+      "pixel_size": [
+        83,
+        127
+      ]
+    },
+    {
+      "id": "update-install",
+      "region": [
+        1014,
+        1135,
+        1090,
+        1254
+      ],
+      "source_bounds": [
+        1014,
+        1135,
+        1090,
+        1254
+      ],
+      "pixel_size": [
+        84,
+        127
+      ]
+    },
+    {
+      "id": "update-rollback",
+      "region": [
+        1090,
+        1135,
+        1166,
+        1254
+      ],
+      "source_bounds": [
+        1090,
+        1135,
+        1166,
+        1254
+      ],
+      "pixel_size": [
+        84,
+        127
+      ]
+    },
+    {
+      "id": "help",
+      "region": [
+        1166,
+        1135,
+        1254,
+        1254
+      ],
+      "source_bounds": [
+        1166,
+        1135,
+        1254,
+        1254
+      ],
+      "pixel_size": [
+        96,
+        127
+      ]
+    }
+  ],
+  "border_warnings": []
+}

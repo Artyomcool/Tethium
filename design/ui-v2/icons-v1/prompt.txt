@@ -1,0 +1,20 @@
+Use case: logo-brand. Asset type: production UI toolbar icon atlas for a compact desktop developer app.
+Create ONE 1024 by 1024 square transparent RGBA image containing exactly 16 distinct monochrome icons in an invisible 4 by 4 grid of equal 256 by 256 cells. Each icon is centered in its cell with 18% transparent gutters on every side, fixed row-major order. No grid lines, no labels, no letters, no numbers, no cards, no decorative backgrounds.
+Style: precise modern geometric monochrome charcoal-black ink (#171719) on true transparent background; smooth antialiased edges; front-facing flat 2D; consistent rounded stroke ends and joins, optical weight equivalent to a 1.8px stroke on a 20px UI icon. All icons need to be readable at 18px. No shading, no gradients, no shadows, no texture, no white fill, no checkerboard illustration. Negative spaces remain transparent. Similar optical size, complete unclipped shapes; no shape crosses its cell.
+Row 1, column 1: open folder with short tab.
+Row 1, column 2: rounded conversation bubble with two short horizontal text strokes.
+Row 1, column 3: simple plus sign.
+Row 1, column 4: archive tray with lid and short centered handle.
+Row 2, column 1: arrow pointing straight upward.
+Row 2, column 2: single solid softly rounded square stop symbol.
+Row 2, column 3: rounded landscape frame with one mountain line and small sun.
+Row 2, column 4: four outward pointing corner brackets for fullscreen.
+Row 3, column 1: circular refresh arrow.
+Row 3, column 2: simple diagonal X close mark.
+Row 3, column 3: three horizontal solid dots.
+Row 3, column 4: solid right-pointing play triangle.
+Row 4, column 1: three vertical equal-width activity bars with different heights.
+Row 4, column 2: diagonal paperclip.
+Row 4, column 3: simple gear with six teeth and circular center.
+Row 4, column 4: undefined.
+Icons are meant as practical controls, not illustrations. Keep strokes uniform, restrained, slightly rounded and crisp.

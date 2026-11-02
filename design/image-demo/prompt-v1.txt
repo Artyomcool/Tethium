@@ -1,0 +1,6 @@
+Use case: stylized-concept
+Asset type: one demonstration image for testing image generation and visual analysis inside Tethium
+Primary request: A small friendly desktop robot working at a laptop, with a smartphone beside the laptop, in a clean miniature workspace. Include exactly three separate geometric objects on the desk: one red cube, one green sphere, and one blue cone. Include a small upright desk nameplate with the exact legible text "TETHIUM".
+Style/medium: polished tactile 3D illustration with matte materials, soft studio lighting, a neutral pale background and crisp readable objects.
+Composition/framing: landscape three-quarter view, the whole robot, laptop, smartphone, three geometric objects and nameplate clearly visible, no overlap that hides the geometric objects.
+Constraints: The nameplate reads exactly "TETHIUM". No other text, no watermark. This is a test illustration, not an application screenshot.

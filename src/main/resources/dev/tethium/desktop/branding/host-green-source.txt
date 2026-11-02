@@ -1,0 +1,3 @@
+Built-in image_gen edit, transparent background.
+Prompt: Recolor the existing silver low-poly origami jellyfish acid lime green (#a8ff26 highlights, chartreuse midtones, deep green shaded facets). Preserve silhouette, tentacles, faceted shading, composition and scale. No glow, outline, text or backdrop.
+Original silver assets retained in client/.

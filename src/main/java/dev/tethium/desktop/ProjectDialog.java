@@ -1,0 +1,21 @@
+package dev.tethium.desktop;
+
+import dev.tethium.host.HostClient;
+import dev.tethium.json.Json;
+import com.fasterxml.jackson.databind.JsonNode;
+import javax.swing.*;
+import java.awt.*;
+import java.nio.file.*;
+import java.util.function.Consumer;
+
+final class ProjectDialog {
+    static void open(Window owner,HostClient host,JsonNode project,Consumer<JsonNode> saved){
+        var dialog=new JDialog(owner,project==null?"Добавить проект":"Настройки проекта",Dialog.ModalityType.MODELESS);var panel=new JPanel();panel.setLayout(new BoxLayout(panel,BoxLayout.Y_AXIS));panel.setBorder(BorderFactory.createEmptyBorder(16,16,16,16));
+        var path=new JTextField(project==null?"C:/git/":project.path("root").asText(),40);path.setEditable(project==null);var browse=new JButton("Выбрать…");browse.setEnabled(project==null);browse.addActionListener(e->{var chooser=new JFileChooser(path.getText());chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);if(chooser.showOpenDialog(dialog)==JFileChooser.APPROVE_OPTION)path.setText(chooser.getSelectedFile().toString());});var row=new JPanel(new BorderLayout(8,0));row.add(path);row.add(browse,BorderLayout.EAST);panel.add(new JLabel("Каталог проекта · можно указать новый"));panel.add(row);panel.add(Box.createVerticalStrut(16));
+        var github=new JCheckBox("Создать репозиторий GitHub");var repository=new JTextField(30);repository.putClientProperty("JTextField.placeholderText","Имя или owner/name");var publicRepo=new JCheckBox("Публичный репозиторий");var sync=new JCheckBox("Агентам часто коммитить и сразу отправлять изменения в GitHub");var info=new JLabel("Правило хранится в управляемом разделе AGENTS.md этого проекта.");info.setForeground(Theme.MUTED);var state=new JLabel(" ");
+        panel.add(github);panel.add(repository);panel.add(publicRepo);panel.add(Box.createVerticalStrut(12));panel.add(sync);panel.add(info);panel.add(Box.createVerticalStrut(12));panel.add(state);repository.setEnabled(false);publicRepo.setEnabled(false);github.addActionListener(e->{repository.setEnabled(github.isSelected());publicRepo.setEnabled(github.isSelected());if(repository.getText().isBlank())try{repository.setText(Path.of(path.getText()).getFileName().toString());}catch(Exception ignored){}});
+        var save=new JButton(project==null?"Добавить проект":"Сохранить");save.addActionListener(e->{save.setEnabled(false);state.setText("Сохраняем…");var body=Json.object("path",path.getText(),"createRepository",github.isSelected(),"repository",repository.getText(),"public",publicRepo.isSelected(),"frequentPush",sync.isSelected());Thread.ofVirtual().start(()->{try{var result=host.post(project==null?"/projects":"/projects/"+project.path("id").asText()+"/settings",body);SwingUtilities.invokeLater(()->{dialog.dispose();saved.accept(result);});}catch(Exception failure){SwingUtilities.invokeLater(()->{save.setEnabled(true);state.setText("Не сохранено");JOptionPane.showMessageDialog(dialog,failure.getMessage(),"Проект",JOptionPane.ERROR_MESSAGE);});}});});panel.add(Box.createVerticalStrut(16));panel.add(save);save.setEnabled(project==null);
+        dialog.setContentPane(panel);dialog.pack();dialog.setLocationRelativeTo(owner);dialog.setVisible(true);
+        if(project!=null)Thread.ofVirtual().start(()->{try{var settings=host.get("/project?project="+project.path("id").asText());SwingUtilities.invokeLater(()->{save.setEnabled(true);sync.setSelected(settings.path("frequentPush").asBoolean());state.setText(settings.path("remote").asText().isBlank()?settings.path("login").asText().isBlank()?"Для GitHub выполните gh auth login на ноутбуке":"GitHub: "+settings.path("login").asText():settings.path("remote").asText());github.setEnabled(settings.path("remote").asText().isBlank());});}catch(Exception failure){SwingUtilities.invokeLater(()->state.setText(failure.getMessage()));}});
+    }
+}

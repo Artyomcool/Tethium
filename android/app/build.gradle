@@ -1,0 +1,18 @@
+plugins { id 'com.android.application' }
+def signingFile = new File(System.getenv('LOCALAPPDATA'), 'Tethium/android-signing.properties')
+def signing = new Properties()
+if (signingFile.exists()) signingFile.withInputStream { signing.load(it) }
+android {
+    namespace 'dev.tethium.mobile'
+    compileSdk 36
+    defaultConfig { applicationId 'dev.tethium.mobile'; minSdk 26; targetSdk 36; versionCode 4; versionName '0.3.0' }
+    signingConfigs { release { if (signingFile.exists()) { storeFile file(signing.storeFile); storePassword signing.password; keyAlias 'tethium'; keyPassword signing.password } } }
+    buildTypes { release { signingConfig signingConfigs.release; minifyEnabled false } }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+dependencies {
+    implementation 'io.noties.markwon:core:4.6.2'
+    implementation 'io.noties.markwon:ext-tables:4.6.2'
+    implementation 'io.noties.markwon:ext-strikethrough:4.6.2'
+    implementation 'io.noties.markwon:ext-tasklist:4.6.2'
+}

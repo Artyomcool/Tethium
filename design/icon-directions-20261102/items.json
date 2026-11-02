@@ -1,0 +1,1026 @@
+[
+  {
+    "id": "01-01",
+    "description": "split T monogram"
+  },
+  {
+    "id": "01-02",
+    "description": "ribbon T"
+  },
+  {
+    "id": "01-03",
+    "description": "architectural T"
+  },
+  {
+    "id": "01-04",
+    "description": "serif T"
+  },
+  {
+    "id": "01-05",
+    "description": "stencil T"
+  },
+  {
+    "id": "01-06",
+    "description": "pixel T"
+  },
+  {
+    "id": "01-07",
+    "description": "orbital T"
+  },
+  {
+    "id": "01-08",
+    "description": "folded T"
+  },
+  {
+    "id": "01-09",
+    "description": "brush T"
+  },
+  {
+    "id": "01-10",
+    "description": "glass T"
+  },
+  {
+    "id": "01-11",
+    "description": "negative-space T"
+  },
+  {
+    "id": "01-12",
+    "description": "woven T"
+  },
+  {
+    "id": "01-13",
+    "description": "lightning T"
+  },
+  {
+    "id": "01-14",
+    "description": "circuit T"
+  },
+  {
+    "id": "01-15",
+    "description": "rounded lowercase t"
+  },
+  {
+    "id": "01-16",
+    "description": "interlocking TT"
+  },
+  {
+    "id": "02-01",
+    "description": "tetrahedron"
+  },
+  {
+    "id": "02-02",
+    "description": "impossible triangle"
+  },
+  {
+    "id": "02-03",
+    "description": "nested cubes"
+  },
+  {
+    "id": "02-04",
+    "description": "torus"
+  },
+  {
+    "id": "02-05",
+    "description": "dodecahedron"
+  },
+  {
+    "id": "02-06",
+    "description": "twisted prism"
+  },
+  {
+    "id": "02-07",
+    "description": "floating slabs"
+  },
+  {
+    "id": "02-08",
+    "description": "crystal shard"
+  },
+  {
+    "id": "02-09",
+    "description": "wireframe sphere"
+  },
+  {
+    "id": "02-10",
+    "description": "faceted pebble"
+  },
+  {
+    "id": "02-11",
+    "description": "spiral cone"
+  },
+  {
+    "id": "02-12",
+    "description": "stepped pyramid"
+  },
+  {
+    "id": "02-13",
+    "description": "beveled hexagon"
+  },
+  {
+    "id": "02-14",
+    "description": "origami diamond"
+  },
+  {
+    "id": "02-15",
+    "description": "cut cylinder"
+  },
+  {
+    "id": "02-16",
+    "description": "asymmetric polyhedron"
+  },
+  {
+    "id": "03-01",
+    "description": "three orbiting dots"
+  },
+  {
+    "id": "03-02",
+    "description": "branching hub"
+  },
+  {
+    "id": "03-03",
+    "description": "braided paths"
+  },
+  {
+    "id": "03-04",
+    "description": "linked rings"
+  },
+  {
+    "id": "03-05",
+    "description": "radial spokes"
+  },
+  {
+    "id": "03-06",
+    "description": "triangular network"
+  },
+  {
+    "id": "03-07",
+    "description": "constellation"
+  },
+  {
+    "id": "03-08",
+    "description": "bridge"
+  },
+  {
+    "id": "03-09",
+    "description": "woven loop"
+  },
+  {
+    "id": "03-10",
+    "description": "connected tiles"
+  },
+  {
+    "id": "03-11",
+    "description": "magnetic poles"
+  },
+  {
+    "id": "03-12",
+    "description": "chain link"
+  },
+  {
+    "id": "03-13",
+    "description": "converging arrows"
+  },
+  {
+    "id": "03-14",
+    "description": "relay baton"
+  },
+  {
+    "id": "03-15",
+    "description": "switch junction"
+  },
+  {
+    "id": "03-16",
+    "description": "nested gateways"
+  },
+  {
+    "id": "04-01",
+    "description": "fox head"
+  },
+  {
+    "id": "04-02",
+    "description": "owl eyes"
+  },
+  {
+    "id": "04-03",
+    "description": "raven profile"
+  },
+  {
+    "id": "04-04",
+    "description": "octopus"
+  },
+  {
+    "id": "04-05",
+    "description": "hummingbird"
+  },
+  {
+    "id": "04-06",
+    "description": "lynx"
+  },
+  {
+    "id": "04-07",
+    "description": "moth"
+  },
+  {
+    "id": "04-08",
+    "description": "whale tail"
+  },
+  {
+    "id": "04-09",
+    "description": "beetle"
+  },
+  {
+    "id": "04-10",
+    "description": "origami crane"
+  },
+  {
+    "id": "04-11",
+    "description": "gecko"
+  },
+  {
+    "id": "04-12",
+    "description": "cat silhouette"
+  },
+  {
+    "id": "04-13",
+    "description": "jellyfish"
+  },
+  {
+    "id": "04-14",
+    "description": "dragonfly"
+  },
+  {
+    "id": "04-15",
+    "description": "wolf crest"
+  },
+  {
+    "id": "04-16",
+    "description": "seahorse"
+  },
+  {
+    "id": "05-01",
+    "description": "seed sprout"
+  },
+  {
+    "id": "05-02",
+    "description": "fern curl"
+  },
+  {
+    "id": "05-03",
+    "description": "ginkgo leaf"
+  },
+  {
+    "id": "05-04",
+    "description": "pine cone"
+  },
+  {
+    "id": "05-05",
+    "description": "mushroom"
+  },
+  {
+    "id": "05-06",
+    "description": "branching tree"
+  },
+  {
+    "id": "05-07",
+    "description": "lotus"
+  },
+  {
+    "id": "05-08",
+    "description": "coral"
+  },
+  {
+    "id": "05-09",
+    "description": "acorn"
+  },
+  {
+    "id": "05-10",
+    "description": "maple seed"
+  },
+  {
+    "id": "05-11",
+    "description": "sunflower center"
+  },
+  {
+    "id": "05-12",
+    "description": "bamboo joint"
+  },
+  {
+    "id": "05-13",
+    "description": "cactus"
+  },
+  {
+    "id": "05-14",
+    "description": "water lily"
+  },
+  {
+    "id": "05-15",
+    "description": "abstract root"
+  },
+  {
+    "id": "05-16",
+    "description": "split seed"
+  },
+  {
+    "id": "06-01",
+    "description": "comet"
+  },
+  {
+    "id": "06-02",
+    "description": "eclipse"
+  },
+  {
+    "id": "06-03",
+    "description": "ringed planet"
+  },
+  {
+    "id": "06-04",
+    "description": "crescent"
+  },
+  {
+    "id": "06-05",
+    "description": "supernova"
+  },
+  {
+    "id": "06-06",
+    "description": "sun disk"
+  },
+  {
+    "id": "06-07",
+    "description": "lunar crater"
+  },
+  {
+    "id": "06-08",
+    "description": "meteor"
+  },
+  {
+    "id": "06-09",
+    "description": "galaxy spiral"
+  },
+  {
+    "id": "06-10",
+    "description": "double star"
+  },
+  {
+    "id": "06-11",
+    "description": "planetary arc"
+  },
+  {
+    "id": "06-12",
+    "description": "astronaut visor"
+  },
+  {
+    "id": "06-13",
+    "description": "nebula knot"
+  },
+  {
+    "id": "06-14",
+    "description": "celestial compass"
+  },
+  {
+    "id": "06-15",
+    "description": "rocket flame"
+  },
+  {
+    "id": "06-16",
+    "description": "horizon sunrise"
+  },
+  {
+    "id": "07-01",
+    "description": "command chevron"
+  },
+  {
+    "id": "07-02",
+    "description": "cursor spark"
+  },
+  {
+    "id": "07-03",
+    "description": "terminal window"
+  },
+  {
+    "id": "07-04",
+    "description": "code brackets"
+  },
+  {
+    "id": "07-05",
+    "description": "prompt underscore"
+  },
+  {
+    "id": "07-06",
+    "description": "stacked windows"
+  },
+  {
+    "id": "07-07",
+    "description": "folder portal"
+  },
+  {
+    "id": "07-08",
+    "description": "tab fan"
+  },
+  {
+    "id": "07-09",
+    "description": "message knot"
+  },
+  {
+    "id": "07-10",
+    "description": "conversation balloons"
+  },
+  {
+    "id": "07-11",
+    "description": "document fold"
+  },
+  {
+    "id": "07-12",
+    "description": "queue bars"
+  },
+  {
+    "id": "07-13",
+    "description": "timeline bead"
+  },
+  {
+    "id": "07-14",
+    "description": "keyboard key"
+  },
+  {
+    "id": "07-15",
+    "description": "task check"
+  },
+  {
+    "id": "07-16",
+    "description": "branching code"
+  },
+  {
+    "id": "08-01",
+    "description": "lighthouse"
+  },
+  {
+    "id": "08-02",
+    "description": "compass rose"
+  },
+  {
+    "id": "08-03",
+    "description": "astrolabe"
+  },
+  {
+    "id": "08-04",
+    "description": "map pin"
+  },
+  {
+    "id": "08-05",
+    "description": "sextant"
+  },
+  {
+    "id": "08-06",
+    "description": "ship wheel"
+  },
+  {
+    "id": "08-07",
+    "description": "sail"
+  },
+  {
+    "id": "08-08",
+    "description": "paper airplane"
+  },
+  {
+    "id": "08-09",
+    "description": "mountain route"
+  },
+  {
+    "id": "08-10",
+    "description": "waypoint flag"
+  },
+  {
+    "id": "08-11",
+    "description": "telescope"
+  },
+  {
+    "id": "08-12",
+    "description": "radar sweep"
+  },
+  {
+    "id": "08-13",
+    "description": "beacon tower"
+  },
+  {
+    "id": "08-14",
+    "description": "north arrow"
+  },
+  {
+    "id": "08-15",
+    "description": "trail switchback"
+  },
+  {
+    "id": "08-16",
+    "description": "horizon gate"
+  },
+  {
+    "id": "09-01",
+    "description": "anvil"
+  },
+  {
+    "id": "09-02",
+    "description": "hammer spark"
+  },
+  {
+    "id": "09-03",
+    "description": "forge flame"
+  },
+  {
+    "id": "09-04",
+    "description": "wrench loop"
+  },
+  {
+    "id": "09-05",
+    "description": "caliper"
+  },
+  {
+    "id": "09-06",
+    "description": "vise"
+  },
+  {
+    "id": "09-07",
+    "description": "gear blossom"
+  },
+  {
+    "id": "09-08",
+    "description": "precision screw"
+  },
+  {
+    "id": "09-09",
+    "description": "solder tip"
+  },
+  {
+    "id": "09-10",
+    "description": "mechanical iris"
+  },
+  {
+    "id": "09-11",
+    "description": "pulley"
+  },
+  {
+    "id": "09-12",
+    "description": "flywheel"
+  },
+  {
+    "id": "09-13",
+    "description": "turbine"
+  },
+  {
+    "id": "09-14",
+    "description": "spring coil"
+  },
+  {
+    "id": "09-15",
+    "description": "piston"
+  },
+  {
+    "id": "09-16",
+    "description": "robotic gripper"
+  },
+  {
+    "id": "10-01",
+    "description": "eye symbol"
+  },
+  {
+    "id": "10-02",
+    "description": "fingerprint"
+  },
+  {
+    "id": "10-03",
+    "description": "labyrinth"
+  },
+  {
+    "id": "10-04",
+    "description": "infinity knot"
+  },
+  {
+    "id": "10-05",
+    "description": "dream cloud"
+  },
+  {
+    "id": "10-06",
+    "description": "brain fold"
+  },
+  {
+    "id": "10-07",
+    "description": "thought bubble"
+  },
+  {
+    "id": "10-08",
+    "description": "neuron"
+  },
+  {
+    "id": "10-09",
+    "description": "memory stack"
+  },
+  {
+    "id": "10-10",
+    "description": "abstract ear"
+  },
+  {
+    "id": "10-11",
+    "description": "question spiral"
+  },
+  {
+    "id": "10-12",
+    "description": "focus reticle"
+  },
+  {
+    "id": "10-13",
+    "description": "insight bulb"
+  },
+  {
+    "id": "10-14",
+    "description": "puzzle bridge"
+  },
+  {
+    "id": "10-15",
+    "description": "keyhole"
+  },
+  {
+    "id": "10-16",
+    "description": "open lock"
+  },
+  {
+    "id": "11-01",
+    "description": "water droplet"
+  },
+  {
+    "id": "11-02",
+    "description": "ocean wave"
+  },
+  {
+    "id": "11-03",
+    "description": "waterfall"
+  },
+  {
+    "id": "11-04",
+    "description": "whirlpool"
+  },
+  {
+    "id": "11-05",
+    "description": "ripple"
+  },
+  {
+    "id": "11-06",
+    "description": "ice floe"
+  },
+  {
+    "id": "11-07",
+    "description": "snow crystal"
+  },
+  {
+    "id": "11-08",
+    "description": "flame droplet"
+  },
+  {
+    "id": "11-09",
+    "description": "gust"
+  },
+  {
+    "id": "11-10",
+    "description": "thundercloud"
+  },
+  {
+    "id": "11-11",
+    "description": "lightning bolt"
+  },
+  {
+    "id": "11-12",
+    "description": "aurora ribbon"
+  },
+  {
+    "id": "11-13",
+    "description": "rain arc"
+  },
+  {
+    "id": "11-14",
+    "description": "sand dune"
+  },
+  {
+    "id": "11-15",
+    "description": "volcanic peak"
+  },
+  {
+    "id": "11-16",
+    "description": "river delta"
+  },
+  {
+    "id": "12-01",
+    "description": "woven basket"
+  },
+  {
+    "id": "12-02",
+    "description": "textile knot"
+  },
+  {
+    "id": "12-03",
+    "description": "spool"
+  },
+  {
+    "id": "12-04",
+    "description": "sewing needle arc"
+  },
+  {
+    "id": "12-05",
+    "description": "paper fold"
+  },
+  {
+    "id": "12-06",
+    "description": "wax seal"
+  },
+  {
+    "id": "12-07",
+    "description": "ceramic bowl"
+  },
+  {
+    "id": "12-08",
+    "description": "stone cairn"
+  },
+  {
+    "id": "12-09",
+    "description": "carved rune"
+  },
+  {
+    "id": "12-10",
+    "description": "wood joint"
+  },
+  {
+    "id": "12-11",
+    "description": "mosaic tile"
+  },
+  {
+    "id": "12-12",
+    "description": "stained glass shard"
+  },
+  {
+    "id": "12-13",
+    "description": "enamel pin"
+  },
+  {
+    "id": "12-14",
+    "description": "ink stamp"
+  },
+  {
+    "id": "12-15",
+    "description": "chalk gesture"
+  },
+  {
+    "id": "12-16",
+    "description": "cut paper bird"
+  },
+  {
+    "id": "13-01",
+    "description": "retro CRT face"
+  },
+  {
+    "id": "13-02",
+    "description": "pixel ghost"
+  },
+  {
+    "id": "13-03",
+    "description": "arcade joystick"
+  },
+  {
+    "id": "13-04",
+    "description": "floppy disk sun"
+  },
+  {
+    "id": "13-05",
+    "description": "cassette loop"
+  },
+  {
+    "id": "13-06",
+    "description": "eight-bit gem"
+  },
+  {
+    "id": "13-07",
+    "description": "voxel tower"
+  },
+  {
+    "id": "13-08",
+    "description": "dithered orb"
+  },
+  {
+    "id": "13-09",
+    "description": "isometric room"
+  },
+  {
+    "id": "13-10",
+    "description": "circuit bug"
+  },
+  {
+    "id": "13-11",
+    "description": "friendly robot"
+  },
+  {
+    "id": "13-12",
+    "description": "satellite dish"
+  },
+  {
+    "id": "13-13",
+    "description": "antenna"
+  },
+  {
+    "id": "13-14",
+    "description": "neon portal"
+  },
+  {
+    "id": "13-15",
+    "description": "chrome swoosh"
+  },
+  {
+    "id": "13-16",
+    "description": "hologram shard"
+  },
+  {
+    "id": "14-01",
+    "description": "bold black disk cutout"
+  },
+  {
+    "id": "14-02",
+    "description": "red square notch"
+  },
+  {
+    "id": "14-03",
+    "description": "blue semicircle pair"
+  },
+  {
+    "id": "14-04",
+    "description": "yellow zigzag"
+  },
+  {
+    "id": "14-05",
+    "description": "orange arch"
+  },
+  {
+    "id": "14-06",
+    "description": "purple crossbar"
+  },
+  {
+    "id": "14-07",
+    "description": "green off-center ring"
+  },
+  {
+    "id": "14-08",
+    "description": "white pinwheel"
+  },
+  {
+    "id": "14-09",
+    "description": "black staircase"
+  },
+  {
+    "id": "14-10",
+    "description": "red wedge stack"
+  },
+  {
+    "id": "14-11",
+    "description": "blue capsule split"
+  },
+  {
+    "id": "14-12",
+    "description": "yellow bracket"
+  },
+  {
+    "id": "14-13",
+    "description": "orange fan"
+  },
+  {
+    "id": "14-14",
+    "description": "violet petal triad"
+  },
+  {
+    "id": "14-15",
+    "description": "green domino"
+  },
+  {
+    "id": "14-16",
+    "description": "monochrome asterisk"
+  },
+  {
+    "id": "15-01",
+    "description": "guardian mask"
+  },
+  {
+    "id": "15-02",
+    "description": "abstract helmet"
+  },
+  {
+    "id": "15-03",
+    "description": "shield split"
+  },
+  {
+    "id": "15-04",
+    "description": "crown"
+  },
+  {
+    "id": "15-05",
+    "description": "flag fold"
+  },
+  {
+    "id": "15-06",
+    "description": "heraldic bird"
+  },
+  {
+    "id": "15-07",
+    "description": "geometric dragon"
+  },
+  {
+    "id": "15-08",
+    "description": "friendly cyclops"
+  },
+  {
+    "id": "15-09",
+    "description": "smiling pebble"
+  },
+  {
+    "id": "15-10",
+    "description": "tiny astronaut"
+  },
+  {
+    "id": "15-11",
+    "description": "wizard hat"
+  },
+  {
+    "id": "15-12",
+    "description": "ghost flame"
+  },
+  {
+    "id": "15-13",
+    "description": "robotic fox"
+  },
+  {
+    "id": "15-14",
+    "description": "clockwork owl"
+  },
+  {
+    "id": "15-15",
+    "description": "origami turtle"
+  },
+  {
+    "id": "15-16",
+    "description": "minimal golem"
+  },
+  {
+    "id": "16-01",
+    "description": "hourglass"
+  },
+  {
+    "id": "16-02",
+    "description": "pendulum"
+  },
+  {
+    "id": "16-03",
+    "description": "clock arc"
+  },
+  {
+    "id": "16-04",
+    "description": "metronome"
+  },
+  {
+    "id": "16-05",
+    "description": "tuning fork"
+  },
+  {
+    "id": "16-06",
+    "description": "waveform"
+  },
+  {
+    "id": "16-07",
+    "description": "equalizer"
+  },
+  {
+    "id": "16-08",
+    "description": "musical rest"
+  },
+  {
+    "id": "16-09",
+    "description": "conducting baton"
+  },
+  {
+    "id": "16-10",
+    "description": "rhythm dots"
+  },
+  {
+    "id": "16-11",
+    "description": "domino cascade"
+  },
+  {
+    "id": "16-12",
+    "description": "balancing stones"
+  },
+  {
+    "id": "16-13",
+    "description": "gyroscope"
+  },
+  {
+    "id": "16-14",
+    "description": "spinning top"
+  },
+  {
+    "id": "16-15",
+    "description": "Möbius band"
+  },
+  {
+    "id": "16-16",
+    "description": "open doorway"
+  }
+]

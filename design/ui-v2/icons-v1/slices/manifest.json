@@ -1,0 +1,427 @@
+{
+  "source": "C:\\git\\Tethium\\design\\ui-v2\\icons-v1\\sheet.png",
+  "sha256": "7b7b3691b58e251f7134bf670b6dbcd51f0d9d347d07e88711d33d11fdbe0ba2",
+  "actual_size": [
+    1254,
+    1254
+  ],
+  "side": 4,
+  "items": [
+    {
+      "id": "folder",
+      "display_height": 20,
+      "row": 0,
+      "column": 0,
+      "source_bounds": [
+        60,
+        87,
+        293,
+        277
+      ],
+      "pixel_size": [
+        245,
+        202
+      ],
+      "pivot": [
+        0.5,
+        0.9603960396039604
+      ],
+      "nominal_cell": [
+        0,
+        0,
+        314,
+        314
+      ]
+    },
+    {
+      "id": "session",
+      "display_height": 20,
+      "row": 0,
+      "column": 1,
+      "source_bounds": [
+        363,
+        81,
+        594,
+        298
+      ],
+      "pixel_size": [
+        243,
+        229
+      ],
+      "pivot": [
+        0.5,
+        0.9650655021834061
+      ],
+      "nominal_cell": [
+        314,
+        0,
+        627,
+        314
+      ]
+    },
+    {
+      "id": "plus",
+      "display_height": 20,
+      "row": 0,
+      "column": 2,
+      "source_bounds": [
+        680,
+        83,
+        879,
+        282
+      ],
+      "pixel_size": [
+        209,
+        209
+      ],
+      "pivot": [
+        0.5,
+        0.9665071770334929
+      ],
+      "nominal_cell": [
+        627,
+        0,
+        940,
+        314
+      ]
+    },
+    {
+      "id": "archive",
+      "display_height": 20,
+      "row": 0,
+      "column": 3,
+      "source_bounds": [
+        963,
+        92,
+        1202,
+        277
+      ],
+      "pixel_size": [
+        251,
+        197
+      ],
+      "pivot": [
+        0.5,
+        0.9593908629441624
+      ],
+      "nominal_cell": [
+        940,
+        0,
+        1254,
+        314
+      ]
+    },
+    {
+      "id": "send",
+      "display_height": 20,
+      "row": 1,
+      "column": 0,
+      "source_bounds": [
+        97,
+        380,
+        254,
+        587
+      ],
+      "pixel_size": [
+        167,
+        217
+      ],
+      "pivot": [
+        0.5,
+        0.967741935483871
+      ],
+      "nominal_cell": [
+        0,
+        314,
+        314,
+        627
+      ]
+    },
+    {
+      "id": "stop",
+      "display_height": 20,
+      "row": 1,
+      "column": 1,
+      "source_bounds": [
+        383,
+        393,
+        573,
+        581
+      ],
+      "pixel_size": [
+        200,
+        198
+      ],
+      "pivot": [
+        0.5,
+        0.9646464646464646
+      ],
+      "nominal_cell": [
+        314,
+        314,
+        627,
+        627
+      ]
+    },
+    {
+      "id": "image",
+      "display_height": 20,
+      "row": 1,
+      "column": 2,
+      "source_bounds": [
+        657,
+        386,
+        900,
+        588
+      ],
+      "pixel_size": [
+        255,
+        214
+      ],
+      "pivot": [
+        0.5,
+        0.9626168224299065
+      ],
+      "nominal_cell": [
+        627,
+        314,
+        940,
+        627
+      ]
+    },
+    {
+      "id": "expand",
+      "display_height": 20,
+      "row": 1,
+      "column": 3,
+      "source_bounds": [
+        976,
+        385,
+        1190,
+        588
+      ],
+      "pixel_size": [
+        224,
+        213
+      ],
+      "pivot": [
+        0.5,
+        0.9671361502347418
+      ],
+      "nominal_cell": [
+        940,
+        314,
+        1254,
+        627
+      ]
+    },
+    {
+      "id": "refresh",
+      "display_height": 20,
+      "row": 2,
+      "column": 0,
+      "source_bounds": [
+        67,
+        681,
+        275,
+        891
+      ],
+      "pixel_size": [
+        218,
+        220
+      ],
+      "pivot": [
+        0.5,
+        0.9681818181818181
+      ],
+      "nominal_cell": [
+        0,
+        627,
+        314,
+        940
+      ]
+    },
+    {
+      "id": "close",
+      "display_height": 20,
+      "row": 2,
+      "column": 1,
+      "source_bounds": [
+        390,
+        695,
+        566,
+        870
+      ],
+      "pixel_size": [
+        184,
+        183
+      ],
+      "pivot": [
+        0.5,
+        0.9672131147540983
+      ],
+      "nominal_cell": [
+        314,
+        627,
+        627,
+        940
+      ]
+    },
+    {
+      "id": "more",
+      "display_height": 20,
+      "row": 2,
+      "column": 2,
+      "source_bounds": [
+        670,
+        752,
+        888,
+        814
+      ],
+      "pixel_size": [
+        228,
+        72
+      ],
+      "pivot": [
+        0.5,
+        0.9027777777777778
+      ],
+      "nominal_cell": [
+        627,
+        627,
+        940,
+        940
+      ]
+    },
+    {
+      "id": "play",
+      "display_height": 20,
+      "row": 2,
+      "column": 3,
+      "source_bounds": [
+        1003,
+        687,
+        1169,
+        876
+      ],
+      "pixel_size": [
+        176,
+        199
+      ],
+      "pivot": [
+        0.5,
+        0.964824120603015
+      ],
+      "nominal_cell": [
+        940,
+        627,
+        1254,
+        940
+      ]
+    },
+    {
+      "id": "activity",
+      "display_height": 20,
+      "row": 3,
+      "column": 0,
+      "source_bounds": [
+        75,
+        993,
+        275,
+        1177
+      ],
+      "pixel_size": [
+        210,
+        194
+      ],
+      "pivot": [
+        0.5,
+        0.9639175257731959
+      ],
+      "nominal_cell": [
+        0,
+        940,
+        314,
+        1254
+      ]
+    },
+    {
+      "id": "attachment",
+      "display_height": 20,
+      "row": 3,
+      "column": 1,
+      "source_bounds": [
+        371,
+        969,
+        578,
+        1202
+      ],
+      "pixel_size": [
+        219,
+        245
+      ],
+      "pivot": [
+        0.5,
+        0.9673469387755103
+      ],
+      "nominal_cell": [
+        314,
+        940,
+        627,
+        1254
+      ]
+    },
+    {
+      "id": "settings",
+      "display_height": 20,
+      "row": 3,
+      "column": 2,
+      "source_bounds": [
+        668,
+        968,
+        887,
+        1197
+      ],
+      "pixel_size": [
+        231,
+        241
+      ],
+      "pivot": [
+        0.5,
+        0.966804979253112
+      ],
+      "nominal_cell": [
+        627,
+        940,
+        940,
+        1254
+      ]
+    },
+    {
+      "id": "help",
+      "display_height": 20,
+      "row": 3,
+      "column": 3,
+      "source_bounds": [
+        1007,
+        973,
+        1152,
+        1189
+      ],
+      "pixel_size": [
+        155,
+        226
+      ],
+      "pivot": [
+        0.5,
+        0.9690265486725663
+      ],
+      "nominal_cell": [
+        940,
+        940,
+        1254,
+        1254
+      ]
+    }
+  ]
+}

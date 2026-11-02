@@ -1,0 +1,327 @@
+{
+  "method": "alpha-gap rows and independent per-row alpha-gap columns; all original RGBA retained",
+  "rows": [
+    0,
+    329,
+    624,
+    931,
+    1254
+  ],
+  "items": [
+    {
+      "id": "jelly-01",
+      "region": [
+        0,
+        0,
+        326,
+        329
+      ],
+      "source_bounds": [
+        0,
+        0,
+        326,
+        329
+      ],
+      "pixel_size": [
+        334,
+        337
+      ]
+    },
+    {
+      "id": "jelly-02",
+      "region": [
+        326,
+        0,
+        636,
+        329
+      ],
+      "source_bounds": [
+        326,
+        0,
+        636,
+        329
+      ],
+      "pixel_size": [
+        318,
+        337
+      ]
+    },
+    {
+      "id": "jelly-03",
+      "region": [
+        636,
+        0,
+        924,
+        329
+      ],
+      "source_bounds": [
+        636,
+        0,
+        924,
+        329
+      ],
+      "pixel_size": [
+        296,
+        337
+      ]
+    },
+    {
+      "id": "jelly-04",
+      "region": [
+        924,
+        0,
+        1254,
+        329
+      ],
+      "source_bounds": [
+        924,
+        0,
+        1246,
+        329
+      ],
+      "pixel_size": [
+        330,
+        337
+      ]
+    },
+    {
+      "id": "jelly-05",
+      "region": [
+        0,
+        329,
+        322,
+        624
+      ],
+      "source_bounds": [
+        0,
+        329,
+        322,
+        624
+      ],
+      "pixel_size": [
+        330,
+        303
+      ]
+    },
+    {
+      "id": "jelly-06",
+      "region": [
+        322,
+        329,
+        621,
+        624
+      ],
+      "source_bounds": [
+        322,
+        329,
+        621,
+        624
+      ],
+      "pixel_size": [
+        307,
+        303
+      ]
+    },
+    {
+      "id": "jelly-07",
+      "region": [
+        621,
+        329,
+        944,
+        624
+      ],
+      "source_bounds": [
+        621,
+        329,
+        944,
+        624
+      ],
+      "pixel_size": [
+        331,
+        303
+      ]
+    },
+    {
+      "id": "jelly-08",
+      "region": [
+        944,
+        329,
+        1254,
+        624
+      ],
+      "source_bounds": [
+        944,
+        329,
+        1254,
+        624
+      ],
+      "pixel_size": [
+        318,
+        303
+      ]
+    },
+    {
+      "id": "jelly-09",
+      "region": [
+        0,
+        624,
+        345,
+        931
+      ],
+      "source_bounds": [
+        0,
+        624,
+        345,
+        931
+      ],
+      "pixel_size": [
+        353,
+        315
+      ]
+    },
+    {
+      "id": "jelly-10",
+      "region": [
+        345,
+        624,
+        608,
+        931
+      ],
+      "source_bounds": [
+        345,
+        624,
+        608,
+        931
+      ],
+      "pixel_size": [
+        271,
+        315
+      ]
+    },
+    {
+      "id": "jelly-11",
+      "region": [
+        608,
+        624,
+        937,
+        931
+      ],
+      "source_bounds": [
+        608,
+        624,
+        937,
+        931
+      ],
+      "pixel_size": [
+        337,
+        315
+      ]
+    },
+    {
+      "id": "jelly-12",
+      "region": [
+        937,
+        624,
+        1254,
+        931
+      ],
+      "source_bounds": [
+        937,
+        624,
+        1248,
+        931
+      ],
+      "pixel_size": [
+        319,
+        315
+      ]
+    },
+    {
+      "id": "jelly-13",
+      "region": [
+        0,
+        931,
+        324,
+        1254
+      ],
+      "source_bounds": [
+        0,
+        931,
+        324,
+        1254
+      ],
+      "pixel_size": [
+        332,
+        331
+      ]
+    },
+    {
+      "id": "jelly-14",
+      "region": [
+        324,
+        931,
+        609,
+        1254
+      ],
+      "source_bounds": [
+        324,
+        931,
+        609,
+        1254
+      ],
+      "pixel_size": [
+        293,
+        331
+      ]
+    },
+    {
+      "id": "jelly-15",
+      "region": [
+        609,
+        931,
+        920,
+        1254
+      ],
+      "source_bounds": [
+        609,
+        931,
+        920,
+        1254
+      ],
+      "pixel_size": [
+        319,
+        331
+      ]
+    },
+    {
+      "id": "jelly-16",
+      "region": [
+        920,
+        931,
+        1254,
+        1254
+      ],
+      "source_bounds": [
+        920,
+        931,
+        1246,
+        1254
+      ],
+      "pixel_size": [
+        334,
+        331
+      ]
+    }
+  ],
+  "border_warnings": [
+    [
+      "jelly-12",
+      [
+        0,
+        0,
+        0,
+        1
+      ]
+    ]
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "generator": "built-in image_gen",
+  "workflow": "batch-imagegen",
+  "calls": 1,
+  "rawSheet": "sheet.png",
+  "actualDimensions": [1254, 1254],
+  "grid": [4, 4],
+  "alpha": true,
+  "exactPrompt": "prompt.txt",
+  "requestedInventory": "requested-items.json",
+  "verifiedInventory": "items.json",
+  "slices": "slices/manifest.json",
+  "contactSheet": "contact.png",
+  "runtimeAssets": "../../../src/main/resources/dev/tethium/desktop/icons/v1",
+  "displaySize": "16–20 logical px, tested contact sheet at 18 px",
+  "notes": "The generated atlas omitted check and inserted help; actual identities were inspected and mapped before integration. Source RGBA crops are preserved. Runtime uses the alpha silhouette with monochrome UI tint. No API or paid CLI fallback used."
+}

@@ -1,0 +1,6669 @@
+{
+  "source": "C:\\git\\Tethium\\design\\ui-icons-color-v2\\atlas.png",
+  "sha256": "f7c3e97b316946fc7765144d9a5a9346252407f40ca484c1f6df1804ec0d82a9",
+  "actual_size": [
+    1263,
+    1246
+  ],
+  "side": 16,
+  "items": [
+    {
+      "id": "project-folder",
+      "description": "project folder",
+      "row": 0,
+      "column": 0,
+      "source_bounds": [
+        18,
+        25,
+        83,
+        83
+      ],
+      "pixel_size": [
+        71,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        0,
+        0,
+        79,
+        78
+      ]
+    },
+    {
+      "id": "project-add",
+      "description": "project add",
+      "row": 0,
+      "column": 1,
+      "source_bounds": [
+        96,
+        25,
+        163,
+        88
+      ],
+      "pixel_size": [
+        73,
+        69
+      ],
+      "pivot": [
+        0.5,
+        0.927536231884058
+      ],
+      "nominal_cell": [
+        79,
+        0,
+        158,
+        78
+      ]
+    },
+    {
+      "id": "session-chat",
+      "description": "session chat",
+      "row": 0,
+      "column": 2,
+      "source_bounds": [
+        174,
+        26,
+        239,
+        87
+      ],
+      "pixel_size": [
+        71,
+        67
+      ],
+      "pivot": [
+        0.5,
+        0.9253731343283582
+      ],
+      "nominal_cell": [
+        158,
+        0,
+        237,
+        78
+      ]
+    },
+    {
+      "id": "session-running",
+      "description": "speech bubble with a little cyan play badge",
+      "row": 0,
+      "column": 3,
+      "source_bounds": [
+        250,
+        25,
+        319,
+        93
+      ],
+      "pixel_size": [
+        75,
+        74
+      ],
+      "pivot": [
+        0.5,
+        0.9324324324324325
+      ],
+      "nominal_cell": [
+        237,
+        0,
+        316,
+        78
+      ]
+    },
+    {
+      "id": "session-new",
+      "description": "session new",
+      "row": 0,
+      "column": 4,
+      "source_bounds": [
+        329,
+        25,
+        397,
+        89
+      ],
+      "pixel_size": [
+        74,
+        70
+      ],
+      "pivot": [
+        0.5,
+        0.9285714285714286
+      ],
+      "nominal_cell": [
+        316,
+        0,
+        395,
+        78
+      ]
+    },
+    {
+      "id": "session-archive",
+      "description": "session archive",
+      "row": 0,
+      "column": 5,
+      "source_bounds": [
+        407,
+        26,
+        472,
+        89
+      ],
+      "pixel_size": [
+        71,
+        69
+      ],
+      "pivot": [
+        0.5,
+        0.927536231884058
+      ],
+      "nominal_cell": [
+        395,
+        0,
+        474,
+        78
+      ]
+    },
+    {
+      "id": "artifact-gallery",
+      "description": "artifact gallery",
+      "row": 0,
+      "column": 6,
+      "source_bounds": [
+        482,
+        28,
+        554,
+        90
+      ],
+      "pixel_size": [
+        78,
+        68
+      ],
+      "pivot": [
+        0.5,
+        0.9264705882352942
+      ],
+      "nominal_cell": [
+        474,
+        0,
+        553,
+        78
+      ]
+    },
+    {
+      "id": "session-actions",
+      "description": "session actions",
+      "row": 0,
+      "column": 7,
+      "source_bounds": [
+        563,
+        26,
+        629,
+        89
+      ],
+      "pixel_size": [
+        72,
+        69
+      ],
+      "pivot": [
+        0.5,
+        0.927536231884058
+      ],
+      "nominal_cell": [
+        553,
+        0,
+        632,
+        78
+      ]
+    },
+    {
+      "id": "send-message",
+      "description": "send message",
+      "row": 0,
+      "column": 8,
+      "source_bounds": [
+        639,
+        28,
+        700,
+        83
+      ],
+      "pixel_size": [
+        67,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        632,
+        0,
+        710,
+        78
+      ]
+    },
+    {
+      "id": "stop-run",
+      "description": "stop run",
+      "row": 0,
+      "column": 9,
+      "source_bounds": [
+        720,
+        29,
+        776,
+        83
+      ],
+      "pixel_size": [
+        62,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        710,
+        0,
+        789,
+        78
+      ]
+    },
+    {
+      "id": "attach-file",
+      "description": "attach file",
+      "row": 0,
+      "column": 10,
+      "source_bounds": [
+        799,
+        26,
+        850,
+        86
+      ],
+      "pixel_size": [
+        57,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        789,
+        0,
+        868,
+        78
+      ]
+    },
+    {
+      "id": "preview-expand",
+      "description": "preview expand",
+      "row": 0,
+      "column": 11,
+      "source_bounds": [
+        871,
+        26,
+        937,
+        85
+      ],
+      "pixel_size": [
+        72,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        868,
+        0,
+        947,
+        78
+      ]
+    },
+    {
+      "id": "preview-collapse",
+      "description": "four inward arrows",
+      "row": 0,
+      "column": 12,
+      "source_bounds": [
+        956,
+        28,
+        1012,
+        81
+      ],
+      "pixel_size": [
+        62,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        947,
+        0,
+        1026,
+        78
+      ]
+    },
+    {
+      "id": "artifact-reload",
+      "description": "artifact reload",
+      "row": 0,
+      "column": 13,
+      "source_bounds": [
+        1034,
+        32,
+        1083,
+        81
+      ],
+      "pixel_size": [
+        55,
+        55
+      ],
+      "pivot": [
+        0.5,
+        0.9090909090909091
+      ],
+      "nominal_cell": [
+        1026,
+        0,
+        1105,
+        78
+      ]
+    },
+    {
+      "id": "preview-close",
+      "description": "framed image with a coral x",
+      "row": 0,
+      "column": 14,
+      "source_bounds": [
+        1102,
+        26,
+        1170,
+        90
+      ],
+      "pixel_size": [
+        74,
+        70
+      ],
+      "pivot": [
+        0.5,
+        0.9285714285714286
+      ],
+      "nominal_cell": [
+        1105,
+        0,
+        1184,
+        78
+      ]
+    },
+    {
+      "id": "quota-gauge",
+      "description": "a small multicolor capacity gauge",
+      "row": 0,
+      "column": 15,
+      "source_bounds": [
+        1179,
+        31,
+        1247,
+        79
+      ],
+      "pixel_size": [
+        74,
+        54
+      ],
+      "pivot": [
+        0.5,
+        0.9074074074074074
+      ],
+      "nominal_cell": [
+        1184,
+        0,
+        1263,
+        78
+      ]
+    },
+    {
+      "id": "quota-refresh",
+      "description": "capacity gauge with a circular arrow",
+      "row": 1,
+      "column": 0,
+      "source_bounds": [
+        15,
+        112,
+        86,
+        176
+      ],
+      "pixel_size": [
+        77,
+        70
+      ],
+      "pivot": [
+        0.5,
+        0.9285714285714286
+      ],
+      "nominal_cell": [
+        0,
+        78,
+        79,
+        156
+      ]
+    },
+    {
+      "id": "action-history",
+      "description": "a clipboard with checkmarked steps and small clock",
+      "row": 1,
+      "column": 1,
+      "source_bounds": [
+        97,
+        101,
+        174,
+        177
+      ],
+      "pixel_size": [
+        83,
+        82
+      ],
+      "pivot": [
+        0.5,
+        0.9390243902439024
+      ],
+      "nominal_cell": [
+        79,
+        78,
+        158,
+        156
+      ]
+    },
+    {
+      "id": "queue-resume",
+      "description": "queue resume",
+      "row": 1,
+      "column": 2,
+      "source_bounds": [
+        178,
+        111,
+        241,
+        173
+      ],
+      "pixel_size": [
+        69,
+        68
+      ],
+      "pivot": [
+        0.5,
+        0.9264705882352942
+      ],
+      "nominal_cell": [
+        158,
+        78,
+        237,
+        156
+      ]
+    },
+    {
+      "id": "queue-expand",
+      "description": "queue expand",
+      "row": 1,
+      "column": 3,
+      "source_bounds": [
+        252,
+        110,
+        316,
+        172
+      ],
+      "pixel_size": [
+        70,
+        68
+      ],
+      "pivot": [
+        0.5,
+        0.9264705882352942
+      ],
+      "nominal_cell": [
+        237,
+        78,
+        316,
+        156
+      ]
+    },
+    {
+      "id": "queue-delete",
+      "description": "stacked message cards with a coral trash bin",
+      "row": 1,
+      "column": 4,
+      "source_bounds": [
+        329,
+        111,
+        395,
+        177
+      ],
+      "pixel_size": [
+        72,
+        72
+      ],
+      "pivot": [
+        0.5,
+        0.9305555555555556
+      ],
+      "nominal_cell": [
+        316,
+        78,
+        395,
+        156
+      ]
+    },
+    {
+      "id": "queue-up",
+      "description": "queue up",
+      "row": 1,
+      "column": 5,
+      "source_bounds": [
+        408,
+        113,
+        473,
+        174
+      ],
+      "pixel_size": [
+        71,
+        67
+      ],
+      "pivot": [
+        0.5,
+        0.9253731343283582
+      ],
+      "nominal_cell": [
+        395,
+        78,
+        474,
+        156
+      ]
+    },
+    {
+      "id": "queue-down",
+      "description": "queue down",
+      "row": 1,
+      "column": 6,
+      "source_bounds": [
+        485,
+        113,
+        550,
+        174
+      ],
+      "pixel_size": [
+        71,
+        67
+      ],
+      "pivot": [
+        0.5,
+        0.9253731343283582
+      ],
+      "nominal_cell": [
+        474,
+        78,
+        553,
+        156
+      ]
+    },
+    {
+      "id": "queue-return-last",
+      "description": "last small message card turning back into a pencil input field",
+      "row": 1,
+      "column": 7,
+      "source_bounds": [
+        562,
+        107,
+        630,
+        177
+      ],
+      "pixel_size": [
+        74,
+        76
+      ],
+      "pivot": [
+        0.5,
+        0.9342105263157895
+      ],
+      "nominal_cell": [
+        553,
+        78,
+        632,
+        156
+      ]
+    },
+    {
+      "id": "preview-fit",
+      "description": "preview fit",
+      "row": 1,
+      "column": 8,
+      "source_bounds": [
+        642,
+        110,
+        703,
+        167
+      ],
+      "pixel_size": [
+        67,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        632,
+        78,
+        710,
+        156
+      ]
+    },
+    {
+      "id": "preview-actual-size",
+      "description": "preview actual size",
+      "row": 1,
+      "column": 9,
+      "source_bounds": [
+        716,
+        110,
+        780,
+        169
+      ],
+      "pixel_size": [
+        70,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        710,
+        78,
+        789,
+        156
+      ]
+    },
+    {
+      "id": "model-select",
+      "description": "a chip with a selection chevron",
+      "row": 1,
+      "column": 10,
+      "source_bounds": [
+        792,
+        110,
+        861,
+        172
+      ],
+      "pixel_size": [
+        75,
+        68
+      ],
+      "pivot": [
+        0.5,
+        0.9264705882352942
+      ],
+      "nominal_cell": [
+        789,
+        78,
+        868,
+        156
+      ]
+    },
+    {
+      "id": "reasoning-level",
+      "description": "three rising bars with a small thought spark",
+      "row": 1,
+      "column": 11,
+      "source_bounds": [
+        870,
+        103,
+        940,
+        174
+      ],
+      "pixel_size": [
+        76,
+        77
+      ],
+      "pivot": [
+        0.5,
+        0.9285714285714286
+      ],
+      "nominal_cell": [
+        868,
+        78,
+        947,
+        156
+      ],
+      "manual_slice_note": "Corrected detached reasoning bar assigned to next row by component slicer"
+    },
+    {
+      "id": "send-separate",
+      "description": "send separate",
+      "row": 1,
+      "column": 12,
+      "source_bounds": [
+        951,
+        111,
+        1014,
+        169
+      ],
+      "pixel_size": [
+        69,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        947,
+        78,
+        1026,
+        156
+      ]
+    },
+    {
+      "id": "send-append",
+      "description": "send append",
+      "row": 1,
+      "column": 13,
+      "source_bounds": [
+        1028,
+        110,
+        1091,
+        168
+      ],
+      "pixel_size": [
+        69,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        1026,
+        78,
+        1105,
+        156
+      ]
+    },
+    {
+      "id": "queue-pause",
+      "description": "queue pause",
+      "row": 1,
+      "column": 14,
+      "source_bounds": [
+        1104,
+        109,
+        1168,
+        169
+      ],
+      "pixel_size": [
+        70,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        1105,
+        78,
+        1184,
+        156
+      ]
+    },
+    {
+      "id": "session-rename",
+      "description": "session rename",
+      "row": 1,
+      "column": 15,
+      "source_bounds": [
+        1187,
+        110,
+        1242,
+        166
+      ],
+      "pixel_size": [
+        61,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        1184,
+        78,
+        1263,
+        156
+      ]
+    },
+    {
+      "id": "project-open",
+      "description": "project open",
+      "row": 2,
+      "column": 0,
+      "source_bounds": [
+        18,
+        192,
+        84,
+        249
+      ],
+      "pixel_size": [
+        72,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        0,
+        156,
+        79,
+        234
+      ]
+    },
+    {
+      "id": "project-remove",
+      "description": "project remove",
+      "row": 2,
+      "column": 1,
+      "source_bounds": [
+        96,
+        193,
+        163,
+        254
+      ],
+      "pixel_size": [
+        73,
+        67
+      ],
+      "pivot": [
+        0.5,
+        0.9253731343283582
+      ],
+      "nominal_cell": [
+        79,
+        156,
+        158,
+        234
+      ]
+    },
+    {
+      "id": "project-settings",
+      "description": "project settings",
+      "row": 2,
+      "column": 2,
+      "source_bounds": [
+        174,
+        192,
+        241,
+        253
+      ],
+      "pixel_size": [
+        73,
+        67
+      ],
+      "pivot": [
+        0.5,
+        0.9253731343283582
+      ],
+      "nominal_cell": [
+        158,
+        156,
+        237,
+        234
+      ]
+    },
+    {
+      "id": "project-pin",
+      "description": "project pin",
+      "row": 2,
+      "column": 3,
+      "source_bounds": [
+        252,
+        192,
+        315,
+        251
+      ],
+      "pixel_size": [
+        69,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        237,
+        156,
+        316,
+        234
+      ]
+    },
+    {
+      "id": "project-unpin",
+      "description": "project unpin",
+      "row": 2,
+      "column": 4,
+      "source_bounds": [
+        328,
+        192,
+        391,
+        251
+      ],
+      "pixel_size": [
+        69,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        316,
+        156,
+        395,
+        234
+      ]
+    },
+    {
+      "id": "project-search",
+      "description": "project search",
+      "row": 2,
+      "column": 5,
+      "source_bounds": [
+        407,
+        193,
+        473,
+        253
+      ],
+      "pixel_size": [
+        72,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        395,
+        156,
+        474,
+        234
+      ]
+    },
+    {
+      "id": "project-recent",
+      "description": "project recent",
+      "row": 2,
+      "column": 6,
+      "source_bounds": [
+        484,
+        193,
+        549,
+        255
+      ],
+      "pixel_size": [
+        71,
+        68
+      ],
+      "pivot": [
+        0.5,
+        0.9264705882352942
+      ],
+      "nominal_cell": [
+        474,
+        156,
+        553,
+        234
+      ]
+    },
+    {
+      "id": "project-import",
+      "description": "project import",
+      "row": 2,
+      "column": 7,
+      "source_bounds": [
+        562,
+        193,
+        627,
+        253
+      ],
+      "pixel_size": [
+        71,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        553,
+        156,
+        632,
+        234
+      ]
+    },
+    {
+      "id": "project-export",
+      "description": "project export",
+      "row": 2,
+      "column": 8,
+      "source_bounds": [
+        639,
+        193,
+        700,
+        252
+      ],
+      "pixel_size": [
+        67,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        632,
+        156,
+        710,
+        234
+      ]
+    },
+    {
+      "id": "project-root",
+      "description": "project root",
+      "row": 2,
+      "column": 9,
+      "source_bounds": [
+        716,
+        193,
+        779,
+        251
+      ],
+      "pixel_size": [
+        69,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        710,
+        156,
+        789,
+        234
+      ]
+    },
+    {
+      "id": "project-branch",
+      "description": "project branch",
+      "row": 2,
+      "column": 10,
+      "source_bounds": [
+        794,
+        193,
+        857,
+        255
+      ],
+      "pixel_size": [
+        69,
+        68
+      ],
+      "pivot": [
+        0.5,
+        0.9264705882352942
+      ],
+      "nominal_cell": [
+        789,
+        156,
+        868,
+        234
+      ]
+    },
+    {
+      "id": "project-collapse",
+      "description": "project collapse",
+      "row": 2,
+      "column": 11,
+      "source_bounds": [
+        870,
+        189,
+        940,
+        254
+      ],
+      "pixel_size": [
+        76,
+        71
+      ],
+      "pivot": [
+        0.5,
+        0.9545454545454546
+      ],
+      "nominal_cell": [
+        868,
+        156,
+        947,
+        234
+      ],
+      "manual_slice_note": "Corrected detached reasoning bar assigned to next row by component slicer"
+    },
+    {
+      "id": "project-expand",
+      "description": "project expand",
+      "row": 2,
+      "column": 12,
+      "source_bounds": [
+        949,
+        193,
+        1012,
+        249
+      ],
+      "pixel_size": [
+        69,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        947,
+        156,
+        1026,
+        234
+      ]
+    },
+    {
+      "id": "project-favorite",
+      "description": "project favorite",
+      "row": 2,
+      "column": 13,
+      "source_bounds": [
+        1026,
+        193,
+        1091,
+        254
+      ],
+      "pixel_size": [
+        71,
+        67
+      ],
+      "pivot": [
+        0.5,
+        0.9253731343283582
+      ],
+      "nominal_cell": [
+        1026,
+        156,
+        1105,
+        234
+      ]
+    },
+    {
+      "id": "project-terminal",
+      "description": "project terminal",
+      "row": 2,
+      "column": 14,
+      "source_bounds": [
+        1104,
+        193,
+        1168,
+        251
+      ],
+      "pixel_size": [
+        70,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        1105,
+        156,
+        1184,
+        234
+      ]
+    },
+    {
+      "id": "project-status",
+      "description": "project status",
+      "row": 2,
+      "column": 15,
+      "source_bounds": [
+        1181,
+        192,
+        1247,
+        254
+      ],
+      "pixel_size": [
+        72,
+        68
+      ],
+      "pivot": [
+        0.5,
+        0.9264705882352942
+      ],
+      "nominal_cell": [
+        1184,
+        156,
+        1263,
+        234
+      ]
+    },
+    {
+      "id": "session-duplicate",
+      "description": "session duplicate",
+      "row": 3,
+      "column": 0,
+      "source_bounds": [
+        17,
+        272,
+        83,
+        334
+      ],
+      "pixel_size": [
+        72,
+        68
+      ],
+      "pivot": [
+        0.5,
+        0.9264705882352942
+      ],
+      "nominal_cell": [
+        0,
+        234,
+        79,
+        312
+      ]
+    },
+    {
+      "id": "session-restore",
+      "description": "session restore",
+      "row": 3,
+      "column": 1,
+      "source_bounds": [
+        100,
+        273,
+        164,
+        332
+      ],
+      "pixel_size": [
+        70,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        79,
+        234,
+        158,
+        312
+      ]
+    },
+    {
+      "id": "session-delete",
+      "description": "session delete",
+      "row": 3,
+      "column": 2,
+      "source_bounds": [
+        177,
+        274,
+        241,
+        335
+      ],
+      "pixel_size": [
+        70,
+        67
+      ],
+      "pivot": [
+        0.5,
+        0.9253731343283582
+      ],
+      "nominal_cell": [
+        158,
+        234,
+        237,
+        312
+      ]
+    },
+    {
+      "id": "session-search",
+      "description": "session search",
+      "row": 3,
+      "column": 3,
+      "source_bounds": [
+        254,
+        273,
+        318,
+        332
+      ],
+      "pixel_size": [
+        70,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        237,
+        234,
+        316,
+        312
+      ]
+    },
+    {
+      "id": "session-pin",
+      "description": "session pin",
+      "row": 3,
+      "column": 4,
+      "source_bounds": [
+        331,
+        274,
+        395,
+        333
+      ],
+      "pixel_size": [
+        70,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        316,
+        234,
+        395,
+        312
+      ]
+    },
+    {
+      "id": "session-unpin",
+      "description": "session unpin",
+      "row": 3,
+      "column": 5,
+      "source_bounds": [
+        408,
+        274,
+        472,
+        333
+      ],
+      "pixel_size": [
+        70,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        395,
+        234,
+        474,
+        312
+      ]
+    },
+    {
+      "id": "session-export",
+      "description": "session export",
+      "row": 3,
+      "column": 6,
+      "source_bounds": [
+        485,
+        274,
+        550,
+        332
+      ],
+      "pixel_size": [
+        71,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        474,
+        234,
+        553,
+        312
+      ]
+    },
+    {
+      "id": "session-import",
+      "description": "session import",
+      "row": 3,
+      "column": 7,
+      "source_bounds": [
+        564,
+        274,
+        629,
+        332
+      ],
+      "pixel_size": [
+        71,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        553,
+        234,
+        632,
+        312
+      ]
+    },
+    {
+      "id": "session-activate",
+      "description": "session activate",
+      "row": 3,
+      "column": 8,
+      "source_bounds": [
+        641,
+        273,
+        707,
+        334
+      ],
+      "pixel_size": [
+        72,
+        67
+      ],
+      "pivot": [
+        0.5,
+        0.9253731343283582
+      ],
+      "nominal_cell": [
+        632,
+        234,
+        710,
+        312
+      ]
+    },
+    {
+      "id": "session-deactivate",
+      "description": "session deactivate",
+      "row": 3,
+      "column": 9,
+      "source_bounds": [
+        718,
+        273,
+        784,
+        334
+      ],
+      "pixel_size": [
+        72,
+        67
+      ],
+      "pivot": [
+        0.5,
+        0.9253731343283582
+      ],
+      "nominal_cell": [
+        710,
+        234,
+        789,
+        312
+      ]
+    },
+    {
+      "id": "session-fork",
+      "description": "session fork",
+      "row": 3,
+      "column": 10,
+      "source_bounds": [
+        797,
+        274,
+        858,
+        331
+      ],
+      "pixel_size": [
+        67,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        789,
+        234,
+        868,
+        312
+      ]
+    },
+    {
+      "id": "session-child",
+      "description": "session child",
+      "row": 3,
+      "column": 11,
+      "source_bounds": [
+        875,
+        274,
+        936,
+        332
+      ],
+      "pixel_size": [
+        67,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        868,
+        234,
+        947,
+        312
+      ]
+    },
+    {
+      "id": "session-parent",
+      "description": "session parent",
+      "row": 3,
+      "column": 12,
+      "source_bounds": [
+        953,
+        274,
+        1014,
+        332
+      ],
+      "pixel_size": [
+        67,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        947,
+        234,
+        1026,
+        312
+      ]
+    },
+    {
+      "id": "session-link",
+      "description": "session link",
+      "row": 3,
+      "column": 13,
+      "source_bounds": [
+        1030,
+        272,
+        1089,
+        332
+      ],
+      "pixel_size": [
+        65,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        1026,
+        234,
+        1105,
+        312
+      ]
+    },
+    {
+      "id": "session-copy-id",
+      "description": "session copy id",
+      "row": 3,
+      "column": 14,
+      "source_bounds": [
+        1108,
+        274,
+        1170,
+        332
+      ],
+      "pixel_size": [
+        68,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        1105,
+        234,
+        1184,
+        312
+      ]
+    },
+    {
+      "id": "session-info",
+      "description": "session info",
+      "row": 3,
+      "column": 15,
+      "source_bounds": [
+        1186,
+        274,
+        1248,
+        334
+      ],
+      "pixel_size": [
+        68,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        1184,
+        234,
+        1263,
+        312
+      ]
+    },
+    {
+      "id": "message-edit",
+      "description": "message edit",
+      "row": 4,
+      "column": 0,
+      "source_bounds": [
+        17,
+        352,
+        86,
+        410
+      ],
+      "pixel_size": [
+        75,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        0,
+        312,
+        79,
+        389
+      ]
+    },
+    {
+      "id": "message-copy",
+      "description": "message copy",
+      "row": 4,
+      "column": 1,
+      "source_bounds": [
+        100,
+        354,
+        160,
+        410
+      ],
+      "pixel_size": [
+        66,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        79,
+        312,
+        158,
+        389
+      ]
+    },
+    {
+      "id": "message-delete",
+      "description": "message delete",
+      "row": 4,
+      "column": 2,
+      "source_bounds": [
+        177,
+        354,
+        239,
+        414
+      ],
+      "pixel_size": [
+        68,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        158,
+        312,
+        237,
+        389
+      ]
+    },
+    {
+      "id": "message-retry",
+      "description": "message retry",
+      "row": 4,
+      "column": 3,
+      "source_bounds": [
+        255,
+        354,
+        317,
+        413
+      ],
+      "pixel_size": [
+        68,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        237,
+        312,
+        316,
+        389
+      ]
+    },
+    {
+      "id": "message-quote",
+      "description": "message quote",
+      "row": 4,
+      "column": 4,
+      "source_bounds": [
+        332,
+        354,
+        393,
+        413
+      ],
+      "pixel_size": [
+        67,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        316,
+        312,
+        395,
+        389
+      ]
+    },
+    {
+      "id": "message-reply",
+      "description": "message reply",
+      "row": 4,
+      "column": 5,
+      "source_bounds": [
+        409,
+        354,
+        471,
+        413
+      ],
+      "pixel_size": [
+        68,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        395,
+        312,
+        474,
+        389
+      ]
+    },
+    {
+      "id": "message-bookmark",
+      "description": "message bookmark",
+      "row": 4,
+      "column": 6,
+      "source_bounds": [
+        488,
+        354,
+        549,
+        413
+      ],
+      "pixel_size": [
+        67,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        474,
+        312,
+        553,
+        389
+      ]
+    },
+    {
+      "id": "message-search",
+      "description": "message search",
+      "row": 4,
+      "column": 7,
+      "source_bounds": [
+        565,
+        354,
+        626,
+        413
+      ],
+      "pixel_size": [
+        67,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        553,
+        312,
+        632,
+        389
+      ]
+    },
+    {
+      "id": "message-expand",
+      "description": "message expand",
+      "row": 4,
+      "column": 8,
+      "source_bounds": [
+        641,
+        354,
+        704,
+        413
+      ],
+      "pixel_size": [
+        69,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        632,
+        312,
+        710,
+        389
+      ]
+    },
+    {
+      "id": "message-collapse",
+      "description": "message collapse",
+      "row": 4,
+      "column": 9,
+      "source_bounds": [
+        718,
+        354,
+        780,
+        413
+      ],
+      "pixel_size": [
+        68,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        710,
+        312,
+        789,
+        389
+      ]
+    },
+    {
+      "id": "message-user",
+      "description": "message user",
+      "row": 4,
+      "column": 10,
+      "source_bounds": [
+        795,
+        354,
+        858,
+        413
+      ],
+      "pixel_size": [
+        69,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        789,
+        312,
+        868,
+        389
+      ]
+    },
+    {
+      "id": "message-agent",
+      "description": "message agent",
+      "row": 4,
+      "column": 11,
+      "source_bounds": [
+        874,
+        354,
+        937,
+        413
+      ],
+      "pixel_size": [
+        69,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        868,
+        312,
+        947,
+        389
+      ]
+    },
+    {
+      "id": "message-system",
+      "description": "message system",
+      "row": 4,
+      "column": 12,
+      "source_bounds": [
+        952,
+        354,
+        1015,
+        413
+      ],
+      "pixel_size": [
+        69,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        947,
+        312,
+        1026,
+        389
+      ]
+    },
+    {
+      "id": "message-error",
+      "description": "message error",
+      "row": 4,
+      "column": 13,
+      "source_bounds": [
+        1029,
+        354,
+        1092,
+        413
+      ],
+      "pixel_size": [
+        69,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        1026,
+        312,
+        1105,
+        389
+      ]
+    },
+    {
+      "id": "message-success",
+      "description": "message success",
+      "row": 4,
+      "column": 14,
+      "source_bounds": [
+        1107,
+        354,
+        1170,
+        413
+      ],
+      "pixel_size": [
+        69,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        1105,
+        312,
+        1184,
+        389
+      ]
+    },
+    {
+      "id": "message-pending",
+      "description": "message pending",
+      "row": 4,
+      "column": 15,
+      "source_bounds": [
+        1183,
+        354,
+        1246,
+        413
+      ],
+      "pixel_size": [
+        69,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        1184,
+        312,
+        1263,
+        389
+      ]
+    },
+    {
+      "id": "queue-add",
+      "description": "queue add",
+      "row": 5,
+      "column": 0,
+      "source_bounds": [
+        18,
+        434,
+        84,
+        494
+      ],
+      "pixel_size": [
+        72,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        0,
+        389,
+        79,
+        467
+      ]
+    },
+    {
+      "id": "queue-clear",
+      "description": "queue clear",
+      "row": 5,
+      "column": 1,
+      "source_bounds": [
+        98,
+        434,
+        163,
+        494
+      ],
+      "pixel_size": [
+        71,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        79,
+        389,
+        158,
+        467
+      ]
+    },
+    {
+      "id": "queue-first",
+      "description": "queue first",
+      "row": 5,
+      "column": 2,
+      "source_bounds": [
+        177,
+        434,
+        239,
+        487
+      ],
+      "pixel_size": [
+        68,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        158,
+        389,
+        237,
+        467
+      ]
+    },
+    {
+      "id": "queue-last",
+      "description": "queue last",
+      "row": 5,
+      "column": 3,
+      "source_bounds": [
+        254,
+        434,
+        316,
+        487
+      ],
+      "pixel_size": [
+        68,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        237,
+        389,
+        316,
+        467
+      ]
+    },
+    {
+      "id": "queue-priority",
+      "description": "queue priority",
+      "row": 5,
+      "column": 4,
+      "source_bounds": [
+        331,
+        434,
+        393,
+        488
+      ],
+      "pixel_size": [
+        68,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        316,
+        389,
+        395,
+        467
+      ]
+    },
+    {
+      "id": "queue-reorder",
+      "description": "queue reorder",
+      "row": 5,
+      "column": 5,
+      "source_bounds": [
+        409,
+        434,
+        470,
+        489
+      ],
+      "pixel_size": [
+        67,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        395,
+        389,
+        474,
+        467
+      ]
+    },
+    {
+      "id": "queue-item",
+      "description": "queue item",
+      "row": 5,
+      "column": 6,
+      "source_bounds": [
+        486,
+        435,
+        548,
+        487
+      ],
+      "pixel_size": [
+        68,
+        58
+      ],
+      "pivot": [
+        0.5,
+        0.9137931034482759
+      ],
+      "nominal_cell": [
+        474,
+        389,
+        553,
+        467
+      ]
+    },
+    {
+      "id": "queue-batch",
+      "description": "queue batch",
+      "row": 5,
+      "column": 7,
+      "source_bounds": [
+        563,
+        434,
+        626,
+        491
+      ],
+      "pixel_size": [
+        69,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        553,
+        389,
+        632,
+        467
+      ]
+    },
+    {
+      "id": "queue-merge",
+      "description": "queue merge",
+      "row": 5,
+      "column": 8,
+      "source_bounds": [
+        640,
+        434,
+        704,
+        488
+      ],
+      "pixel_size": [
+        70,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        632,
+        389,
+        710,
+        467
+      ]
+    },
+    {
+      "id": "queue-split",
+      "description": "queue split",
+      "row": 5,
+      "column": 9,
+      "source_bounds": [
+        718,
+        434,
+        781,
+        489
+      ],
+      "pixel_size": [
+        69,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        710,
+        389,
+        789,
+        467
+      ]
+    },
+    {
+      "id": "queue-scheduled",
+      "description": "queue scheduled",
+      "row": 5,
+      "column": 10,
+      "source_bounds": [
+        797,
+        433,
+        864,
+        494
+      ],
+      "pixel_size": [
+        73,
+        67
+      ],
+      "pivot": [
+        0.5,
+        0.9253731343283582
+      ],
+      "nominal_cell": [
+        789,
+        389,
+        868,
+        467
+      ]
+    },
+    {
+      "id": "queue-waiting",
+      "description": "queue waiting",
+      "row": 5,
+      "column": 11,
+      "source_bounds": [
+        875,
+        434,
+        937,
+        489
+      ],
+      "pixel_size": [
+        68,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        868,
+        389,
+        947,
+        467
+      ]
+    },
+    {
+      "id": "queue-running",
+      "description": "queue running",
+      "row": 5,
+      "column": 12,
+      "source_bounds": [
+        952,
+        434,
+        1015,
+        489
+      ],
+      "pixel_size": [
+        69,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        947,
+        389,
+        1026,
+        467
+      ]
+    },
+    {
+      "id": "queue-complete",
+      "description": "queue complete",
+      "row": 5,
+      "column": 13,
+      "source_bounds": [
+        1030,
+        434,
+        1093,
+        489
+      ],
+      "pixel_size": [
+        69,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        1026,
+        389,
+        1105,
+        467
+      ]
+    },
+    {
+      "id": "queue-failed",
+      "description": "queue failed",
+      "row": 5,
+      "column": 14,
+      "source_bounds": [
+        1107,
+        434,
+        1171,
+        489
+      ],
+      "pixel_size": [
+        70,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        1105,
+        389,
+        1184,
+        467
+      ]
+    },
+    {
+      "id": "queue-restore",
+      "description": "queue restore",
+      "row": 5,
+      "column": 15,
+      "source_bounds": [
+        1185,
+        434,
+        1247,
+        489
+      ],
+      "pixel_size": [
+        68,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        1184,
+        389,
+        1263,
+        467
+      ]
+    },
+    {
+      "id": "file-text",
+      "description": "file text",
+      "row": 6,
+      "column": 0,
+      "source_bounds": [
+        21,
+        509,
+        74,
+        569
+      ],
+      "pixel_size": [
+        59,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        0,
+        467,
+        79,
+        545
+      ]
+    },
+    {
+      "id": "file-code",
+      "description": "file code",
+      "row": 6,
+      "column": 1,
+      "source_bounds": [
+        101,
+        510,
+        158,
+        570
+      ],
+      "pixel_size": [
+        63,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        79,
+        467,
+        158,
+        545
+      ]
+    },
+    {
+      "id": "file-image",
+      "description": "file image",
+      "row": 6,
+      "column": 2,
+      "source_bounds": [
+        180,
+        510,
+        236,
+        569
+      ],
+      "pixel_size": [
+        62,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        158,
+        467,
+        237,
+        545
+      ]
+    },
+    {
+      "id": "file-html",
+      "description": "file html",
+      "row": 6,
+      "column": 3,
+      "source_bounds": [
+        257,
+        509,
+        313,
+        569
+      ],
+      "pixel_size": [
+        62,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        237,
+        467,
+        316,
+        545
+      ]
+    },
+    {
+      "id": "file-pdf",
+      "description": "file pdf",
+      "row": 6,
+      "column": 4,
+      "source_bounds": [
+        334,
+        510,
+        391,
+        569
+      ],
+      "pixel_size": [
+        63,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        316,
+        467,
+        395,
+        545
+      ]
+    },
+    {
+      "id": "file-table",
+      "description": "file table",
+      "row": 6,
+      "column": 5,
+      "source_bounds": [
+        412,
+        510,
+        469,
+        569
+      ],
+      "pixel_size": [
+        63,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        395,
+        467,
+        474,
+        545
+      ]
+    },
+    {
+      "id": "file-archive",
+      "description": "file archive",
+      "row": 6,
+      "column": 6,
+      "source_bounds": [
+        490,
+        509,
+        547,
+        569
+      ],
+      "pixel_size": [
+        63,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        474,
+        467,
+        553,
+        545
+      ]
+    },
+    {
+      "id": "file-audio",
+      "description": "file audio",
+      "row": 6,
+      "column": 7,
+      "source_bounds": [
+        567,
+        510,
+        625,
+        569
+      ],
+      "pixel_size": [
+        64,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        553,
+        467,
+        632,
+        545
+      ]
+    },
+    {
+      "id": "file-video",
+      "description": "file video",
+      "row": 6,
+      "column": 8,
+      "source_bounds": [
+        644,
+        509,
+        704,
+        569
+      ],
+      "pixel_size": [
+        66,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        632,
+        467,
+        710,
+        545
+      ]
+    },
+    {
+      "id": "file-markdown",
+      "description": "file markdown",
+      "row": 6,
+      "column": 9,
+      "source_bounds": [
+        723,
+        510,
+        780,
+        569
+      ],
+      "pixel_size": [
+        63,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        710,
+        467,
+        789,
+        545
+      ]
+    },
+    {
+      "id": "file-json",
+      "description": "file json",
+      "row": 6,
+      "column": 10,
+      "source_bounds": [
+        800,
+        510,
+        857,
+        569
+      ],
+      "pixel_size": [
+        63,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        789,
+        467,
+        868,
+        545
+      ]
+    },
+    {
+      "id": "file-log",
+      "description": "file log",
+      "row": 6,
+      "column": 11,
+      "source_bounds": [
+        877,
+        510,
+        933,
+        570
+      ],
+      "pixel_size": [
+        62,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        868,
+        467,
+        947,
+        545
+      ]
+    },
+    {
+      "id": "file-diff",
+      "description": "file diff",
+      "row": 6,
+      "column": 12,
+      "source_bounds": [
+        953,
+        510,
+        1009,
+        570
+      ],
+      "pixel_size": [
+        62,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        947,
+        467,
+        1026,
+        545
+      ]
+    },
+    {
+      "id": "file-executable",
+      "description": "file executable",
+      "row": 6,
+      "column": 13,
+      "source_bounds": [
+        1029,
+        510,
+        1087,
+        570
+      ],
+      "pixel_size": [
+        64,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        1026,
+        467,
+        1105,
+        545
+      ]
+    },
+    {
+      "id": "file-unknown",
+      "description": "file unknown",
+      "row": 6,
+      "column": 14,
+      "source_bounds": [
+        1109,
+        509,
+        1166,
+        569
+      ],
+      "pixel_size": [
+        63,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        1105,
+        467,
+        1184,
+        545
+      ]
+    },
+    {
+      "id": "file-link",
+      "description": "file link",
+      "row": 6,
+      "column": 15,
+      "source_bounds": [
+        1188,
+        509,
+        1245,
+        570
+      ],
+      "pixel_size": [
+        63,
+        67
+      ],
+      "pivot": [
+        0.5,
+        0.9253731343283582
+      ],
+      "nominal_cell": [
+        1184,
+        467,
+        1263,
+        545
+      ]
+    },
+    {
+      "id": "file-open",
+      "description": "file open",
+      "row": 7,
+      "column": 0,
+      "source_bounds": [
+        21,
+        586,
+        79,
+        645
+      ],
+      "pixel_size": [
+        64,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        0,
+        545,
+        79,
+        623
+      ]
+    },
+    {
+      "id": "file-save",
+      "description": "file save",
+      "row": 7,
+      "column": 1,
+      "source_bounds": [
+        102,
+        587,
+        155,
+        642
+      ],
+      "pixel_size": [
+        59,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        79,
+        545,
+        158,
+        623
+      ]
+    },
+    {
+      "id": "file-save-as",
+      "description": "file save as",
+      "row": 7,
+      "column": 2,
+      "source_bounds": [
+        180,
+        588,
+        240,
+        646
+      ],
+      "pixel_size": [
+        66,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        158,
+        545,
+        237,
+        623
+      ]
+    },
+    {
+      "id": "file-download",
+      "description": "file download",
+      "row": 7,
+      "column": 3,
+      "source_bounds": [
+        258,
+        588,
+        311,
+        643
+      ],
+      "pixel_size": [
+        59,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        237,
+        545,
+        316,
+        623
+      ]
+    },
+    {
+      "id": "file-upload",
+      "description": "file upload",
+      "row": 7,
+      "column": 4,
+      "source_bounds": [
+        333,
+        588,
+        387,
+        644
+      ],
+      "pixel_size": [
+        60,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        316,
+        545,
+        395,
+        623
+      ]
+    },
+    {
+      "id": "file-copy-path",
+      "description": "file copy path",
+      "row": 7,
+      "column": 5,
+      "source_bounds": [
+        414,
+        587,
+        466,
+        645
+      ],
+      "pixel_size": [
+        58,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        395,
+        545,
+        474,
+        623
+      ]
+    },
+    {
+      "id": "file-reveal",
+      "description": "file reveal",
+      "row": 7,
+      "column": 6,
+      "source_bounds": [
+        486,
+        590,
+        548,
+        646
+      ],
+      "pixel_size": [
+        68,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        474,
+        545,
+        553,
+        623
+      ]
+    },
+    {
+      "id": "file-preview",
+      "description": "file preview",
+      "row": 7,
+      "column": 7,
+      "source_bounds": [
+        567,
+        586,
+        625,
+        645
+      ],
+      "pixel_size": [
+        64,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        553,
+        545,
+        632,
+        623
+      ]
+    },
+    {
+      "id": "file-remove-attachment",
+      "description": "file remove attachment",
+      "row": 7,
+      "column": 8,
+      "source_bounds": [
+        646,
+        586,
+        707,
+        646
+      ],
+      "pixel_size": [
+        67,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        632,
+        545,
+        710,
+        623
+      ]
+    },
+    {
+      "id": "file-add-folder",
+      "description": "file add folder",
+      "row": 7,
+      "column": 9,
+      "source_bounds": [
+        722,
+        592,
+        781,
+        646
+      ],
+      "pixel_size": [
+        65,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        710,
+        545,
+        789,
+        623
+      ]
+    },
+    {
+      "id": "file-recent",
+      "description": "file recent",
+      "row": 7,
+      "column": 10,
+      "source_bounds": [
+        798,
+        589,
+        860,
+        645
+      ],
+      "pixel_size": [
+        68,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        789,
+        545,
+        868,
+        623
+      ]
+    },
+    {
+      "id": "file-search",
+      "description": "file search",
+      "row": 7,
+      "column": 11,
+      "source_bounds": [
+        876,
+        586,
+        934,
+        646
+      ],
+      "pixel_size": [
+        64,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        868,
+        545,
+        947,
+        623
+      ]
+    },
+    {
+      "id": "file-rename",
+      "description": "file rename",
+      "row": 7,
+      "column": 12,
+      "source_bounds": [
+        953,
+        588,
+        1008,
+        645
+      ],
+      "pixel_size": [
+        61,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        947,
+        545,
+        1026,
+        623
+      ]
+    },
+    {
+      "id": "file-move",
+      "description": "file move",
+      "row": 7,
+      "column": 13,
+      "source_bounds": [
+        1029,
+        588,
+        1090,
+        644
+      ],
+      "pixel_size": [
+        67,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        1026,
+        545,
+        1105,
+        623
+      ]
+    },
+    {
+      "id": "file-copy",
+      "description": "file copy",
+      "row": 7,
+      "column": 14,
+      "source_bounds": [
+        1109,
+        587,
+        1166,
+        647
+      ],
+      "pixel_size": [
+        63,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        1105,
+        545,
+        1184,
+        623
+      ]
+    },
+    {
+      "id": "file-properties",
+      "description": "file properties",
+      "row": 7,
+      "column": 15,
+      "source_bounds": [
+        1189,
+        586,
+        1241,
+        648
+      ],
+      "pixel_size": [
+        58,
+        68
+      ],
+      "pivot": [
+        0.5,
+        0.9264705882352942
+      ],
+      "nominal_cell": [
+        1184,
+        545,
+        1263,
+        623
+      ]
+    },
+    {
+      "id": "artifact-image",
+      "description": "artifact image",
+      "row": 8,
+      "column": 0,
+      "source_bounds": [
+        17,
+        664,
+        83,
+        721
+      ],
+      "pixel_size": [
+        72,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        0,
+        623,
+        79,
+        701
+      ]
+    },
+    {
+      "id": "artifact-html",
+      "description": "artifact html",
+      "row": 8,
+      "column": 1,
+      "source_bounds": [
+        98,
+        663,
+        163,
+        720
+      ],
+      "pixel_size": [
+        71,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        79,
+        623,
+        158,
+        701
+      ]
+    },
+    {
+      "id": "artifact-document",
+      "description": "artifact document",
+      "row": 8,
+      "column": 2,
+      "source_bounds": [
+        178,
+        663,
+        237,
+        719
+      ],
+      "pixel_size": [
+        65,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        158,
+        623,
+        237,
+        701
+      ]
+    },
+    {
+      "id": "artifact-chart",
+      "description": "artifact chart",
+      "row": 8,
+      "column": 3,
+      "source_bounds": [
+        254,
+        664,
+        316,
+        720
+      ],
+      "pixel_size": [
+        68,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        237,
+        623,
+        316,
+        701
+      ]
+    },
+    {
+      "id": "artifact-code",
+      "description": "artifact code",
+      "row": 8,
+      "column": 4,
+      "source_bounds": [
+        332,
+        664,
+        394,
+        720
+      ],
+      "pixel_size": [
+        68,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        316,
+        623,
+        395,
+        701
+      ]
+    },
+    {
+      "id": "artifact-table",
+      "description": "artifact table",
+      "row": 8,
+      "column": 5,
+      "source_bounds": [
+        410,
+        664,
+        471,
+        720
+      ],
+      "pixel_size": [
+        67,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        395,
+        623,
+        474,
+        701
+      ]
+    },
+    {
+      "id": "artifact-open-browser",
+      "description": "artifact open browser",
+      "row": 8,
+      "column": 6,
+      "source_bounds": [
+        488,
+        663,
+        552,
+        720
+      ],
+      "pixel_size": [
+        70,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        474,
+        623,
+        553,
+        701
+      ]
+    },
+    {
+      "id": "artifact-download",
+      "description": "artifact download",
+      "row": 8,
+      "column": 7,
+      "source_bounds": [
+        568,
+        664,
+        630,
+        719
+      ],
+      "pixel_size": [
+        68,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        553,
+        623,
+        632,
+        701
+      ]
+    },
+    {
+      "id": "artifact-copy",
+      "description": "artifact copy",
+      "row": 8,
+      "column": 8,
+      "source_bounds": [
+        646,
+        662,
+        705,
+        719
+      ],
+      "pixel_size": [
+        65,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        632,
+        623,
+        710,
+        701
+      ]
+    },
+    {
+      "id": "artifact-previous",
+      "description": "artifact previous",
+      "row": 8,
+      "column": 9,
+      "source_bounds": [
+        723,
+        663,
+        783,
+        718
+      ],
+      "pixel_size": [
+        66,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        710,
+        623,
+        789,
+        701
+      ]
+    },
+    {
+      "id": "artifact-next",
+      "description": "artifact next",
+      "row": 8,
+      "column": 10,
+      "source_bounds": [
+        798,
+        663,
+        858,
+        718
+      ],
+      "pixel_size": [
+        66,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        789,
+        623,
+        868,
+        701
+      ]
+    },
+    {
+      "id": "artifact-zoom-in",
+      "description": "artifact zoom in",
+      "row": 8,
+      "column": 11,
+      "source_bounds": [
+        877,
+        663,
+        940,
+        718
+      ],
+      "pixel_size": [
+        69,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        868,
+        623,
+        947,
+        701
+      ]
+    },
+    {
+      "id": "artifact-zoom-out",
+      "description": "artifact zoom out",
+      "row": 8,
+      "column": 12,
+      "source_bounds": [
+        955,
+        664,
+        1014,
+        719
+      ],
+      "pixel_size": [
+        65,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        947,
+        623,
+        1026,
+        701
+      ]
+    },
+    {
+      "id": "artifact-reset",
+      "description": "artifact reset",
+      "row": 8,
+      "column": 13,
+      "source_bounds": [
+        1031,
+        663,
+        1092,
+        719
+      ],
+      "pixel_size": [
+        67,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        1026,
+        623,
+        1105,
+        701
+      ]
+    },
+    {
+      "id": "artifact-background-light",
+      "description": "artifact background light",
+      "row": 8,
+      "column": 14,
+      "source_bounds": [
+        1108,
+        663,
+        1169,
+        719
+      ],
+      "pixel_size": [
+        67,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        1105,
+        623,
+        1184,
+        701
+      ]
+    },
+    {
+      "id": "artifact-background-dark",
+      "description": "artifact background dark",
+      "row": 8,
+      "column": 15,
+      "source_bounds": [
+        1183,
+        663,
+        1248,
+        718
+      ],
+      "pixel_size": [
+        71,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        1184,
+        623,
+        1263,
+        701
+      ]
+    },
+    {
+      "id": "tool-terminal",
+      "description": "tool terminal",
+      "row": 9,
+      "column": 0,
+      "source_bounds": [
+        17,
+        739,
+        83,
+        792
+      ],
+      "pixel_size": [
+        72,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        0,
+        701,
+        79,
+        779
+      ]
+    },
+    {
+      "id": "tool-search",
+      "description": "tool search",
+      "row": 9,
+      "column": 1,
+      "source_bounds": [
+        100,
+        738,
+        159,
+        793
+      ],
+      "pixel_size": [
+        65,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        79,
+        701,
+        158,
+        779
+      ]
+    },
+    {
+      "id": "tool-read",
+      "description": "tool read",
+      "row": 9,
+      "column": 2,
+      "source_bounds": [
+        176,
+        739,
+        238,
+        793
+      ],
+      "pixel_size": [
+        68,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        158,
+        701,
+        237,
+        779
+      ]
+    },
+    {
+      "id": "tool-write",
+      "description": "tool write",
+      "row": 9,
+      "column": 3,
+      "source_bounds": [
+        257,
+        739,
+        313,
+        793
+      ],
+      "pixel_size": [
+        62,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        237,
+        701,
+        316,
+        779
+      ]
+    },
+    {
+      "id": "tool-patch",
+      "description": "tool patch",
+      "row": 9,
+      "column": 4,
+      "source_bounds": [
+        332,
+        739,
+        388,
+        793
+      ],
+      "pixel_size": [
+        62,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        316,
+        701,
+        395,
+        779
+      ]
+    },
+    {
+      "id": "tool-browser",
+      "description": "tool browser",
+      "row": 9,
+      "column": 5,
+      "source_bounds": [
+        406,
+        740,
+        472,
+        794
+      ],
+      "pixel_size": [
+        72,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        395,
+        701,
+        474,
+        779
+      ]
+    },
+    {
+      "id": "tool-imagegen",
+      "description": "tool imagegen",
+      "row": 9,
+      "column": 6,
+      "source_bounds": [
+        485,
+        736,
+        553,
+        794
+      ],
+      "pixel_size": [
+        74,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        474,
+        701,
+        553,
+        779
+      ]
+    },
+    {
+      "id": "tool-test",
+      "description": "tool test",
+      "row": 9,
+      "column": 7,
+      "source_bounds": [
+        568,
+        739,
+        622,
+        793
+      ],
+      "pixel_size": [
+        60,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        553,
+        701,
+        632,
+        779
+      ]
+    },
+    {
+      "id": "tool-build",
+      "description": "tool build",
+      "row": 9,
+      "column": 8,
+      "source_bounds": [
+        641,
+        740,
+        704,
+        790
+      ],
+      "pixel_size": [
+        69,
+        56
+      ],
+      "pivot": [
+        0.5,
+        0.9107142857142857
+      ],
+      "nominal_cell": [
+        632,
+        701,
+        710,
+        779
+      ]
+    },
+    {
+      "id": "tool-git",
+      "description": "tool git",
+      "row": 9,
+      "column": 9,
+      "source_bounds": [
+        728,
+        737,
+        776,
+        793
+      ],
+      "pixel_size": [
+        54,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        710,
+        701,
+        789,
+        779
+      ]
+    },
+    {
+      "id": "tool-database",
+      "description": "tool database",
+      "row": 9,
+      "column": 10,
+      "source_bounds": [
+        799,
+        737,
+        852,
+        794
+      ],
+      "pixel_size": [
+        59,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        789,
+        701,
+        868,
+        779
+      ]
+    },
+    {
+      "id": "tool-network",
+      "description": "tool network",
+      "row": 9,
+      "column": 11,
+      "source_bounds": [
+        875,
+        738,
+        933,
+        789
+      ],
+      "pixel_size": [
+        64,
+        57
+      ],
+      "pivot": [
+        0.5,
+        0.9122807017543859
+      ],
+      "nominal_cell": [
+        868,
+        701,
+        947,
+        779
+      ]
+    },
+    {
+      "id": "tool-clock",
+      "description": "tool clock",
+      "row": 9,
+      "column": 12,
+      "source_bounds": [
+        955,
+        738,
+        1011,
+        794
+      ],
+      "pixel_size": [
+        62,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        947,
+        701,
+        1026,
+        779
+      ]
+    },
+    {
+      "id": "tool-calculator",
+      "description": "tool calculator",
+      "row": 9,
+      "column": 13,
+      "source_bounds": [
+        1032,
+        739,
+        1087,
+        792
+      ],
+      "pixel_size": [
+        61,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        1026,
+        701,
+        1105,
+        779
+      ]
+    },
+    {
+      "id": "tool-inspect",
+      "description": "tool inspect",
+      "row": 9,
+      "column": 14,
+      "source_bounds": [
+        1108,
+        739,
+        1162,
+        791
+      ],
+      "pixel_size": [
+        60,
+        58
+      ],
+      "pivot": [
+        0.5,
+        0.9137931034482759
+      ],
+      "nominal_cell": [
+        1105,
+        701,
+        1184,
+        779
+      ]
+    },
+    {
+      "id": "tool-automation",
+      "description": "tool automation",
+      "row": 9,
+      "column": 15,
+      "source_bounds": [
+        1182,
+        737,
+        1249,
+        796
+      ],
+      "pixel_size": [
+        73,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        1184,
+        701,
+        1263,
+        779
+      ]
+    },
+    {
+      "id": "run-start",
+      "description": "run start",
+      "row": 10,
+      "column": 0,
+      "source_bounds": [
+        20,
+        808,
+        74,
+        859
+      ],
+      "pixel_size": [
+        60,
+        57
+      ],
+      "pivot": [
+        0.5,
+        0.9122807017543859
+      ],
+      "nominal_cell": [
+        0,
+        779,
+        79,
+        857
+      ]
+    },
+    {
+      "id": "run-pause",
+      "description": "run pause",
+      "row": 10,
+      "column": 1,
+      "source_bounds": [
+        101,
+        809,
+        155,
+        858
+      ],
+      "pixel_size": [
+        60,
+        55
+      ],
+      "pivot": [
+        0.5,
+        0.9090909090909091
+      ],
+      "nominal_cell": [
+        79,
+        779,
+        158,
+        857
+      ]
+    },
+    {
+      "id": "run-resume",
+      "description": "run resume",
+      "row": 10,
+      "column": 2,
+      "source_bounds": [
+        181,
+        808,
+        233,
+        858
+      ],
+      "pixel_size": [
+        58,
+        56
+      ],
+      "pivot": [
+        0.5,
+        0.9107142857142857
+      ],
+      "nominal_cell": [
+        158,
+        779,
+        237,
+        857
+      ]
+    },
+    {
+      "id": "run-stop",
+      "description": "run stop",
+      "row": 10,
+      "column": 3,
+      "source_bounds": [
+        257,
+        808,
+        310,
+        858
+      ],
+      "pixel_size": [
+        59,
+        56
+      ],
+      "pivot": [
+        0.5,
+        0.9107142857142857
+      ],
+      "nominal_cell": [
+        237,
+        779,
+        316,
+        857
+      ]
+    },
+    {
+      "id": "run-retry",
+      "description": "run retry",
+      "row": 10,
+      "column": 4,
+      "source_bounds": [
+        333,
+        808,
+        387,
+        861
+      ],
+      "pixel_size": [
+        60,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        316,
+        779,
+        395,
+        857
+      ]
+    },
+    {
+      "id": "run-success",
+      "description": "run success",
+      "row": 10,
+      "column": 5,
+      "source_bounds": [
+        411,
+        809,
+        463,
+        860
+      ],
+      "pixel_size": [
+        58,
+        57
+      ],
+      "pivot": [
+        0.5,
+        0.9122807017543859
+      ],
+      "nominal_cell": [
+        395,
+        779,
+        474,
+        857
+      ]
+    },
+    {
+      "id": "run-error",
+      "description": "run error",
+      "row": 10,
+      "column": 6,
+      "source_bounds": [
+        489,
+        809,
+        541,
+        860
+      ],
+      "pixel_size": [
+        58,
+        57
+      ],
+      "pivot": [
+        0.5,
+        0.9122807017543859
+      ],
+      "nominal_cell": [
+        474,
+        779,
+        553,
+        857
+      ]
+    },
+    {
+      "id": "run-warning",
+      "description": "run warning",
+      "row": 10,
+      "column": 7,
+      "source_bounds": [
+        565,
+        809,
+        620,
+        858
+      ],
+      "pixel_size": [
+        61,
+        55
+      ],
+      "pivot": [
+        0.5,
+        0.9090909090909091
+      ],
+      "nominal_cell": [
+        553,
+        779,
+        632,
+        857
+      ]
+    },
+    {
+      "id": "run-waiting",
+      "description": "run waiting",
+      "row": 10,
+      "column": 8,
+      "source_bounds": [
+        646,
+        809,
+        689,
+        858
+      ],
+      "pixel_size": [
+        49,
+        55
+      ],
+      "pivot": [
+        0.5,
+        0.9090909090909091
+      ],
+      "nominal_cell": [
+        632,
+        779,
+        710,
+        857
+      ]
+    },
+    {
+      "id": "run-draining",
+      "description": "run draining",
+      "row": 10,
+      "column": 9,
+      "source_bounds": [
+        718,
+        809,
+        776,
+        857
+      ],
+      "pixel_size": [
+        64,
+        54
+      ],
+      "pivot": [
+        0.5,
+        0.9074074074074074
+      ],
+      "nominal_cell": [
+        710,
+        779,
+        789,
+        857
+      ]
+    },
+    {
+      "id": "run-duration",
+      "description": "run duration",
+      "row": 10,
+      "column": 10,
+      "source_bounds": [
+        801,
+        806,
+        849,
+        860
+      ],
+      "pixel_size": [
+        54,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        789,
+        779,
+        868,
+        857
+      ]
+    },
+    {
+      "id": "run-progress",
+      "description": "run progress",
+      "row": 10,
+      "column": 11,
+      "source_bounds": [
+        873,
+        807,
+        925,
+        860
+      ],
+      "pixel_size": [
+        58,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        868,
+        779,
+        947,
+        857
+      ]
+    },
+    {
+      "id": "run-log",
+      "description": "run log",
+      "row": 10,
+      "column": 12,
+      "source_bounds": [
+        953,
+        809,
+        1009,
+        859
+      ],
+      "pixel_size": [
+        62,
+        56
+      ],
+      "pivot": [
+        0.5,
+        0.9107142857142857
+      ],
+      "nominal_cell": [
+        947,
+        779,
+        1026,
+        857
+      ]
+    },
+    {
+      "id": "run-details",
+      "description": "run details",
+      "row": 10,
+      "column": 13,
+      "source_bounds": [
+        1031,
+        809,
+        1090,
+        859
+      ],
+      "pixel_size": [
+        65,
+        56
+      ],
+      "pivot": [
+        0.5,
+        0.9107142857142857
+      ],
+      "nominal_cell": [
+        1026,
+        779,
+        1105,
+        857
+      ]
+    },
+    {
+      "id": "run-cancel",
+      "description": "run cancel",
+      "row": 10,
+      "column": 14,
+      "source_bounds": [
+        1111,
+        807,
+        1164,
+        859
+      ],
+      "pixel_size": [
+        59,
+        58
+      ],
+      "pivot": [
+        0.5,
+        0.9137931034482759
+      ],
+      "nominal_cell": [
+        1105,
+        779,
+        1184,
+        857
+      ]
+    },
+    {
+      "id": "run-queued",
+      "description": "run queued",
+      "row": 10,
+      "column": 15,
+      "source_bounds": [
+        1187,
+        809,
+        1250,
+        864
+      ],
+      "pixel_size": [
+        69,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        1184,
+        779,
+        1263,
+        857
+      ]
+    },
+    {
+      "id": "agent-main",
+      "description": "agent main",
+      "row": 11,
+      "column": 0,
+      "source_bounds": [
+        17,
+        872,
+        79,
+        926
+      ],
+      "pixel_size": [
+        68,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        0,
+        857,
+        79,
+        934
+      ]
+    },
+    {
+      "id": "agent-child",
+      "description": "agent child",
+      "row": 11,
+      "column": 1,
+      "source_bounds": [
+        102,
+        870,
+        152,
+        928
+      ],
+      "pixel_size": [
+        56,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        79,
+        857,
+        158,
+        934
+      ]
+    },
+    {
+      "id": "agent-team",
+      "description": "agent team",
+      "row": 11,
+      "column": 2,
+      "source_bounds": [
+        171,
+        872,
+        240,
+        922
+      ],
+      "pixel_size": [
+        75,
+        56
+      ],
+      "pivot": [
+        0.5,
+        0.9107142857142857
+      ],
+      "nominal_cell": [
+        158,
+        857,
+        237,
+        934
+      ]
+    },
+    {
+      "id": "agent-assign",
+      "description": "agent assign",
+      "row": 11,
+      "column": 3,
+      "source_bounds": [
+        258,
+        873,
+        315,
+        926
+      ],
+      "pixel_size": [
+        63,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        237,
+        857,
+        316,
+        934
+      ]
+    },
+    {
+      "id": "agent-handoff",
+      "description": "agent handoff",
+      "row": 11,
+      "column": 4,
+      "source_bounds": [
+        330,
+        876,
+        396,
+        928
+      ],
+      "pixel_size": [
+        72,
+        58
+      ],
+      "pivot": [
+        0.5,
+        0.9137931034482759
+      ],
+      "nominal_cell": [
+        316,
+        857,
+        395,
+        934
+      ]
+    },
+    {
+      "id": "agent-message",
+      "description": "agent message",
+      "row": 11,
+      "column": 5,
+      "source_bounds": [
+        412,
+        873,
+        466,
+        923
+      ],
+      "pixel_size": [
+        60,
+        56
+      ],
+      "pivot": [
+        0.5,
+        0.9107142857142857
+      ],
+      "nominal_cell": [
+        395,
+        857,
+        474,
+        934
+      ]
+    },
+    {
+      "id": "agent-idle",
+      "description": "agent idle",
+      "row": 11,
+      "column": 6,
+      "source_bounds": [
+        483,
+        869,
+        552,
+        923
+      ],
+      "pixel_size": [
+        75,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        474,
+        857,
+        553,
+        934
+      ]
+    },
+    {
+      "id": "agent-busy",
+      "description": "agent busy",
+      "row": 11,
+      "column": 7,
+      "source_bounds": [
+        562,
+        871,
+        630,
+        925
+      ],
+      "pixel_size": [
+        74,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        553,
+        857,
+        632,
+        934
+      ]
+    },
+    {
+      "id": "agent-complete",
+      "description": "agent complete",
+      "row": 11,
+      "column": 8,
+      "source_bounds": [
+        639,
+        872,
+        706,
+        929
+      ],
+      "pixel_size": [
+        73,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        632,
+        857,
+        710,
+        934
+      ]
+    },
+    {
+      "id": "agent-blocked",
+      "description": "agent blocked",
+      "row": 11,
+      "column": 9,
+      "source_bounds": [
+        716,
+        873,
+        784,
+        929
+      ],
+      "pixel_size": [
+        74,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        710,
+        857,
+        789,
+        934
+      ]
+    },
+    {
+      "id": "agent-interrupt",
+      "description": "agent interrupt",
+      "row": 11,
+      "column": 10,
+      "source_bounds": [
+        795,
+        874,
+        861,
+        924
+      ],
+      "pixel_size": [
+        72,
+        56
+      ],
+      "pivot": [
+        0.5,
+        0.9107142857142857
+      ],
+      "nominal_cell": [
+        789,
+        857,
+        868,
+        934
+      ]
+    },
+    {
+      "id": "agent-followup",
+      "description": "agent followup",
+      "row": 11,
+      "column": 11,
+      "source_bounds": [
+        876,
+        878,
+        935,
+        927
+      ],
+      "pixel_size": [
+        65,
+        55
+      ],
+      "pivot": [
+        0.5,
+        0.9090909090909091
+      ],
+      "nominal_cell": [
+        868,
+        857,
+        947,
+        934
+      ]
+    },
+    {
+      "id": "agent-tree",
+      "description": "agent tree",
+      "row": 11,
+      "column": 12,
+      "source_bounds": [
+        951,
+        874,
+        1012,
+        923
+      ],
+      "pixel_size": [
+        67,
+        55
+      ],
+      "pivot": [
+        0.5,
+        0.9090909090909091
+      ],
+      "nominal_cell": [
+        947,
+        857,
+        1026,
+        934
+      ]
+    },
+    {
+      "id": "agent-context",
+      "description": "agent context",
+      "row": 11,
+      "column": 13,
+      "source_bounds": [
+        1032,
+        875,
+        1087,
+        927
+      ],
+      "pixel_size": [
+        61,
+        58
+      ],
+      "pivot": [
+        0.5,
+        0.9137931034482759
+      ],
+      "nominal_cell": [
+        1026,
+        857,
+        1105,
+        934
+      ]
+    },
+    {
+      "id": "agent-memory",
+      "description": "agent memory",
+      "row": 11,
+      "column": 14,
+      "source_bounds": [
+        1105,
+        874,
+        1164,
+        926
+      ],
+      "pixel_size": [
+        65,
+        58
+      ],
+      "pivot": [
+        0.5,
+        0.9137931034482759
+      ],
+      "nominal_cell": [
+        1105,
+        857,
+        1184,
+        934
+      ]
+    },
+    {
+      "id": "agent-capabilities",
+      "description": "agent capabilities",
+      "row": 11,
+      "column": 15,
+      "source_bounds": [
+        1187,
+        871,
+        1246,
+        925
+      ],
+      "pixel_size": [
+        65,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        1184,
+        857,
+        1263,
+        934
+      ]
+    },
+    {
+      "id": "settings-general",
+      "description": "settings general",
+      "row": 12,
+      "column": 0,
+      "source_bounds": [
+        19,
+        940,
+        76,
+        995
+      ],
+      "pixel_size": [
+        63,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        0,
+        934,
+        79,
+        1012
+      ]
+    },
+    {
+      "id": "settings-appearance",
+      "description": "settings appearance",
+      "row": 12,
+      "column": 1,
+      "source_bounds": [
+        99,
+        941,
+        157,
+        994
+      ],
+      "pixel_size": [
+        64,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        79,
+        934,
+        158,
+        1012
+      ]
+    },
+    {
+      "id": "settings-model",
+      "description": "settings model",
+      "row": 12,
+      "column": 2,
+      "source_bounds": [
+        177,
+        940,
+        235,
+        995
+      ],
+      "pixel_size": [
+        64,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        158,
+        934,
+        237,
+        1012
+      ]
+    },
+    {
+      "id": "settings-provider",
+      "description": "settings provider",
+      "row": 12,
+      "column": 3,
+      "source_bounds": [
+        253,
+        943,
+        316,
+        992
+      ],
+      "pixel_size": [
+        69,
+        55
+      ],
+      "pivot": [
+        0.5,
+        0.9090909090909091
+      ],
+      "nominal_cell": [
+        237,
+        934,
+        316,
+        1012
+      ]
+    },
+    {
+      "id": "settings-keyboard",
+      "description": "settings keyboard",
+      "row": 12,
+      "column": 4,
+      "source_bounds": [
+        332,
+        946,
+        393,
+        990
+      ],
+      "pixel_size": [
+        67,
+        50
+      ],
+      "pivot": [
+        0.5,
+        0.9
+      ],
+      "nominal_cell": [
+        316,
+        934,
+        395,
+        1012
+      ]
+    },
+    {
+      "id": "settings-language",
+      "description": "settings language",
+      "row": 12,
+      "column": 5,
+      "source_bounds": [
+        411,
+        941,
+        466,
+        994
+      ],
+      "pixel_size": [
+        61,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        395,
+        934,
+        474,
+        1012
+      ]
+    },
+    {
+      "id": "settings-notifications",
+      "description": "settings notifications",
+      "row": 12,
+      "column": 6,
+      "source_bounds": [
+        489,
+        939,
+        542,
+        994
+      ],
+      "pixel_size": [
+        59,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        474,
+        934,
+        553,
+        1012
+      ]
+    },
+    {
+      "id": "settings-storage",
+      "description": "settings storage",
+      "row": 12,
+      "column": 7,
+      "source_bounds": [
+        565,
+        942,
+        620,
+        994
+      ],
+      "pixel_size": [
+        61,
+        58
+      ],
+      "pivot": [
+        0.5,
+        0.9137931034482759
+      ],
+      "nominal_cell": [
+        553,
+        934,
+        632,
+        1012
+      ]
+    },
+    {
+      "id": "settings-network",
+      "description": "settings network",
+      "row": 12,
+      "column": 8,
+      "source_bounds": [
+        643,
+        946,
+        700,
+        990
+      ],
+      "pixel_size": [
+        63,
+        50
+      ],
+      "pivot": [
+        0.5,
+        0.9
+      ],
+      "nominal_cell": [
+        632,
+        934,
+        710,
+        1012
+      ]
+    },
+    {
+      "id": "settings-security",
+      "description": "settings security",
+      "row": 12,
+      "column": 9,
+      "source_bounds": [
+        725,
+        941,
+        777,
+        995
+      ],
+      "pixel_size": [
+        58,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        710,
+        934,
+        789,
+        1012
+      ]
+    },
+    {
+      "id": "settings-tools",
+      "description": "settings tools",
+      "row": 12,
+      "column": 10,
+      "source_bounds": [
+        801,
+        943,
+        853,
+        993
+      ],
+      "pixel_size": [
+        58,
+        56
+      ],
+      "pivot": [
+        0.5,
+        0.9107142857142857
+      ],
+      "nominal_cell": [
+        789,
+        934,
+        868,
+        1012
+      ]
+    },
+    {
+      "id": "settings-prompts",
+      "description": "settings prompts",
+      "row": 12,
+      "column": 11,
+      "source_bounds": [
+        875,
+        943,
+        933,
+        998
+      ],
+      "pixel_size": [
+        64,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        868,
+        934,
+        947,
+        1012
+      ]
+    },
+    {
+      "id": "settings-layout",
+      "description": "settings layout",
+      "row": 12,
+      "column": 12,
+      "source_bounds": [
+        951,
+        943,
+        1011,
+        993
+      ],
+      "pixel_size": [
+        66,
+        56
+      ],
+      "pivot": [
+        0.5,
+        0.9107142857142857
+      ],
+      "nominal_cell": [
+        947,
+        934,
+        1026,
+        1012
+      ]
+    },
+    {
+      "id": "settings-accessibility",
+      "description": "settings accessibility",
+      "row": 12,
+      "column": 13,
+      "source_bounds": [
+        1032,
+        941,
+        1087,
+        994
+      ],
+      "pixel_size": [
+        61,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        1026,
+        934,
+        1105,
+        1012
+      ]
+    },
+    {
+      "id": "settings-advanced",
+      "description": "settings advanced",
+      "row": 12,
+      "column": 14,
+      "source_bounds": [
+        1110,
+        944,
+        1165,
+        993
+      ],
+      "pixel_size": [
+        61,
+        55
+      ],
+      "pivot": [
+        0.5,
+        0.9090909090909091
+      ],
+      "nominal_cell": [
+        1105,
+        934,
+        1184,
+        1012
+      ]
+    },
+    {
+      "id": "settings-reset",
+      "description": "settings reset",
+      "row": 12,
+      "column": 15,
+      "source_bounds": [
+        1189,
+        941,
+        1242,
+        993
+      ],
+      "pixel_size": [
+        59,
+        58
+      ],
+      "pivot": [
+        0.5,
+        0.9137931034482759
+      ],
+      "nominal_cell": [
+        1184,
+        934,
+        1263,
+        1012
+      ]
+    },
+    {
+      "id": "account-profile",
+      "description": "account profile",
+      "row": 13,
+      "column": 0,
+      "source_bounds": [
+        22,
+        1006,
+        73,
+        1060
+      ],
+      "pixel_size": [
+        57,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        0,
+        1012,
+        79,
+        1090
+      ]
+    },
+    {
+      "id": "account-login",
+      "description": "account login",
+      "row": 13,
+      "column": 1,
+      "source_bounds": [
+        98,
+        1007,
+        151,
+        1059
+      ],
+      "pixel_size": [
+        59,
+        58
+      ],
+      "pivot": [
+        0.5,
+        0.9137931034482759
+      ],
+      "nominal_cell": [
+        79,
+        1012,
+        158,
+        1090
+      ]
+    },
+    {
+      "id": "account-logout",
+      "description": "account logout",
+      "row": 13,
+      "column": 2,
+      "source_bounds": [
+        181,
+        1010,
+        233,
+        1058
+      ],
+      "pixel_size": [
+        58,
+        54
+      ],
+      "pivot": [
+        0.5,
+        0.9074074074074074
+      ],
+      "nominal_cell": [
+        158,
+        1012,
+        237,
+        1090
+      ]
+    },
+    {
+      "id": "account-switch",
+      "description": "account switch",
+      "row": 13,
+      "column": 3,
+      "source_bounds": [
+        255,
+        1008,
+        315,
+        1057
+      ],
+      "pixel_size": [
+        66,
+        55
+      ],
+      "pivot": [
+        0.5,
+        0.9090909090909091
+      ],
+      "nominal_cell": [
+        237,
+        1012,
+        316,
+        1090
+      ]
+    },
+    {
+      "id": "quota-daily",
+      "description": "quota daily",
+      "row": 13,
+      "column": 4,
+      "source_bounds": [
+        336,
+        1008,
+        390,
+        1059
+      ],
+      "pixel_size": [
+        60,
+        57
+      ],
+      "pivot": [
+        0.5,
+        0.9122807017543859
+      ],
+      "nominal_cell": [
+        316,
+        1012,
+        395,
+        1090
+      ]
+    },
+    {
+      "id": "quota-weekly",
+      "description": "quota weekly",
+      "row": 13,
+      "column": 5,
+      "source_bounds": [
+        412,
+        1008,
+        468,
+        1059
+      ],
+      "pixel_size": [
+        62,
+        57
+      ],
+      "pivot": [
+        0.5,
+        0.9122807017543859
+      ],
+      "nominal_cell": [
+        395,
+        1012,
+        474,
+        1090
+      ]
+    },
+    {
+      "id": "quota-remaining",
+      "description": "quota remaining",
+      "row": 13,
+      "column": 6,
+      "source_bounds": [
+        488,
+        1008,
+        542,
+        1060
+      ],
+      "pixel_size": [
+        60,
+        58
+      ],
+      "pivot": [
+        0.5,
+        0.9137931034482759
+      ],
+      "nominal_cell": [
+        474,
+        1012,
+        553,
+        1090
+      ]
+    },
+    {
+      "id": "quota-used",
+      "description": "quota used",
+      "row": 13,
+      "column": 7,
+      "source_bounds": [
+        565,
+        1008,
+        620,
+        1062
+      ],
+      "pixel_size": [
+        61,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        553,
+        1012,
+        632,
+        1090
+      ]
+    },
+    {
+      "id": "quota-reset-time",
+      "description": "quota reset time",
+      "row": 13,
+      "column": 8,
+      "source_bounds": [
+        639,
+        1009,
+        699,
+        1063
+      ],
+      "pixel_size": [
+        66,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        632,
+        1012,
+        710,
+        1090
+      ]
+    },
+    {
+      "id": "quota-limit",
+      "description": "quota limit",
+      "row": 13,
+      "column": 9,
+      "source_bounds": [
+        715,
+        1008,
+        781,
+        1059
+      ],
+      "pixel_size": [
+        72,
+        57
+      ],
+      "pivot": [
+        0.5,
+        0.9122807017543859
+      ],
+      "nominal_cell": [
+        710,
+        1012,
+        789,
+        1090
+      ]
+    },
+    {
+      "id": "quota-warning",
+      "description": "quota warning",
+      "row": 13,
+      "column": 10,
+      "source_bounds": [
+        795,
+        1011,
+        859,
+        1058
+      ],
+      "pixel_size": [
+        70,
+        53
+      ],
+      "pivot": [
+        0.5,
+        0.9056603773584906
+      ],
+      "nominal_cell": [
+        789,
+        1012,
+        868,
+        1090
+      ]
+    },
+    {
+      "id": "usage-tokens",
+      "description": "usage tokens",
+      "row": 13,
+      "column": 11,
+      "source_bounds": [
+        873,
+        1009,
+        933,
+        1061
+      ],
+      "pixel_size": [
+        66,
+        58
+      ],
+      "pivot": [
+        0.5,
+        0.9137931034482759
+      ],
+      "nominal_cell": [
+        868,
+        1012,
+        947,
+        1090
+      ]
+    },
+    {
+      "id": "usage-cost",
+      "description": "usage cost",
+      "row": 13,
+      "column": 12,
+      "source_bounds": [
+        950,
+        1009,
+        1017,
+        1061
+      ],
+      "pixel_size": [
+        73,
+        58
+      ],
+      "pivot": [
+        0.5,
+        0.9137931034482759
+      ],
+      "nominal_cell": [
+        947,
+        1012,
+        1026,
+        1090
+      ]
+    },
+    {
+      "id": "usage-history",
+      "description": "usage history",
+      "row": 13,
+      "column": 13,
+      "source_bounds": [
+        1031,
+        1011,
+        1087,
+        1058
+      ],
+      "pixel_size": [
+        62,
+        53
+      ],
+      "pivot": [
+        0.5,
+        0.9056603773584906
+      ],
+      "nominal_cell": [
+        1026,
+        1012,
+        1105,
+        1090
+      ]
+    },
+    {
+      "id": "provider-connected",
+      "description": "provider connected",
+      "row": 13,
+      "column": 14,
+      "source_bounds": [
+        1107,
+        1010,
+        1171,
+        1061
+      ],
+      "pixel_size": [
+        70,
+        57
+      ],
+      "pivot": [
+        0.5,
+        0.9122807017543859
+      ],
+      "nominal_cell": [
+        1105,
+        1012,
+        1184,
+        1090
+      ]
+    },
+    {
+      "id": "provider-offline",
+      "description": "provider offline",
+      "row": 13,
+      "column": 15,
+      "source_bounds": [
+        1184,
+        1010,
+        1246,
+        1060
+      ],
+      "pixel_size": [
+        68,
+        56
+      ],
+      "pivot": [
+        0.5,
+        0.9107142857142857
+      ],
+      "nominal_cell": [
+        1184,
+        1012,
+        1263,
+        1090
+      ]
+    },
+    {
+      "id": "permission-allow",
+      "description": "permission allow",
+      "row": 14,
+      "column": 0,
+      "source_bounds": [
+        18,
+        1075,
+        75,
+        1133
+      ],
+      "pixel_size": [
+        63,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        0,
+        1090,
+        79,
+        1168
+      ]
+    },
+    {
+      "id": "permission-deny",
+      "description": "permission deny",
+      "row": 14,
+      "column": 1,
+      "source_bounds": [
+        98,
+        1076,
+        152,
+        1133
+      ],
+      "pixel_size": [
+        60,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        79,
+        1090,
+        158,
+        1168
+      ]
+    },
+    {
+      "id": "permission-session",
+      "description": "permission session",
+      "row": 14,
+      "column": 2,
+      "source_bounds": [
+        172,
+        1077,
+        238,
+        1136
+      ],
+      "pixel_size": [
+        72,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        158,
+        1090,
+        237,
+        1168
+      ]
+    },
+    {
+      "id": "permission-folder",
+      "description": "permission folder",
+      "row": 14,
+      "column": 3,
+      "source_bounds": [
+        253,
+        1078,
+        314,
+        1135
+      ],
+      "pixel_size": [
+        67,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        237,
+        1090,
+        316,
+        1168
+      ]
+    },
+    {
+      "id": "permission-network",
+      "description": "permission network",
+      "row": 14,
+      "column": 4,
+      "source_bounds": [
+        328,
+        1076,
+        394,
+        1136
+      ],
+      "pixel_size": [
+        72,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        316,
+        1090,
+        395,
+        1168
+      ]
+    },
+    {
+      "id": "permission-execute",
+      "description": "permission execute",
+      "row": 14,
+      "column": 5,
+      "source_bounds": [
+        407,
+        1078,
+        472,
+        1136
+      ],
+      "pixel_size": [
+        71,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        395,
+        1090,
+        474,
+        1168
+      ]
+    },
+    {
+      "id": "question-answer",
+      "description": "question answer",
+      "row": 14,
+      "column": 6,
+      "source_bounds": [
+        487,
+        1078,
+        545,
+        1135
+      ],
+      "pixel_size": [
+        64,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        474,
+        1090,
+        553,
+        1168
+      ]
+    },
+    {
+      "id": "question-choice",
+      "description": "question choice",
+      "row": 14,
+      "column": 7,
+      "source_bounds": [
+        561,
+        1078,
+        626,
+        1133
+      ],
+      "pixel_size": [
+        71,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        553,
+        1090,
+        632,
+        1168
+      ]
+    },
+    {
+      "id": "question-text",
+      "description": "question text",
+      "row": 14,
+      "column": 8,
+      "source_bounds": [
+        639,
+        1081,
+        703,
+        1135
+      ],
+      "pixel_size": [
+        70,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        632,
+        1090,
+        710,
+        1168
+      ]
+    },
+    {
+      "id": "question-submit",
+      "description": "question submit",
+      "row": 14,
+      "column": 9,
+      "source_bounds": [
+        717,
+        1079,
+        778,
+        1138
+      ],
+      "pixel_size": [
+        67,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        710,
+        1090,
+        789,
+        1168
+      ]
+    },
+    {
+      "id": "notification-info",
+      "description": "notification info",
+      "row": 14,
+      "column": 10,
+      "source_bounds": [
+        795,
+        1076,
+        855,
+        1135
+      ],
+      "pixel_size": [
+        66,
+        65
+      ],
+      "pivot": [
+        0.5,
+        0.9230769230769231
+      ],
+      "nominal_cell": [
+        789,
+        1090,
+        868,
+        1168
+      ]
+    },
+    {
+      "id": "notification-success",
+      "description": "notification success",
+      "row": 14,
+      "column": 11,
+      "source_bounds": [
+        876,
+        1076,
+        932,
+        1134
+      ],
+      "pixel_size": [
+        62,
+        64
+      ],
+      "pivot": [
+        0.5,
+        0.921875
+      ],
+      "nominal_cell": [
+        868,
+        1090,
+        947,
+        1168
+      ]
+    },
+    {
+      "id": "notification-warning",
+      "description": "notification warning",
+      "row": 14,
+      "column": 12,
+      "source_bounds": [
+        952,
+        1076,
+        1011,
+        1129
+      ],
+      "pixel_size": [
+        65,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        947,
+        1090,
+        1026,
+        1168
+      ]
+    },
+    {
+      "id": "notification-error",
+      "description": "notification error",
+      "row": 14,
+      "column": 13,
+      "source_bounds": [
+        1033,
+        1076,
+        1089,
+        1130
+      ],
+      "pixel_size": [
+        62,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        1026,
+        1090,
+        1105,
+        1168
+      ]
+    },
+    {
+      "id": "notification-muted",
+      "description": "notification muted",
+      "row": 14,
+      "column": 14,
+      "source_bounds": [
+        1111,
+        1075,
+        1162,
+        1132
+      ],
+      "pixel_size": [
+        57,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        1105,
+        1090,
+        1184,
+        1168
+      ]
+    },
+    {
+      "id": "notification-inbox",
+      "description": "notification inbox",
+      "row": 14,
+      "column": 15,
+      "source_bounds": [
+        1184,
+        1081,
+        1245,
+        1129
+      ],
+      "pixel_size": [
+        67,
+        54
+      ],
+      "pivot": [
+        0.5,
+        0.9074074074074074
+      ],
+      "nominal_cell": [
+        1184,
+        1090,
+        1263,
+        1168
+      ]
+    },
+    {
+      "id": "navigation-back",
+      "description": "navigation back",
+      "row": 15,
+      "column": 0,
+      "source_bounds": [
+        16,
+        1156,
+        81,
+        1211
+      ],
+      "pixel_size": [
+        71,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        0,
+        1168,
+        79,
+        1246
+      ]
+    },
+    {
+      "id": "navigation-forward",
+      "description": "navigation forward",
+      "row": 15,
+      "column": 1,
+      "source_bounds": [
+        94,
+        1156,
+        158,
+        1211
+      ],
+      "pixel_size": [
+        70,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        79,
+        1168,
+        158,
+        1246
+      ]
+    },
+    {
+      "id": "navigation-home",
+      "description": "navigation home",
+      "row": 15,
+      "column": 2,
+      "source_bounds": [
+        173,
+        1152,
+        234,
+        1209
+      ],
+      "pixel_size": [
+        67,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        158,
+        1168,
+        237,
+        1246
+      ]
+    },
+    {
+      "id": "navigation-top",
+      "description": "navigation top",
+      "row": 15,
+      "column": 3,
+      "source_bounds": [
+        251,
+        1158,
+        309,
+        1206
+      ],
+      "pixel_size": [
+        64,
+        54
+      ],
+      "pivot": [
+        0.5,
+        0.9074074074074074
+      ],
+      "nominal_cell": [
+        237,
+        1168,
+        316,
+        1246
+      ]
+    },
+    {
+      "id": "navigation-bottom",
+      "description": "navigation bottom",
+      "row": 15,
+      "column": 4,
+      "source_bounds": [
+        329,
+        1158,
+        387,
+        1206
+      ],
+      "pixel_size": [
+        64,
+        54
+      ],
+      "pivot": [
+        0.5,
+        0.9074074074074074
+      ],
+      "nominal_cell": [
+        316,
+        1168,
+        395,
+        1246
+      ]
+    },
+    {
+      "id": "sidebar-show",
+      "description": "sidebar show",
+      "row": 15,
+      "column": 5,
+      "source_bounds": [
+        403,
+        1156,
+        462,
+        1210
+      ],
+      "pixel_size": [
+        65,
+        60
+      ],
+      "pivot": [
+        0.5,
+        0.9166666666666666
+      ],
+      "nominal_cell": [
+        395,
+        1168,
+        474,
+        1246
+      ]
+    },
+    {
+      "id": "sidebar-hide",
+      "description": "sidebar hide",
+      "row": 15,
+      "column": 6,
+      "source_bounds": [
+        483,
+        1156,
+        542,
+        1209
+      ],
+      "pixel_size": [
+        65,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        474,
+        1168,
+        553,
+        1246
+      ]
+    },
+    {
+      "id": "panel-split",
+      "description": "panel split",
+      "row": 15,
+      "column": 7,
+      "source_bounds": [
+        558,
+        1156,
+        621,
+        1209
+      ],
+      "pixel_size": [
+        69,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        553,
+        1168,
+        632,
+        1246
+      ]
+    },
+    {
+      "id": "panel-merge",
+      "description": "panel merge",
+      "row": 15,
+      "column": 8,
+      "source_bounds": [
+        637,
+        1156,
+        699,
+        1209
+      ],
+      "pixel_size": [
+        68,
+        59
+      ],
+      "pivot": [
+        0.5,
+        0.9152542372881356
+      ],
+      "nominal_cell": [
+        632,
+        1168,
+        710,
+        1246
+      ]
+    },
+    {
+      "id": "window-new",
+      "description": "window new",
+      "row": 15,
+      "column": 9,
+      "source_bounds": [
+        715,
+        1156,
+        778,
+        1216
+      ],
+      "pixel_size": [
+        69,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        710,
+        1168,
+        789,
+        1246
+      ]
+    },
+    {
+      "id": "window-restore",
+      "description": "window restore",
+      "row": 15,
+      "column": 10,
+      "source_bounds": [
+        794,
+        1157,
+        856,
+        1213
+      ],
+      "pixel_size": [
+        68,
+        62
+      ],
+      "pivot": [
+        0.5,
+        0.9193548387096774
+      ],
+      "nominal_cell": [
+        789,
+        1168,
+        868,
+        1246
+      ]
+    },
+    {
+      "id": "update-available",
+      "description": "update available",
+      "row": 15,
+      "column": 11,
+      "source_bounds": [
+        874,
+        1153,
+        940,
+        1216
+      ],
+      "pixel_size": [
+        72,
+        69
+      ],
+      "pivot": [
+        0.5,
+        0.927536231884058
+      ],
+      "nominal_cell": [
+        868,
+        1168,
+        947,
+        1246
+      ]
+    },
+    {
+      "id": "update-download",
+      "description": "update download",
+      "row": 15,
+      "column": 12,
+      "source_bounds": [
+        955,
+        1155,
+        1009,
+        1210
+      ],
+      "pixel_size": [
+        60,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        947,
+        1168,
+        1026,
+        1246
+      ]
+    },
+    {
+      "id": "update-install",
+      "description": "update install",
+      "row": 15,
+      "column": 13,
+      "source_bounds": [
+        1031,
+        1155,
+        1086,
+        1212
+      ],
+      "pixel_size": [
+        61,
+        63
+      ],
+      "pivot": [
+        0.5,
+        0.9206349206349206
+      ],
+      "nominal_cell": [
+        1026,
+        1168,
+        1105,
+        1246
+      ]
+    },
+    {
+      "id": "update-rollback",
+      "description": "update rollback",
+      "row": 15,
+      "column": 14,
+      "source_bounds": [
+        1107,
+        1156,
+        1162,
+        1211
+      ],
+      "pixel_size": [
+        61,
+        61
+      ],
+      "pivot": [
+        0.5,
+        0.9180327868852459
+      ],
+      "nominal_cell": [
+        1105,
+        1168,
+        1184,
+        1246
+      ]
+    },
+    {
+      "id": "help",
+      "description": "help",
+      "row": 15,
+      "column": 15,
+      "source_bounds": [
+        1183,
+        1153,
+        1243,
+        1213
+      ],
+      "pixel_size": [
+        66,
+        66
+      ],
+      "pivot": [
+        0.5,
+        0.9242424242424242
+      ],
+      "nominal_cell": [
+        1184,
+        1168,
+        1263,
+        1246
+      ]
+    }
+  ]
+}

@@ -1,0 +1,317 @@
+{
+  "method": "alpha-gap rows and independent per-row alpha-gap columns; all original RGBA retained",
+  "rows": [
+    0,
+    321,
+    633,
+    940,
+    1254
+  ],
+  "items": [
+    {
+      "id": "project-tethium",
+      "region": [
+        0,
+        0,
+        301,
+        321
+      ],
+      "source_bounds": [
+        0,
+        0,
+        301,
+        321
+      ],
+      "pixel_size": [
+        309,
+        329
+      ]
+    },
+    {
+      "id": "project-phoenix",
+      "region": [
+        301,
+        0,
+        636,
+        321
+      ],
+      "source_bounds": [
+        301,
+        0,
+        633,
+        321
+      ],
+      "pixel_size": [
+        340,
+        329
+      ]
+    },
+    {
+      "id": "project-sbg",
+      "region": [
+        636,
+        0,
+        929,
+        321
+      ],
+      "source_bounds": [
+        642,
+        9,
+        929,
+        321
+      ],
+      "pixel_size": [
+        295,
+        320
+      ]
+    },
+    {
+      "id": "project-stars",
+      "region": [
+        929,
+        0,
+        1254,
+        321
+      ],
+      "source_bounds": [
+        929,
+        0,
+        1254,
+        312
+      ],
+      "pixel_size": [
+        333,
+        320
+      ]
+    },
+    {
+      "id": "session-graphics",
+      "region": [
+        0,
+        321,
+        312,
+        633
+      ],
+      "source_bounds": [
+        0,
+        321,
+        312,
+        633
+      ],
+      "pixel_size": [
+        320,
+        320
+      ]
+    },
+    {
+      "id": "session-logic",
+      "region": [
+        312,
+        321,
+        632,
+        633
+      ],
+      "source_bounds": [
+        312,
+        321,
+        632,
+        633
+      ],
+      "pixel_size": [
+        328,
+        320
+      ]
+    },
+    {
+      "id": "session-verification",
+      "region": [
+        632,
+        321,
+        937,
+        633
+      ],
+      "source_bounds": [
+        632,
+        321,
+        937,
+        633
+      ],
+      "pixel_size": [
+        313,
+        320
+      ]
+    },
+    {
+      "id": "session-progress",
+      "region": [
+        937,
+        321,
+        1254,
+        633
+      ],
+      "source_bounds": [
+        937,
+        322,
+        1242,
+        633
+      ],
+      "pixel_size": [
+        313,
+        319
+      ]
+    },
+    {
+      "id": "session-tasks",
+      "region": [
+        0,
+        633,
+        315,
+        940
+      ],
+      "source_bounds": [
+        0,
+        633,
+        315,
+        937
+      ],
+      "pixel_size": [
+        323,
+        312
+      ]
+    },
+    {
+      "id": "session-general",
+      "region": [
+        315,
+        633,
+        630,
+        940
+      ],
+      "source_bounds": [
+        315,
+        633,
+        630,
+        940
+      ],
+      "pixel_size": [
+        323,
+        315
+      ]
+    },
+    {
+      "id": "project-general",
+      "region": [
+        630,
+        633,
+        944,
+        940
+      ],
+      "source_bounds": [
+        630,
+        633,
+        944,
+        940
+      ],
+      "pixel_size": [
+        322,
+        315
+      ]
+    },
+    {
+      "id": "session-research",
+      "region": [
+        944,
+        633,
+        1254,
+        940
+      ],
+      "source_bounds": [
+        944,
+        633,
+        1242,
+        940
+      ],
+      "pixel_size": [
+        306,
+        315
+      ]
+    },
+    {
+      "id": "session-experiments",
+      "region": [
+        0,
+        940,
+        300,
+        1254
+      ],
+      "source_bounds": [
+        0,
+        946,
+        300,
+        1254
+      ],
+      "pixel_size": [
+        308,
+        316
+      ]
+    },
+    {
+      "id": "session-docs",
+      "region": [
+        300,
+        940,
+        630,
+        1254
+      ],
+      "source_bounds": [
+        300,
+        940,
+        630,
+        1254
+      ],
+      "pixel_size": [
+        338,
+        322
+      ]
+    },
+    {
+      "id": "session-maintenance",
+      "region": [
+        630,
+        940,
+        932,
+        1254
+      ],
+      "source_bounds": [
+        630,
+        940,
+        932,
+        1254
+      ],
+      "pixel_size": [
+        310,
+        322
+      ]
+    },
+    {
+      "id": "session-architecture",
+      "region": [
+        932,
+        940,
+        1254,
+        1254
+      ],
+      "source_bounds": [
+        932,
+        940,
+        1253,
+        1254
+      ],
+      "pixel_size": [
+        329,
+        322
+      ]
+    }
+  ],
+  "border_warnings": []
+}

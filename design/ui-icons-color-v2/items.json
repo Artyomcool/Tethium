@@ -1,0 +1,1538 @@
+[
+  {
+    "id": "project-folder",
+    "description": "project folder",
+    "row": 1,
+    "column": 1
+  },
+  {
+    "id": "project-add",
+    "description": "project add",
+    "row": 1,
+    "column": 2
+  },
+  {
+    "id": "session-chat",
+    "description": "session chat",
+    "row": 1,
+    "column": 3
+  },
+  {
+    "id": "session-running",
+    "description": "speech bubble with a little cyan play badge",
+    "row": 1,
+    "column": 4
+  },
+  {
+    "id": "session-new",
+    "description": "session new",
+    "row": 1,
+    "column": 5
+  },
+  {
+    "id": "session-archive",
+    "description": "session archive",
+    "row": 1,
+    "column": 6
+  },
+  {
+    "id": "artifact-gallery",
+    "description": "artifact gallery",
+    "row": 1,
+    "column": 7
+  },
+  {
+    "id": "session-actions",
+    "description": "session actions",
+    "row": 1,
+    "column": 8
+  },
+  {
+    "id": "send-message",
+    "description": "send message",
+    "row": 1,
+    "column": 9
+  },
+  {
+    "id": "stop-run",
+    "description": "stop run",
+    "row": 1,
+    "column": 10
+  },
+  {
+    "id": "attach-file",
+    "description": "attach file",
+    "row": 1,
+    "column": 11
+  },
+  {
+    "id": "preview-expand",
+    "description": "preview expand",
+    "row": 1,
+    "column": 12
+  },
+  {
+    "id": "preview-collapse",
+    "description": "four inward arrows",
+    "row": 1,
+    "column": 13
+  },
+  {
+    "id": "artifact-reload",
+    "description": "artifact reload",
+    "row": 1,
+    "column": 14
+  },
+  {
+    "id": "preview-close",
+    "description": "framed image with a coral x",
+    "row": 1,
+    "column": 15
+  },
+  {
+    "id": "quota-gauge",
+    "description": "a small multicolor capacity gauge",
+    "row": 1,
+    "column": 16
+  },
+  {
+    "id": "quota-refresh",
+    "description": "capacity gauge with a circular arrow",
+    "row": 2,
+    "column": 1
+  },
+  {
+    "id": "action-history",
+    "description": "a clipboard with checkmarked steps and small clock",
+    "row": 2,
+    "column": 2
+  },
+  {
+    "id": "queue-resume",
+    "description": "queue resume",
+    "row": 2,
+    "column": 3
+  },
+  {
+    "id": "queue-expand",
+    "description": "queue expand",
+    "row": 2,
+    "column": 4
+  },
+  {
+    "id": "queue-delete",
+    "description": "stacked message cards with a coral trash bin",
+    "row": 2,
+    "column": 5
+  },
+  {
+    "id": "queue-up",
+    "description": "queue up",
+    "row": 2,
+    "column": 6
+  },
+  {
+    "id": "queue-down",
+    "description": "queue down",
+    "row": 2,
+    "column": 7
+  },
+  {
+    "id": "queue-return-last",
+    "description": "last small message card turning back into a pencil input field",
+    "row": 2,
+    "column": 8
+  },
+  {
+    "id": "preview-fit",
+    "description": "preview fit",
+    "row": 2,
+    "column": 9
+  },
+  {
+    "id": "preview-actual-size",
+    "description": "preview actual size",
+    "row": 2,
+    "column": 10
+  },
+  {
+    "id": "model-select",
+    "description": "a chip with a selection chevron",
+    "row": 2,
+    "column": 11
+  },
+  {
+    "id": "reasoning-level",
+    "description": "three rising bars with a small thought spark",
+    "row": 2,
+    "column": 12
+  },
+  {
+    "id": "send-separate",
+    "description": "send separate",
+    "row": 2,
+    "column": 13
+  },
+  {
+    "id": "send-append",
+    "description": "send append",
+    "row": 2,
+    "column": 14
+  },
+  {
+    "id": "queue-pause",
+    "description": "queue pause",
+    "row": 2,
+    "column": 15
+  },
+  {
+    "id": "session-rename",
+    "description": "session rename",
+    "row": 2,
+    "column": 16
+  },
+  {
+    "id": "project-open",
+    "description": "project open",
+    "row": 3,
+    "column": 1
+  },
+  {
+    "id": "project-remove",
+    "description": "project remove",
+    "row": 3,
+    "column": 2
+  },
+  {
+    "id": "project-settings",
+    "description": "project settings",
+    "row": 3,
+    "column": 3
+  },
+  {
+    "id": "project-pin",
+    "description": "project pin",
+    "row": 3,
+    "column": 4
+  },
+  {
+    "id": "project-unpin",
+    "description": "project unpin",
+    "row": 3,
+    "column": 5
+  },
+  {
+    "id": "project-search",
+    "description": "project search",
+    "row": 3,
+    "column": 6
+  },
+  {
+    "id": "project-recent",
+    "description": "project recent",
+    "row": 3,
+    "column": 7
+  },
+  {
+    "id": "project-import",
+    "description": "project import",
+    "row": 3,
+    "column": 8
+  },
+  {
+    "id": "project-export",
+    "description": "project export",
+    "row": 3,
+    "column": 9
+  },
+  {
+    "id": "project-root",
+    "description": "project root",
+    "row": 3,
+    "column": 10
+  },
+  {
+    "id": "project-branch",
+    "description": "project branch",
+    "row": 3,
+    "column": 11
+  },
+  {
+    "id": "project-collapse",
+    "description": "project collapse",
+    "row": 3,
+    "column": 12
+  },
+  {
+    "id": "project-expand",
+    "description": "project expand",
+    "row": 3,
+    "column": 13
+  },
+  {
+    "id": "project-favorite",
+    "description": "project favorite",
+    "row": 3,
+    "column": 14
+  },
+  {
+    "id": "project-terminal",
+    "description": "project terminal",
+    "row": 3,
+    "column": 15
+  },
+  {
+    "id": "project-status",
+    "description": "project status",
+    "row": 3,
+    "column": 16
+  },
+  {
+    "id": "session-duplicate",
+    "description": "session duplicate",
+    "row": 4,
+    "column": 1
+  },
+  {
+    "id": "session-restore",
+    "description": "session restore",
+    "row": 4,
+    "column": 2
+  },
+  {
+    "id": "session-delete",
+    "description": "session delete",
+    "row": 4,
+    "column": 3
+  },
+  {
+    "id": "session-search",
+    "description": "session search",
+    "row": 4,
+    "column": 4
+  },
+  {
+    "id": "session-pin",
+    "description": "session pin",
+    "row": 4,
+    "column": 5
+  },
+  {
+    "id": "session-unpin",
+    "description": "session unpin",
+    "row": 4,
+    "column": 6
+  },
+  {
+    "id": "session-export",
+    "description": "session export",
+    "row": 4,
+    "column": 7
+  },
+  {
+    "id": "session-import",
+    "description": "session import",
+    "row": 4,
+    "column": 8
+  },
+  {
+    "id": "session-activate",
+    "description": "session activate",
+    "row": 4,
+    "column": 9
+  },
+  {
+    "id": "session-deactivate",
+    "description": "session deactivate",
+    "row": 4,
+    "column": 10
+  },
+  {
+    "id": "session-fork",
+    "description": "session fork",
+    "row": 4,
+    "column": 11
+  },
+  {
+    "id": "session-child",
+    "description": "session child",
+    "row": 4,
+    "column": 12
+  },
+  {
+    "id": "session-parent",
+    "description": "session parent",
+    "row": 4,
+    "column": 13
+  },
+  {
+    "id": "session-link",
+    "description": "session link",
+    "row": 4,
+    "column": 14
+  },
+  {
+    "id": "session-copy-id",
+    "description": "session copy id",
+    "row": 4,
+    "column": 15
+  },
+  {
+    "id": "session-info",
+    "description": "session info",
+    "row": 4,
+    "column": 16
+  },
+  {
+    "id": "message-edit",
+    "description": "message edit",
+    "row": 5,
+    "column": 1
+  },
+  {
+    "id": "message-copy",
+    "description": "message copy",
+    "row": 5,
+    "column": 2
+  },
+  {
+    "id": "message-delete",
+    "description": "message delete",
+    "row": 5,
+    "column": 3
+  },
+  {
+    "id": "message-retry",
+    "description": "message retry",
+    "row": 5,
+    "column": 4
+  },
+  {
+    "id": "message-quote",
+    "description": "message quote",
+    "row": 5,
+    "column": 5
+  },
+  {
+    "id": "message-reply",
+    "description": "message reply",
+    "row": 5,
+    "column": 6
+  },
+  {
+    "id": "message-bookmark",
+    "description": "message bookmark",
+    "row": 5,
+    "column": 7
+  },
+  {
+    "id": "message-search",
+    "description": "message search",
+    "row": 5,
+    "column": 8
+  },
+  {
+    "id": "message-expand",
+    "description": "message expand",
+    "row": 5,
+    "column": 9
+  },
+  {
+    "id": "message-collapse",
+    "description": "message collapse",
+    "row": 5,
+    "column": 10
+  },
+  {
+    "id": "message-user",
+    "description": "message user",
+    "row": 5,
+    "column": 11
+  },
+  {
+    "id": "message-agent",
+    "description": "message agent",
+    "row": 5,
+    "column": 12
+  },
+  {
+    "id": "message-system",
+    "description": "message system",
+    "row": 5,
+    "column": 13
+  },
+  {
+    "id": "message-error",
+    "description": "message error",
+    "row": 5,
+    "column": 14
+  },
+  {
+    "id": "message-success",
+    "description": "message success",
+    "row": 5,
+    "column": 15
+  },
+  {
+    "id": "message-pending",
+    "description": "message pending",
+    "row": 5,
+    "column": 16
+  },
+  {
+    "id": "queue-add",
+    "description": "queue add",
+    "row": 6,
+    "column": 1
+  },
+  {
+    "id": "queue-clear",
+    "description": "queue clear",
+    "row": 6,
+    "column": 2
+  },
+  {
+    "id": "queue-first",
+    "description": "queue first",
+    "row": 6,
+    "column": 3
+  },
+  {
+    "id": "queue-last",
+    "description": "queue last",
+    "row": 6,
+    "column": 4
+  },
+  {
+    "id": "queue-priority",
+    "description": "queue priority",
+    "row": 6,
+    "column": 5
+  },
+  {
+    "id": "queue-reorder",
+    "description": "queue reorder",
+    "row": 6,
+    "column": 6
+  },
+  {
+    "id": "queue-item",
+    "description": "queue item",
+    "row": 6,
+    "column": 7
+  },
+  {
+    "id": "queue-batch",
+    "description": "queue batch",
+    "row": 6,
+    "column": 8
+  },
+  {
+    "id": "queue-merge",
+    "description": "queue merge",
+    "row": 6,
+    "column": 9
+  },
+  {
+    "id": "queue-split",
+    "description": "queue split",
+    "row": 6,
+    "column": 10
+  },
+  {
+    "id": "queue-scheduled",
+    "description": "queue scheduled",
+    "row": 6,
+    "column": 11
+  },
+  {
+    "id": "queue-waiting",
+    "description": "queue waiting",
+    "row": 6,
+    "column": 12
+  },
+  {
+    "id": "queue-running",
+    "description": "queue running",
+    "row": 6,
+    "column": 13
+  },
+  {
+    "id": "queue-complete",
+    "description": "queue complete",
+    "row": 6,
+    "column": 14
+  },
+  {
+    "id": "queue-failed",
+    "description": "queue failed",
+    "row": 6,
+    "column": 15
+  },
+  {
+    "id": "queue-restore",
+    "description": "queue restore",
+    "row": 6,
+    "column": 16
+  },
+  {
+    "id": "file-text",
+    "description": "file text",
+    "row": 7,
+    "column": 1
+  },
+  {
+    "id": "file-code",
+    "description": "file code",
+    "row": 7,
+    "column": 2
+  },
+  {
+    "id": "file-image",
+    "description": "file image",
+    "row": 7,
+    "column": 3
+  },
+  {
+    "id": "file-html",
+    "description": "file html",
+    "row": 7,
+    "column": 4
+  },
+  {
+    "id": "file-pdf",
+    "description": "file pdf",
+    "row": 7,
+    "column": 5
+  },
+  {
+    "id": "file-table",
+    "description": "file table",
+    "row": 7,
+    "column": 6
+  },
+  {
+    "id": "file-archive",
+    "description": "file archive",
+    "row": 7,
+    "column": 7
+  },
+  {
+    "id": "file-audio",
+    "description": "file audio",
+    "row": 7,
+    "column": 8
+  },
+  {
+    "id": "file-video",
+    "description": "file video",
+    "row": 7,
+    "column": 9
+  },
+  {
+    "id": "file-markdown",
+    "description": "file markdown",
+    "row": 7,
+    "column": 10
+  },
+  {
+    "id": "file-json",
+    "description": "file json",
+    "row": 7,
+    "column": 11
+  },
+  {
+    "id": "file-log",
+    "description": "file log",
+    "row": 7,
+    "column": 12
+  },
+  {
+    "id": "file-diff",
+    "description": "file diff",
+    "row": 7,
+    "column": 13
+  },
+  {
+    "id": "file-executable",
+    "description": "file executable",
+    "row": 7,
+    "column": 14
+  },
+  {
+    "id": "file-unknown",
+    "description": "file unknown",
+    "row": 7,
+    "column": 15
+  },
+  {
+    "id": "file-link",
+    "description": "file link",
+    "row": 7,
+    "column": 16
+  },
+  {
+    "id": "file-open",
+    "description": "file open",
+    "row": 8,
+    "column": 1
+  },
+  {
+    "id": "file-save",
+    "description": "file save",
+    "row": 8,
+    "column": 2
+  },
+  {
+    "id": "file-save-as",
+    "description": "file save as",
+    "row": 8,
+    "column": 3
+  },
+  {
+    "id": "file-download",
+    "description": "file download",
+    "row": 8,
+    "column": 4
+  },
+  {
+    "id": "file-upload",
+    "description": "file upload",
+    "row": 8,
+    "column": 5
+  },
+  {
+    "id": "file-copy-path",
+    "description": "file copy path",
+    "row": 8,
+    "column": 6
+  },
+  {
+    "id": "file-reveal",
+    "description": "file reveal",
+    "row": 8,
+    "column": 7
+  },
+  {
+    "id": "file-preview",
+    "description": "file preview",
+    "row": 8,
+    "column": 8
+  },
+  {
+    "id": "file-remove-attachment",
+    "description": "file remove attachment",
+    "row": 8,
+    "column": 9
+  },
+  {
+    "id": "file-add-folder",
+    "description": "file add folder",
+    "row": 8,
+    "column": 10
+  },
+  {
+    "id": "file-recent",
+    "description": "file recent",
+    "row": 8,
+    "column": 11
+  },
+  {
+    "id": "file-search",
+    "description": "file search",
+    "row": 8,
+    "column": 12
+  },
+  {
+    "id": "file-rename",
+    "description": "file rename",
+    "row": 8,
+    "column": 13
+  },
+  {
+    "id": "file-move",
+    "description": "file move",
+    "row": 8,
+    "column": 14
+  },
+  {
+    "id": "file-copy",
+    "description": "file copy",
+    "row": 8,
+    "column": 15
+  },
+  {
+    "id": "file-properties",
+    "description": "file properties",
+    "row": 8,
+    "column": 16
+  },
+  {
+    "id": "artifact-image",
+    "description": "artifact image",
+    "row": 9,
+    "column": 1
+  },
+  {
+    "id": "artifact-html",
+    "description": "artifact html",
+    "row": 9,
+    "column": 2
+  },
+  {
+    "id": "artifact-document",
+    "description": "artifact document",
+    "row": 9,
+    "column": 3
+  },
+  {
+    "id": "artifact-chart",
+    "description": "artifact chart",
+    "row": 9,
+    "column": 4
+  },
+  {
+    "id": "artifact-code",
+    "description": "artifact code",
+    "row": 9,
+    "column": 5
+  },
+  {
+    "id": "artifact-table",
+    "description": "artifact table",
+    "row": 9,
+    "column": 6
+  },
+  {
+    "id": "artifact-open-browser",
+    "description": "artifact open browser",
+    "row": 9,
+    "column": 7
+  },
+  {
+    "id": "artifact-download",
+    "description": "artifact download",
+    "row": 9,
+    "column": 8
+  },
+  {
+    "id": "artifact-copy",
+    "description": "artifact copy",
+    "row": 9,
+    "column": 9
+  },
+  {
+    "id": "artifact-previous",
+    "description": "artifact previous",
+    "row": 9,
+    "column": 10
+  },
+  {
+    "id": "artifact-next",
+    "description": "artifact next",
+    "row": 9,
+    "column": 11
+  },
+  {
+    "id": "artifact-zoom-in",
+    "description": "artifact zoom in",
+    "row": 9,
+    "column": 12
+  },
+  {
+    "id": "artifact-zoom-out",
+    "description": "artifact zoom out",
+    "row": 9,
+    "column": 13
+  },
+  {
+    "id": "artifact-reset",
+    "description": "artifact reset",
+    "row": 9,
+    "column": 14
+  },
+  {
+    "id": "artifact-background-light",
+    "description": "artifact background light",
+    "row": 9,
+    "column": 15
+  },
+  {
+    "id": "artifact-background-dark",
+    "description": "artifact background dark",
+    "row": 9,
+    "column": 16
+  },
+  {
+    "id": "tool-terminal",
+    "description": "tool terminal",
+    "row": 10,
+    "column": 1
+  },
+  {
+    "id": "tool-search",
+    "description": "tool search",
+    "row": 10,
+    "column": 2
+  },
+  {
+    "id": "tool-read",
+    "description": "tool read",
+    "row": 10,
+    "column": 3
+  },
+  {
+    "id": "tool-write",
+    "description": "tool write",
+    "row": 10,
+    "column": 4
+  },
+  {
+    "id": "tool-patch",
+    "description": "tool patch",
+    "row": 10,
+    "column": 5
+  },
+  {
+    "id": "tool-browser",
+    "description": "tool browser",
+    "row": 10,
+    "column": 6
+  },
+  {
+    "id": "tool-imagegen",
+    "description": "tool imagegen",
+    "row": 10,
+    "column": 7
+  },
+  {
+    "id": "tool-test",
+    "description": "tool test",
+    "row": 10,
+    "column": 8
+  },
+  {
+    "id": "tool-build",
+    "description": "tool build",
+    "row": 10,
+    "column": 9
+  },
+  {
+    "id": "tool-git",
+    "description": "tool git",
+    "row": 10,
+    "column": 10
+  },
+  {
+    "id": "tool-database",
+    "description": "tool database",
+    "row": 10,
+    "column": 11
+  },
+  {
+    "id": "tool-network",
+    "description": "tool network",
+    "row": 10,
+    "column": 12
+  },
+  {
+    "id": "tool-clock",
+    "description": "tool clock",
+    "row": 10,
+    "column": 13
+  },
+  {
+    "id": "tool-calculator",
+    "description": "tool calculator",
+    "row": 10,
+    "column": 14
+  },
+  {
+    "id": "tool-inspect",
+    "description": "tool inspect",
+    "row": 10,
+    "column": 15
+  },
+  {
+    "id": "tool-automation",
+    "description": "tool automation",
+    "row": 10,
+    "column": 16
+  },
+  {
+    "id": "run-start",
+    "description": "run start",
+    "row": 11,
+    "column": 1
+  },
+  {
+    "id": "run-pause",
+    "description": "run pause",
+    "row": 11,
+    "column": 2
+  },
+  {
+    "id": "run-resume",
+    "description": "run resume",
+    "row": 11,
+    "column": 3
+  },
+  {
+    "id": "run-stop",
+    "description": "run stop",
+    "row": 11,
+    "column": 4
+  },
+  {
+    "id": "run-retry",
+    "description": "run retry",
+    "row": 11,
+    "column": 5
+  },
+  {
+    "id": "run-success",
+    "description": "run success",
+    "row": 11,
+    "column": 6
+  },
+  {
+    "id": "run-error",
+    "description": "run error",
+    "row": 11,
+    "column": 7
+  },
+  {
+    "id": "run-warning",
+    "description": "run warning",
+    "row": 11,
+    "column": 8
+  },
+  {
+    "id": "run-waiting",
+    "description": "run waiting",
+    "row": 11,
+    "column": 9
+  },
+  {
+    "id": "run-draining",
+    "description": "run draining",
+    "row": 11,
+    "column": 10
+  },
+  {
+    "id": "run-duration",
+    "description": "run duration",
+    "row": 11,
+    "column": 11
+  },
+  {
+    "id": "run-progress",
+    "description": "run progress",
+    "row": 11,
+    "column": 12
+  },
+  {
+    "id": "run-log",
+    "description": "run log",
+    "row": 11,
+    "column": 13
+  },
+  {
+    "id": "run-details",
+    "description": "run details",
+    "row": 11,
+    "column": 14
+  },
+  {
+    "id": "run-cancel",
+    "description": "run cancel",
+    "row": 11,
+    "column": 15
+  },
+  {
+    "id": "run-queued",
+    "description": "run queued",
+    "row": 11,
+    "column": 16
+  },
+  {
+    "id": "agent-main",
+    "description": "agent main",
+    "row": 12,
+    "column": 1
+  },
+  {
+    "id": "agent-child",
+    "description": "agent child",
+    "row": 12,
+    "column": 2
+  },
+  {
+    "id": "agent-team",
+    "description": "agent team",
+    "row": 12,
+    "column": 3
+  },
+  {
+    "id": "agent-assign",
+    "description": "agent assign",
+    "row": 12,
+    "column": 4
+  },
+  {
+    "id": "agent-handoff",
+    "description": "agent handoff",
+    "row": 12,
+    "column": 5
+  },
+  {
+    "id": "agent-message",
+    "description": "agent message",
+    "row": 12,
+    "column": 6
+  },
+  {
+    "id": "agent-idle",
+    "description": "agent idle",
+    "row": 12,
+    "column": 7
+  },
+  {
+    "id": "agent-busy",
+    "description": "agent busy",
+    "row": 12,
+    "column": 8
+  },
+  {
+    "id": "agent-complete",
+    "description": "agent complete",
+    "row": 12,
+    "column": 9
+  },
+  {
+    "id": "agent-blocked",
+    "description": "agent blocked",
+    "row": 12,
+    "column": 10
+  },
+  {
+    "id": "agent-interrupt",
+    "description": "agent interrupt",
+    "row": 12,
+    "column": 11
+  },
+  {
+    "id": "agent-followup",
+    "description": "agent followup",
+    "row": 12,
+    "column": 12
+  },
+  {
+    "id": "agent-tree",
+    "description": "agent tree",
+    "row": 12,
+    "column": 13
+  },
+  {
+    "id": "agent-context",
+    "description": "agent context",
+    "row": 12,
+    "column": 14
+  },
+  {
+    "id": "agent-memory",
+    "description": "agent memory",
+    "row": 12,
+    "column": 15
+  },
+  {
+    "id": "agent-capabilities",
+    "description": "agent capabilities",
+    "row": 12,
+    "column": 16
+  },
+  {
+    "id": "settings-general",
+    "description": "settings general",
+    "row": 13,
+    "column": 1
+  },
+  {
+    "id": "settings-appearance",
+    "description": "settings appearance",
+    "row": 13,
+    "column": 2
+  },
+  {
+    "id": "settings-model",
+    "description": "settings model",
+    "row": 13,
+    "column": 3
+  },
+  {
+    "id": "settings-provider",
+    "description": "settings provider",
+    "row": 13,
+    "column": 4
+  },
+  {
+    "id": "settings-keyboard",
+    "description": "settings keyboard",
+    "row": 13,
+    "column": 5
+  },
+  {
+    "id": "settings-language",
+    "description": "settings language",
+    "row": 13,
+    "column": 6
+  },
+  {
+    "id": "settings-notifications",
+    "description": "settings notifications",
+    "row": 13,
+    "column": 7
+  },
+  {
+    "id": "settings-storage",
+    "description": "settings storage",
+    "row": 13,
+    "column": 8
+  },
+  {
+    "id": "settings-network",
+    "description": "settings network",
+    "row": 13,
+    "column": 9
+  },
+  {
+    "id": "settings-security",
+    "description": "settings security",
+    "row": 13,
+    "column": 10
+  },
+  {
+    "id": "settings-tools",
+    "description": "settings tools",
+    "row": 13,
+    "column": 11
+  },
+  {
+    "id": "settings-prompts",
+    "description": "settings prompts",
+    "row": 13,
+    "column": 12
+  },
+  {
+    "id": "settings-layout",
+    "description": "settings layout",
+    "row": 13,
+    "column": 13
+  },
+  {
+    "id": "settings-accessibility",
+    "description": "settings accessibility",
+    "row": 13,
+    "column": 14
+  },
+  {
+    "id": "settings-advanced",
+    "description": "settings advanced",
+    "row": 13,
+    "column": 15
+  },
+  {
+    "id": "settings-reset",
+    "description": "settings reset",
+    "row": 13,
+    "column": 16
+  },
+  {
+    "id": "account-profile",
+    "description": "account profile",
+    "row": 14,
+    "column": 1
+  },
+  {
+    "id": "account-login",
+    "description": "account login",
+    "row": 14,
+    "column": 2
+  },
+  {
+    "id": "account-logout",
+    "description": "account logout",
+    "row": 14,
+    "column": 3
+  },
+  {
+    "id": "account-switch",
+    "description": "account switch",
+    "row": 14,
+    "column": 4
+  },
+  {
+    "id": "quota-daily",
+    "description": "quota daily",
+    "row": 14,
+    "column": 5
+  },
+  {
+    "id": "quota-weekly",
+    "description": "quota weekly",
+    "row": 14,
+    "column": 6
+  },
+  {
+    "id": "quota-remaining",
+    "description": "quota remaining",
+    "row": 14,
+    "column": 7
+  },
+  {
+    "id": "quota-used",
+    "description": "quota used",
+    "row": 14,
+    "column": 8
+  },
+  {
+    "id": "quota-reset-time",
+    "description": "quota reset time",
+    "row": 14,
+    "column": 9
+  },
+  {
+    "id": "quota-limit",
+    "description": "quota limit",
+    "row": 14,
+    "column": 10
+  },
+  {
+    "id": "quota-warning",
+    "description": "quota warning",
+    "row": 14,
+    "column": 11
+  },
+  {
+    "id": "usage-tokens",
+    "description": "usage tokens",
+    "row": 14,
+    "column": 12
+  },
+  {
+    "id": "usage-cost",
+    "description": "usage cost",
+    "row": 14,
+    "column": 13
+  },
+  {
+    "id": "usage-history",
+    "description": "usage history",
+    "row": 14,
+    "column": 14
+  },
+  {
+    "id": "provider-connected",
+    "description": "provider connected",
+    "row": 14,
+    "column": 15
+  },
+  {
+    "id": "provider-offline",
+    "description": "provider offline",
+    "row": 14,
+    "column": 16
+  },
+  {
+    "id": "permission-allow",
+    "description": "permission allow",
+    "row": 15,
+    "column": 1
+  },
+  {
+    "id": "permission-deny",
+    "description": "permission deny",
+    "row": 15,
+    "column": 2
+  },
+  {
+    "id": "permission-session",
+    "description": "permission session",
+    "row": 15,
+    "column": 3
+  },
+  {
+    "id": "permission-folder",
+    "description": "permission folder",
+    "row": 15,
+    "column": 4
+  },
+  {
+    "id": "permission-network",
+    "description": "permission network",
+    "row": 15,
+    "column": 5
+  },
+  {
+    "id": "permission-execute",
+    "description": "permission execute",
+    "row": 15,
+    "column": 6
+  },
+  {
+    "id": "question-answer",
+    "description": "question answer",
+    "row": 15,
+    "column": 7
+  },
+  {
+    "id": "question-choice",
+    "description": "question choice",
+    "row": 15,
+    "column": 8
+  },
+  {
+    "id": "question-text",
+    "description": "question text",
+    "row": 15,
+    "column": 9
+  },
+  {
+    "id": "question-submit",
+    "description": "question submit",
+    "row": 15,
+    "column": 10
+  },
+  {
+    "id": "notification-info",
+    "description": "notification info",
+    "row": 15,
+    "column": 11
+  },
+  {
+    "id": "notification-success",
+    "description": "notification success",
+    "row": 15,
+    "column": 12
+  },
+  {
+    "id": "notification-warning",
+    "description": "notification warning",
+    "row": 15,
+    "column": 13
+  },
+  {
+    "id": "notification-error",
+    "description": "notification error",
+    "row": 15,
+    "column": 14
+  },
+  {
+    "id": "notification-muted",
+    "description": "notification muted",
+    "row": 15,
+    "column": 15
+  },
+  {
+    "id": "notification-inbox",
+    "description": "notification inbox",
+    "row": 15,
+    "column": 16
+  },
+  {
+    "id": "navigation-back",
+    "description": "navigation back",
+    "row": 16,
+    "column": 1
+  },
+  {
+    "id": "navigation-forward",
+    "description": "navigation forward",
+    "row": 16,
+    "column": 2
+  },
+  {
+    "id": "navigation-home",
+    "description": "navigation home",
+    "row": 16,
+    "column": 3
+  },
+  {
+    "id": "navigation-top",
+    "description": "navigation top",
+    "row": 16,
+    "column": 4
+  },
+  {
+    "id": "navigation-bottom",
+    "description": "navigation bottom",
+    "row": 16,
+    "column": 5
+  },
+  {
+    "id": "sidebar-show",
+    "description": "sidebar show",
+    "row": 16,
+    "column": 6
+  },
+  {
+    "id": "sidebar-hide",
+    "description": "sidebar hide",
+    "row": 16,
+    "column": 7
+  },
+  {
+    "id": "panel-split",
+    "description": "panel split",
+    "row": 16,
+    "column": 8
+  },
+  {
+    "id": "panel-merge",
+    "description": "panel merge",
+    "row": 16,
+    "column": 9
+  },
+  {
+    "id": "window-new",
+    "description": "window new",
+    "row": 16,
+    "column": 10
+  },
+  {
+    "id": "window-restore",
+    "description": "window restore",
+    "row": 16,
+    "column": 11
+  },
+  {
+    "id": "update-available",
+    "description": "update available",
+    "row": 16,
+    "column": 12
+  },
+  {
+    "id": "update-download",
+    "description": "update download",
+    "row": 16,
+    "column": 13
+  },
+  {
+    "id": "update-install",
+    "description": "update install",
+    "row": 16,
+    "column": 14
+  },
+  {
+    "id": "update-rollback",
+    "description": "update rollback",
+    "row": 16,
+    "column": 15
+  },
+  {
+    "id": "help",
+    "description": "help",
+    "row": 16,
+    "column": 16
+  }
+]

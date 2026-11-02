@@ -1,0 +1,66 @@
+[
+  {
+    "id": "project-tethium",
+    "description": "silver white low-poly jellyfish with graceful short ribbon tentacles, Tethium workspace"
+  },
+  {
+    "id": "project-phoenix",
+    "description": "fiery orange gold phoenix with uplifted wings, H3Phoenix2 game reverse engineering"
+  },
+  {
+    "id": "project-sbg",
+    "description": "emerald and gold twenty-sided tabletop die with tiny crossed swords, SBG tabletop game"
+  },
+  {
+    "id": "project-stars",
+    "description": "deep blue planet with two bright gold stars and a violet orbital ring, UnclaimedStars space game"
+  },
+  {
+    "id": "session-graphics",
+    "description": "violet and cyan artist palette with one clean diagonal paintbrush, graphics session"
+  },
+  {
+    "id": "session-logic",
+    "description": "cobalt and teal interlocking logic circuit blocks, logic programming session"
+  },
+  {
+    "id": "session-verification",
+    "description": "mint green shield with a bold ivory checkmark, verification session"
+  },
+  {
+    "id": "session-progress",
+    "description": "orange ascending bar chart with an upward gold arrow, progress session"
+  },
+  {
+    "id": "session-tasks",
+    "description": "warm yellow small toolkit with a tiny blue screwdriver, small tasks session"
+  },
+  {
+    "id": "session-general",
+    "description": "blue speech bubble with a white star, general new session"
+  },
+  {
+    "id": "project-general",
+    "description": "teal open project folder with a gold tab, general project"
+  },
+  {
+    "id": "session-research",
+    "description": "coral magnifying glass over a document, research session"
+  },
+  {
+    "id": "session-experiments",
+    "description": "violet flask with cyan liquid, experiments session"
+  },
+  {
+    "id": "session-docs",
+    "description": "blue open book with gold bookmark, documentation session"
+  },
+  {
+    "id": "session-maintenance",
+    "description": "orange wrench and small gray gear, maintenance session"
+  },
+  {
+    "id": "session-architecture",
+    "description": "turquoise branching nodes with one bright central node, architecture session"
+  }
+]
