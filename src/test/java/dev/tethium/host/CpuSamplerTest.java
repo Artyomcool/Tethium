@@ -3,6 +3,18 @@ import org.junit.jupiter.api.Test;
 import java.util.*;
 import static org.junit.jupiter.api.Assertions.*;
 class CpuSamplerTest {
+    public static void main(String[] args){long end=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(40);double value=1;while(System.nanoTime()<end)value=Math.sin(value)+1;System.out.println(value);}
+    @Test void measuresRealProcessCpuAndContinuesFromPersistedBaseline(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir)throws Exception{
+        var process=new ProcessBuilder(AppPaths.javaExecutable(false),"-cp",System.getProperty("tethium.test.classpath"),CpuSamplerTest.class.getName()).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+        try(var ledger=new dev.tethium.core.UsageLedger(dir.resolve("cpu.db"))){
+            var root=new CpuSampler.Root(process.pid(),process.info().startInstant().orElseThrow().toEpochMilli(),new CpuSampler.Owner("s","p"));
+            try(var sampler=new CpuSampler(ledger,()->List.of(root))){awaitCpu(ledger,0,process);}
+            long first=ledger.report("all","","").path("cpu").path("totalNanos").asLong();assertTrue(first>0,"No real CPU observed");
+            try(var sampler=new CpuSampler(ledger,()->List.of(root))){awaitCpu(ledger,first,process);}
+            long second=ledger.report("all","","").path("cpu").path("totalNanos").asLong();assertTrue(second>first);assertTrue(second<=process.info().totalCpuDuration().orElseThrow().toNanos(),"CPU counted twice across sampler replacement");
+        }finally{process.destroyForcibly();process.waitFor();}
+    }
+    private static void awaitCpu(dev.tethium.core.UsageLedger ledger,long previous,Process process)throws Exception{long end=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(15);while(System.nanoTime()<end){assertTrue(process.isAlive(),"CPU fixture failed: "+new String(process.getErrorStream().available()>0?process.getErrorStream().readNBytes(process.getErrorStream().available()):new byte[0]));if(ledger.report("all","","").path("cpu").path("totalNanos").asLong()>previous)return;Thread.sleep(100);}throw new AssertionError("No CPU delta: "+ledger.cpuProcesses());}
     @Test void descendantsAndReusedDaemonFollowCurrentClientNotOriginalParent(){
         var a=new CpuSampler.Owner("a","p");var b=new CpuSampler.Owner("b","q");
         var rootA=new CpuSampler.Sample(1,0,1,10,"worker");var rootB=new CpuSampler.Sample(2,0,2,10,"worker");

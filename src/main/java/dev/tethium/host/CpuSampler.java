@@ -42,7 +42,7 @@ final class CpuSampler implements AutoCloseable {
             for(var link:links){long other=link.left==daemon.pid?link.right:link.right==daemon.pid?link.left:-1;var client=byPid.get(other);var owner=owners.get(other);if(client!=null&&client.client()&&owner!=null)candidates.add(owner.owner);}
             if(candidates.size()==1)owners.put(daemon.pid,new Assignment(candidates.iterator().next(),true));
         }
-        propagate(samples,owners,Set.of());return owners;
+        var daemons=new HashSet<Long>();for(var p:samples)if(p.daemon())daemons.add(p.pid);propagate(samples,owners,daemons);return owners;
     }
     private static void propagate(List<Sample> samples,Map<Long,Assignment> owners,Set<Long> excluded){
         boolean changed;do{changed=false;for(var p:samples)if(!excluded.contains(p.pid)&&!owners.containsKey(p.pid)&&owners.containsKey(p.parent)){owners.put(p.pid,owners.get(p.parent));changed=true;}}while(changed);

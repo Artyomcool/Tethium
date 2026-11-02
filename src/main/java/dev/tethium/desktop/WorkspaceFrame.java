@@ -77,7 +77,7 @@ public final class WorkspaceFrame extends JFrame {
     private final Map<String,JsonNode> sessionViews=new LinkedHashMap<>();
     private String restoreViewFor;private boolean switchingView;
     private void rememberPreview(){
-        if(selected==null||switchingView)return;
+        if(selected==null||switchingView||Objects.equals(restoreViewFor,selected))return;
         int divider=previewOpen&&fullScreenPreview==null?content.getDividerLocation():previewDivider;
         sessionViews.put(selected,Json.object("open",previewOpen,"divider",divider,"path",artifacts.getSelectedItem() instanceof Artifact a?a.path.toString():"","title",artifacts.getSelectedItem() instanceof Artifact a?a.title:""));
         var copy=Json.MAPPER.valueToTree(sessionViews);io.submit(()->{try{Path file=dev.tethium.host.AppPaths.data().resolve("session-views.json");Files.createDirectories(file.getParent());Path temp=Files.createTempFile(file.getParent(),"views-",".tmp");try{Json.MAPPER.writeValue(temp.toFile(),copy);Files.move(temp,file,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}finally{Files.deleteIfExists(temp);}}catch(Exception ignored){}});
