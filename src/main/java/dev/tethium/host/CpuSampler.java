@@ -23,8 +23,7 @@ final class CpuSampler implements AutoCloseable {
     private final Supplier<List<Root>> roots;
     private final ScheduledExecutorService timer=Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
     private final Map<String,Assignment> retained=new HashMap<>();
-    private final Map<String,String> commands=new HashMap<>();
-    private long previous=System.currentTimeMillis(),lastCommands;
+    private long previous=System.currentTimeMillis();
     CpuSampler(UsageLedger ledger,Supplier<List<Root>> roots)throws Exception{
         this.ledger=ledger;this.roots=roots;
         for(var p:ledger.cpuProcesses())if(!p.path("session").isNull())retained.put(p.path("key").asText(),new Assignment(new Owner(p.path("session").asText(),p.path("project").asText()),p.path("kind").asText().equals("shared")));
@@ -48,23 +47,26 @@ final class CpuSampler implements AutoCloseable {
         boolean changed;do{changed=false;for(var p:samples)if(!excluded.contains(p.pid)&&!owners.containsKey(p.pid)&&owners.containsKey(p.parent)){owners.put(p.pid,owners.get(p.parent));changed=true;}}while(changed);
     }
     private void sample()throws Exception{
-        long now=System.currentTimeMillis();var processes=ProcessHandle.allProcesses().toList();
-        boolean needsCommands=false;
-        for(var p:processes){var info=p.info();if(info.command().orElse("").toLowerCase(Locale.ROOT).matches(".*javaw?\\.exe")&&info.startInstant().isPresent()&&!commands.containsKey(p.pid()+":"+info.startInstant().get().toEpochMilli()))needsCommands=true;}
-        if(needsCommands&&now-lastCommands>=5000){lastCommands=now;readCommands(processes);}
-        var samples=new ArrayList<Sample>();
-        for(var p:processes){var info=p.info();if(info.startInstant().isEmpty()||info.totalCpuDuration().isEmpty())continue;long start=info.startInstant().get().toEpochMilli();samples.add(new Sample(p.pid(),p.parent().map(ProcessHandle::pid).orElse(-1L),start,info.totalCpuDuration().get().toNanos(),commands.getOrDefault(p.pid()+":"+start,info.commandLine().orElse(""))));}
+        var samples=snapshot();long now=System.currentTimeMillis();
         var links=samples.stream().anyMatch(Sample::daemon)?connections(command("netstat.exe","-ano","-p","tcp")):List.<Link>of();
         var assigned=attribute(samples,roots.get(),retained,links);var liveKeys=new HashSet<String>();
         for(var p:samples){liveKeys.add(p.key());var a=assigned.get(p.pid);if(a!=null||p.daemon()||retained.containsKey(p.key()))ledger.cpuSample(p.key(),p.pid,p.started,a==null?null:a.owner.session,a==null?null:a.owner.project,p.nanos,now,a!=null&&a.shared||p.daemon()?"shared":"child",p.started>=previous);}
         retained.clear();for(var p:samples){var a=assigned.get(p.pid);if(a!=null)retained.put(p.key(),a);else if(p.daemon())retained.put(p.key(),new Assignment(null,true));}
-        commands.keySet().retainAll(liveKeys);previous=now;
+        previous=now;
     }
-    private void readCommands(List<ProcessHandle> processes)throws Exception{
-        if(!System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win"))return;
-        String output=command("powershell.exe","-NoProfile","-NonInteractive","-WindowStyle","Hidden","-Command","[Console]::OutputEncoding=[Text.UTF8Encoding]::new(); Get-CimInstance Win32_Process -Filter \"Name='java.exe' OR Name='javaw.exe'\" | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress");
-        if(output.isBlank())return;var rows=Json.parse(output);var list=rows.isArray()?rows:Json.MAPPER.createArrayNode().add(rows);var handles=new HashMap<Long,ProcessHandle>();processes.forEach(p->handles.put(p.pid(),p));
-        for(var row:list){var p=handles.get(row.path("ProcessId").asLong());if(p!=null)p.info().startInstant().ifPresent(t->commands.put(p.pid()+":"+t.toEpochMilli(),row.path("CommandLine").asText("")));}
+    private static List<Sample> snapshot()throws Exception{
+        var samples=new ArrayList<Sample>();
+        if(System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win")){
+            // One native WMI snapshot avoids hundreds of slow per-process command-line lookups on Windows.
+            // Only Java command lines are inspected, and none are persisted or logged.
+            String output=command("powershell.exe","-NoProfile","-NonInteractive","-WindowStyle","Hidden","-Command",
+                "[Console]::OutputEncoding=[Text.UTF8Encoding]::new(); @(Get-CimInstance Win32_Process | Where-Object {$null -ne $_.CreationDate} | Select-Object @{n='pid';e={$_.ProcessId}},@{n='parent';e={$_.ParentProcessId}},@{n='started';e={([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds()}},@{n='cpu';e={([long]$_.KernelModeTime+[long]$_.UserModeTime)*100}},@{n='command';e={if($_.Name -match '^javaw?\\.exe$'){$_.CommandLine}else{$_.Name}}}) | ConvertTo-Json -Compress");
+            if(output.isBlank())throw new IllegalStateException("Windows process snapshot timed out");
+            for(var row:Json.parse(output))samples.add(new Sample(row.path("pid").asLong(),row.path("parent").asLong(),row.path("started").asLong(),row.path("cpu").asLong(),row.path("command").asText("")));
+        }else{
+            for(var p:ProcessHandle.allProcesses().toList()){var info=p.info();if(info.startInstant().isPresent()&&info.totalCpuDuration().isPresent())samples.add(new Sample(p.pid(),p.parent().map(ProcessHandle::pid).orElse(-1L),info.startInstant().get().toEpochMilli(),info.totalCpuDuration().get().toNanos(),info.commandLine().orElse("")));}
+        }
+        return samples;
     }
     static List<Link> connections(String output){
         record Socket(String local,String remote,long pid){}var sockets=new HashMap<String,Socket>();var links=new ArrayList<Link>();

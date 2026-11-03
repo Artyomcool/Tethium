@@ -21,6 +21,7 @@ public final class HostService implements AutoCloseable {
     private final SessionStore store;
     private final UsageLedger usage;
     private CpuSampler cpu;
+    private AwakeGuard awake;
     private final ScheduledExecutorService quotaMonitor=Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
     private long quotaObserved;
     private final HttpServer server;
@@ -81,6 +82,7 @@ public final class HostService implements AutoCloseable {
         }
         for (var project : store.projects()) for (var session : store.list(project.id())) schedule(session.id());
         quotaMonitor.scheduleWithFixedDelay(this::observeQuota,0,15,TimeUnit.SECONDS);
+        if(detachedEnabled)awake=new AwakeGuard(()->{try{return !closed&&store.autonomousWorkPending();}catch(Exception e){return false;}});
         if(detachedEnabled)cpu=new CpuSampler(usage,()->{var roots=new ArrayList<CpuSampler.Root>();for(var entry:running.entrySet())try{var worker=entry.getValue().worker;if(worker!=null){var root=worker.cpuRoot(store.get(entry.getKey()).projectId());if(root!=null)roots.add(root);}}catch(Exception ignored){}return roots;});
     }
     public JsonNode descriptor() { return Json.object("port", server.getAddress().getPort(), "token", token, "version", VERSION, "protocol", BuildInfo.PROTOCOL, "build", BuildInfo.BUILD, "hostBuild", BuildInfo.HOST, "pid", ProcessHandle.current().pid()); }
@@ -466,6 +468,6 @@ public final class HostService implements AutoCloseable {
         if(!handoff){for(String id:running.keySet())stopRunning(id);}
         server.stop(0); workers.shutdown();
         if (!workers.awaitTermination(15, TimeUnit.SECONDS)) workers.shutdownNow();
-        if(cpu!=null)cpu.close();usage.close();store.close();
+        if(cpu!=null)cpu.close();if(awake!=null)awake.close();usage.close();store.close();
     }
 }

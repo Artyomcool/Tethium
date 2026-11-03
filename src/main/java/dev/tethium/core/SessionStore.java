@@ -68,6 +68,9 @@ public final class SessionStore implements AutoCloseable {
         }
     }
 
+    public synchronized boolean autonomousWorkPending()throws SQLException{
+        try(var q=connection.createStatement();var r=q.executeQuery("SELECT 1 FROM session_autonomy a JOIN sessions s ON s.id=a.session_id LEFT JOIN queue_state q ON q.session_id=s.id WHERE s.active=1 AND a.state IN ('active','waiting') AND COALESCE(q.paused,0)=0 LIMIT 1")){return r.next();}
+    }
     public synchronized JsonNode autonomy(String id)throws SQLException{
         try(var q=connection.prepareStatement("SELECT * FROM session_autonomy WHERE session_id=?")){q.setString(1,id);try(var r=q.executeQuery()){return r.next()?Json.object("state",r.getString("state"),"goalId",r.getString("goal_id"),"goal",r.getString("goal"),"reason",r.getString("reason")):Json.object("state","off","goalId","","goal","","reason","");}}
     }
