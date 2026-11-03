@@ -1,0 +1,17 @@
+Generate one transparent square RGBA atlas with an invisible 4x4 grid: EXACTLY 16 different D20 dice icon proposals for SBG. Every die is a genuine regular ICOSAHEDRON with TWENTY TRIANGULAR faces, not a six-sided cube, not d12 pentagons, not an octahedron. Clearly recognizable Dungeons & Dragons tabletop twenty-sided die. Reference image supplies the calm matte low-poly visual style ONLY. Each cell has one isolated complete die, 20% transparent margins, no overlap, no platforms or cast shadows. Calm muted sophisticated colors, large clear triangular planes, crisp antialiased silhouette, modest bevels, readable at sidebar sizes. One large legible number '20' on principal triangular face, only a few small engraved numerals on side faces where geometrically sensible; avoid clutter. No labels outside dice, no grid, no decorative particles, neon, gloss or glow. Vary orientation, restrained material, facet treatment, number engraving and muted palette while retaining coherent low-poly style. Row-major cells:
+1. slate blue stone, vertex up, front triangular face engraved 20
+2. sage green ceramic, tilted right, front face 20
+3. warm ivory matte bone, point up, dark engraved 20
+4. dusty mauve stone, tilted left, pale engraved 20
+5. pewter brushed matte metal, face forward, 20
+6. muted terracotta clay, point up, cream 20
+7. sandstone beige, rotated three-quarter, dark 20
+8. smoky blue-grey frosted mineral, tilted right, 20
+9. two-tone ivory and sage triangular faces, vertex up, 20
+10. two-tone slate and warm grey faces, tilted left, 20
+11. muted lavender crystal opaque matte, front face 20
+12. warm bronze satin metal restrained sheen, 20
+13. off-white porcelain subtle grey facet contrast, 20
+14. dark charcoal stone with light grey 20, well-lit faces
+15. desaturated teal mineral with broad pale facets, 20
+16. warm grey stone minimal incised triangular edges and ivory 20
