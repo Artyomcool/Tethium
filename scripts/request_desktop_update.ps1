@@ -1,9 +1,10 @@
-param(
+﻿param(
     [string]$AppPath='',
     [string]$SessionId='',
     [string]$DataPath=(Join-Path $env:LOCALAPPDATA 'Tethium'),
     [string]$StatusPath='',
     [switch]$Apply,
+    [switch]$RestartWorkloads,
     [switch]$QueueOnly
 )
 $ErrorActionPreference='Stop'
@@ -25,6 +26,30 @@ function SaveRequest($value) {
     else { [IO.File]::Move($temporary,$requestFile) }
 }
 function ReadRequest { Get-Content -LiteralPath $requestFile -Raw -Encoding UTF8 | ConvertFrom-Json }
+function SaveStatusFile([string]$file,[string]$json) {
+    $temporary=$file+'.'+[Guid]::NewGuid().ToString()+'.tmp'
+    try {
+        [IO.File]::WriteAllText($temporary,$json,[Text.UTF8Encoding]::new($false))
+        for ($attempt=0; $attempt -lt 100; $attempt++) {
+            try {
+                if ([IO.File]::Exists($file)) { [IO.File]::Replace($temporary,$file,[NullString]::Value) }
+                else { [IO.File]::Move($temporary,$file) }
+                return
+            } catch { if ($attempt -eq 99) { throw }; Start-Sleep -Milliseconds 20 }
+        }
+    } finally { if ([IO.File]::Exists($temporary)) { Remove-Item -LiteralPath $temporary -Force } }
+}
+function ReadStatusFile([string]$file) {
+    for ($attempt=0; $attempt -lt 100; $attempt++) {
+        $stream=$null;$reader=$null
+        try {
+            $stream=[IO.FileStream]::new($file,[IO.FileMode]::Open,[IO.FileAccess]::Read,([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+            $reader=[IO.StreamReader]::new($stream,[Text.Encoding]::UTF8)
+            return ($reader.ReadToEnd() | ConvertFrom-Json -ErrorAction Stop)
+        } catch { if ($attempt -eq 99) { throw }; Start-Sleep -Milliseconds 20 }
+        finally { if ($null -ne $reader) { $reader.Dispose() } elseif ($null -ne $stream) { $stream.Dispose() } }
+    }
+}
 function LaunchHidden($script,$arguments,$log) {
     $values=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$script)+$arguments
     $quoted=($values | ForEach-Object { '"'+$_.ToString().Replace('"','\"')+'"' }) -join ' '
@@ -39,10 +64,25 @@ if (-not $Apply) {
     # An updater keeps its own scripts: subsequent source changes cannot change a queued installation.
     Copy-Item -LiteralPath $PSCommandPath -Destination (Join-Path $bundle 'request_desktop_update.ps1')
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'reload_desktop.ps1') -Destination (Join-Path $bundle 'reload_desktop.ps1')
-    $request=@{id=$id;appPath=$AppPath;sessionId=$SessionId;phase='queued';requestedAt=[DateTime]::UtcNow.ToString('o');coordinatorPath=(Join-Path $bundle 'request_desktop_update.ps1');statusPath=[IO.Path]::GetFullPath($StatusPath);attemptStatusPath=(Join-Path $bundle 'status.json')}
+    $request=@{restartWorkloads=[bool]$RestartWorkloads;id=$id;appPath=$AppPath;sessionId=$SessionId;phase='queued';requestedAt=[DateTime]::UtcNow.ToString('o');coordinatorPath=(Join-Path $bundle 'request_desktop_update.ps1');statusPath=[IO.Path]::GetFullPath($StatusPath);attemptStatusPath=(Join-Path $bundle 'status.json')}
     $guard=RequestLock
     try { SaveRequest $request } finally { $guard.Dispose() }
-    if (-not $QueueOnly) { $process=LaunchHidden $request.coordinatorPath @('-Apply','-DataPath',$DataPath) (Join-Path $bundle 'coordinator'); $request.workerPid=$process.Id }
+    if (-not $QueueOnly) {
+        # The host launches the dispatcher outside the requesting worker's CPU job.
+        $endpoint=$null;$health=$null
+        try {
+            $endpoint=Get-Content -LiteralPath (Join-Path $DataPath 'host.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+            $headers=@{Authorization=('Bearer '+$endpoint.token)}
+            $base='http://127.0.0.1:'+$endpoint.port
+            $health=Invoke-RestMethod -Uri ($base+'/health') -Headers $headers -TimeoutSec 5
+        } catch { }
+        if ($health.resourceControlProtocol -ge 1) {
+            $launched=Invoke-RestMethod -Method Post -Uri ($base+'/updates/apply') -Headers $headers -ContentType 'application/json' -Body '{}' -TimeoutSec 10
+            $request.workerPid=$launched.pid
+        } else {
+            $process=LaunchHidden $request.coordinatorPath @('-Apply','-DataPath',$DataPath) (Join-Path $bundle 'coordinator'); $request.workerPid=$process.Id
+        }
+    }
     $request | ConvertTo-Json
     exit 0
 }
@@ -67,22 +107,24 @@ try {
             $attemptStatus=$request.attemptStatusPath
             if (-not $attemptStatus) { $attemptStatus=Join-Path (Split-Path $request.coordinatorPath) 'status.json' }
             $saved=$null
-            if (Test-Path -LiteralPath $attemptStatus) { $saved=Get-Content -LiteralPath $attemptStatus -Raw -Encoding UTF8 | ConvertFrom-Json }
+            if (Test-Path -LiteralPath $attemptStatus) { $saved=ReadStatusFile $attemptStatus }
             if ($saved.phase -eq 'complete' -and $saved.appPath -eq $request.appPath -and $active.appPath -eq $request.appPath) {
                 $outcome='complete';$message='Previously completed installation recovered'
             } else {
                 $reload=Join-Path (Split-Path $request.coordinatorPath) 'reload_desktop.ps1'
-                $process=LaunchHidden $reload @('-AppPath',$request.appPath,'-PreviousAppPath',$active.appPath,'-SessionId',$request.sessionId,'-DataPath',$DataPath,'-StatusPath',$attemptStatus,'-WaitForLock') (Join-Path (Split-Path $request.coordinatorPath) 'reload')
+                $reloadArgs=@('-AppPath',$request.appPath,'-PreviousAppPath',$active.appPath,'-SessionId',$request.sessionId,'-DataPath',$DataPath,'-StatusPath',$attemptStatus,'-WaitForLock')
+                if ($request.restartWorkloads) { $reloadArgs+=@('-RestartWorkloads','-RestartId',$request.id) }
+                $process=LaunchHidden $reload $reloadArgs (Join-Path (Split-Path $request.coordinatorPath) 'reload')
                 New-Item -ItemType Directory -Force -Path (Split-Path $request.statusPath) | Out-Null
                 do {
                     $ended=$process.WaitForExit(500)
                     if (Test-Path -LiteralPath $attemptStatus) {
-                        try { $state=Get-Content -LiteralPath $attemptStatus -Raw -Encoding UTF8 | ConvertFrom-Json
-                            if ($state.workerPid -eq $process.Id -or $ended) { Copy-Item -LiteralPath $attemptStatus -Destination $request.statusPath -Force }
+                        try { $state=ReadStatusFile $attemptStatus
+                            if ($state.workerPid -eq $process.Id -or $ended) { SaveStatusFile $request.statusPath ($state | ConvertTo-Json -Depth 20) }
                         } catch { }
                     }
                 } while (-not $ended)
-                $state=Get-Content -LiteralPath $attemptStatus -Raw -Encoding UTF8 | ConvertFrom-Json
+                $state=ReadStatusFile $attemptStatus
                 if ($state.appPath -eq $request.appPath) { $outcome=$state.phase;$message=$state.message }
                 if ($outcome -notin @('complete','deferred')) { $outcome='failed' }
             }

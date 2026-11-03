@@ -9,7 +9,7 @@ public final class CodexAdapter implements AgentAdapter {
     public CodexAdapter() { this(System.getenv().getOrDefault("TETHIUM_CODEX", "codex")); }
     public CodexAdapter(String executable) { this(List.of(executable)); }
     public CodexAdapter(List<String> executable) { this.executable = List.copyOf(executable); }
-    public List<String> executable() { return executable; }
+    @Override public List<String> executable() { return executable; }
     @Override public Provider provider() { return Provider.CODEX; }
 
     @Override public Result run(Request request, java.util.function.Consumer<Event> events, Cancellation cancellation) throws Exception {
@@ -29,7 +29,7 @@ public final class CodexAdapter implements AgentAdapter {
             process.send(Json.object("method", "initialized"));
             boolean fullAccess = request.access().equals("danger-full-access");
             var params = Json.object("cwd", request.directory().toString(), "approvalPolicy", fullAccess || request.requests() == null ? "never" : "on-request", "sandbox", request.access());
-            params.put("developerInstructions", "You are running inside Tethium. Use its session_list/session_history tools to coordinate with other sessions in the same project. Use artifact_publish to show generated HTML or images to the user. Do not create git worktrees unless the user asks. Keep user-facing communication in the user's language.");
+            params.put("developerInstructions", DEVELOPER_INSTRUCTIONS);
             if (request.model() != null) params.put("model", request.model());
             if (request.reasoningEffort() != null) params.set("config", Json.object("model_reasoning_effort", request.reasoningEffort()));
             String method = "thread/start";

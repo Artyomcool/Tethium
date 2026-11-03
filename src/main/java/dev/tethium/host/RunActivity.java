@@ -23,7 +23,7 @@ final class RunActivity {
 
     synchronized String accept(AgentAdapter.Event event) {
         updatedAt = System.currentTimeMillis();
-        if (event.type().equals("connecting")) { detail = "Запускает Codex и подключает разговор"; return "Подключение Codex"; }
+        if (event.type().equals("connecting")) { String executor = event.text() == null || event.text().isBlank() ? "Codex" : event.text(); detail = "Запускает " + executor + " и подключает разговор"; return "Подключение " + executor; }
         if (event.type().equals("conversation")) { detail = "Контекст подключён"; return "Работает"; }
         if (event.type().equals("text")) return "Отвечает";
         if (!event.type().equals("item/started") && !event.type().equals("item/completed")) return null;

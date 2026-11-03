@@ -29,7 +29,7 @@ public final class WorkerMain {
                 journal.state("processStart", process.info().startInstant().orElseThrow().toString());
                 journal.state("claimed", "true");
                 var cancellation = new Cancellation();
-                try (var monitor = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory())) {
+                try (var resources=dev.tethium.resources.SessionResources.enter(spec.path("resources")); var monitor = Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory())) {
                     monitor.scheduleWithFixedDelay(() -> {
                         try { if ("true".equals(journal.state("cancel"))) cancellation.cancel(); }
                         catch (Exception e) { System.err.println("Worker control: " + e); }
@@ -39,7 +39,9 @@ public final class WorkerMain {
                         var request = request(spec.path("request"), tools.uri(), tools.token(),
                                 (method, params, cancel) -> exchange(journal,"question",Json.object("method",method,"params",params),cancel));
                         var executable = new ArrayList<String>(); spec.path("executable").forEach(v -> executable.add(v.asText()));
-                        var result = new CodexAdapter(executable).run(request, event -> {
+                        var provider = AgentAdapter.Provider.of(spec.path("provider").asText(null));
+                        AgentAdapter adapter = provider == AgentAdapter.Provider.CLAUDE ? new ClaudeAdapter(executable) : new CodexAdapter(executable);
+                        var result = adapter.run(request, event -> {
                             try { journal.append("event", event); }
                             catch (Exception e) { throw new IllegalStateException("Cannot journal agent output",e); }
                         }, cancellation);

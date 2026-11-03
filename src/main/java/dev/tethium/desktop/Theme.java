@@ -23,14 +23,14 @@ public final class Theme {
         UIManager.put("Button.borderColor", BORDER); UIManager.put("Button.focusedBorderColor", PRIMARY);
         UIManager.put("Button.hoverBackground", new Color(0x3b3e47)); UIManager.put("Button.pressedBackground", SELECTED);
         UIManager.put("Button.toolbar.hoverBackground", SURFACE); UIManager.put("Button.toolbar.pressedBackground", SELECTED);
-        UIManager.put("Button.margin", new Insets(4, 8, 4, 8)); UIManager.put("Button.minimumWidth", 0);
+        UIManager.put("Button.margin", new Insets(3, 8, 3, 8)); UIManager.put("Button.minimumWidth", 0);
         for (String type : new String[]{"TextField", "TextArea", "PasswordField", "FormattedTextField", "ComboBox", "Spinner"}) {
             UIManager.put(type + ".background", FIELD); UIManager.put(type + ".foreground", TEXT);
             UIManager.put(type + ".selectionBackground", SELECTED); UIManager.put(type + ".selectionForeground", TEXT);
             UIManager.put(type + ".caretForeground", ACCENT);
         }
-        UIManager.put("TextComponent.arc", 10); UIManager.put("TextField.margin", new Insets(4, 8, 4, 8));
-        UIManager.put("ComboBox.padding", new Insets(4, 8, 4, 8)); UIManager.put("ComboBox.buttonBackground", FIELD);
+        UIManager.put("TextComponent.arc", 10); UIManager.put("TextField.margin", new Insets(3, 8, 3, 8));
+        UIManager.put("ComboBox.padding", new Insets(3, 8, 3, 8)); UIManager.put("ComboBox.buttonBackground", FIELD);
         UIManager.put("Tree.background", SIDEBAR); UIManager.put("Tree.foreground", TEXT); UIManager.put("Tree.rowHeight", 28);
         UIManager.put("Tree.selectionBackground", SELECTED); UIManager.put("Tree.selectionForeground", TEXT);
         UIManager.put("Tree.selectionInactiveBackground", SELECTED); UIManager.put("Tree.selectionArc", 8);
@@ -54,7 +54,7 @@ public final class Theme {
     static JButton iconButton(String icon, String tooltip, Runnable action) {
         var button = button("", tooltip, action); button.setIcon(icon(icon)); toolbar(button); return button;
     }
-    static void toolbar(JButton button) { button.putClientProperty("JButton.buttonType", "toolBarButton"); button.setMargin(new Insets(6, 6, 6, 6)); }
+    static void toolbar(JButton button) { button.putClientProperty("JButton.buttonType", "toolBarButton"); button.setMargin(new Insets(3, 6, 3, 6)); }
     static void primary(JButton button) {
         button.setBackground(PRIMARY); button.setForeground(new Color(0x161c32));
         button.putClientProperty("FlatLaf.style", "borderColor: #829aee; hoverBackground: #9baff7; pressedBackground: #7089dd; focusedBorderColor: #b7c6ff");

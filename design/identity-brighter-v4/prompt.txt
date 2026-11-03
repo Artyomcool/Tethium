@@ -1,0 +1,12 @@
+Edit the supplied reference of EIGHT selected icons into ONE transparent 8 columns x 8 rows atlas of EIGHT subtly different brightness/color/contrast treatments. Each row is one complete treatment of the SAME eight icons. Preserve the subjects, exact basic silhouette, orientation, relative pieces, and low-poly geometry from reference. DO NOT redesign or substitute associations. Ignore the reference's background and labels. Columns in every row, left to right: 1 two intermeshing gears silver and sage; 2 ivory microscope; 3 angled peach paintbrush; 4 terracotta Swiss pocketknife with two open steel blades; 5 three ascending blue sage mauve polygon crystals; 6 warm copper rising phoenix with spread wings; 7 three pale gold four-point stars connected by thin rods; 8 graphite D20 twenty-sided icosahedral die with triangular faces and legible pale number 20.
+All rows should be a little brighter, clearer and more colorful than the muted reference, NEVER excessive. Matte low-poly, precisely defined broad planar facets, clean antialiased edges, sharp readable silhouettes. No blur, haze, dirty texture, heavy outline, oversharpen halos, neon, sparkles, glow or shiny plastic. Rows MUST have perceptibly different but restrained treatments, not identical copies.
+Rows top to bottom:
+1. Gentle lift: slightly brighter midtones, modest clearer facets, very mild color increase
+2. Crisp neutral: moderate facet contrast, silver highlights, natural restrained color
+3. Fresh color: moderate saturation increase, clear sage steel and peach hues, slightly brighter
+4. Warm daylight: warm clean highlights, amber and copper accents, crisp medium contrast
+5. Cool daylight: clean cool silver highlights, blue-grey shadows, medium saturation
+6. Bright matte: noticeably lighter main planes, deeper narrow shadow planes, no gloss
+7. Sculpted facets: strongest geometry contrast of this sheet, moderate colors, sharp clean planar boundaries
+8. Balanced vivid: combine fresh but controlled color, brighter light-facing planes and crisp moderately dark shadows
+Strict invisible 8x8 equal cell layout, one complete icon centered in each cell, generous 18% transparent gutters. No grid lines, numbers outside icons, labels, background, cards, bases or cast shadows. Genuine transparent RGBA. Maximum available resolution. This is a selection sheet, not a screenshot.

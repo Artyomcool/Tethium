@@ -23,7 +23,8 @@ public final class JsonProcess implements AutoCloseable {
 
     public JsonProcess(List<String> command, Path cwd, Map<String, String> environment) throws IOException {
         var builder = new ProcessBuilder(command).directory(cwd.toFile());
-        builder.environment().putAll(environment);
+        // A null value removes an inherited variable, e.g. a nesting guard of the parent CLI.
+        environment.forEach((key, value) -> { if (value == null) builder.environment().remove(key); else builder.environment().put(key, value); });
         String local=System.getenv("LOCALAPPDATA");
         if(local!=null){Path bin=Path.of(local,"Tethium","tools","gh","bin");if(java.nio.file.Files.isRegularFile(bin.resolve("gh.exe"))){String key=builder.environment().keySet().stream().filter(k->k.equalsIgnoreCase("PATH")).findFirst().orElse("PATH");builder.environment().put(key,bin+java.io.File.pathSeparator+builder.environment().getOrDefault(key,""));}}
         process = builder.start();

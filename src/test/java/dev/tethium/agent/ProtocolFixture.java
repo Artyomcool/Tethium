@@ -3,6 +3,7 @@ package dev.tethium.agent;
 import dev.tethium.json.Json;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.util.*;
 
 /** Real child-process transport with deterministic protocol transcripts; no model requests. */
 public final class ProtocolFixture {
@@ -10,17 +11,7 @@ public final class ProtocolFixture {
         String mode = args[0];
         var input = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         if (mode.equals("malformed")) { System.out.println("not json"); return; }
-        if (mode.startsWith("claude")) {
-            Json.parse(input.readLine());
-            output(Json.object("type", "system", "subtype", "init", "session_id", "claude-thread"));
-            if (mode.equals("claude-error")) {
-                output(Json.object("type", "result", "subtype", "success", "is_error", true, "result", "Weekly limit reached", "session_id", "claude-thread")); return;
-            }
-            output(Json.object("type", "stream_event", "event", Json.object("type", "content_block_delta", "delta", Json.object("type", "text_delta", "text", "Hello world"))));
-            if (mode.equals("claude-cancel")) { Thread.sleep(30000); return; }
-            output(Json.object("type", "assistant", "message", Json.object("content", java.util.List.of(Json.object("type", "text", "text", "Hello world")))));
-            output(Json.object("type", "result", "subtype", "success", "is_error", false, "result", "Hello world", "session_id", "claude-thread")); return;
-        }
+        if (mode.startsWith("claude")) { claude(mode, List.of(args), input); return; }
         String line;
         while ((line = input.readLine()) != null) {
             var request = Json.parse(line);
@@ -62,9 +53,60 @@ public final class ProtocolFixture {
             }
         }
     }
+    /** Claude Code print mode: one user message in, streaming JSON out, control requests both ways. */
+    private static void claude(String mode, List<String> args, BufferedReader input) throws Exception {
+        var first = Json.parse(input.readLine());
+        if (!first.path("type").asText().equals("user") || !first.path("message").path("content").get(0).path("text").asText().equals("hello")) throw new AssertionError("User message must carry the prompt as a content block");
+        int resume = args.indexOf("--resume"), fresh = args.indexOf("--session-id");
+        String session = resume >= 0 ? args.get(resume + 1) : fresh >= 0 ? args.get(fresh + 1) : "claude-thread";
+        if (mode.equals("claude-flags")) {
+            require(args, "--model", "chosen-model"); require(args, "--effort", "max"); require(args, "--permission-mode", "bypassPermissions");
+            require(args, "--resume", "claude-thread"); require(args, "--permission-prompt-tool", "stdio");
+            if (args.contains("--session-id")) throw new AssertionError("A resumed conversation must not get a new session id");
+            if (!first.path("message").path("content").get(1).path("source").path("media_type").asText().equals("image/png")) throw new AssertionError("Images must be sent as base64 content blocks");
+        }
+        if (mode.equals("claude-new") && (fresh < 0 || resume >= 0)) throw new AssertionError("A new conversation must announce its own session id");
+        output(Json.object("type", "system", "subtype", "init", "session_id", session, "model", "fixture-model"));
+        if (mode.equals("claude-error")) {
+            output(Json.object("type", "result", "subtype", "success", "is_error", true, "result", "Weekly limit reached", "session_id", session)); return;
+        }
+        output(Json.object("type", "stream_event", "event", Json.object("type", "content_block_start", "index", 0, "content_block", Json.object("type", "text", "text", ""))));
+        output(Json.object("type", "stream_event", "event", Json.object("type", "content_block_delta", "delta", Json.object("type", "text_delta", "text", "Hello world"))));
+        if (mode.equals("claude-cancel")) {
+            // The adapter must interrupt through the control channel instead of killing the process.
+            String line; while ((line = input.readLine()) != null) {
+                var control = Json.parse(line);
+                if (control.path("type").asText().equals("control_request") && control.path("request").path("subtype").asText().equals("interrupt")) {
+                    output(Json.object("type", "control_response", "response", Json.object("subtype", "success", "request_id", control.path("request_id").asText())));
+                    output(Json.object("type", "result", "subtype", "success", "is_error", false, "result", "Hello world", "session_id", session, "terminal_reason", "aborted_streaming")); return;
+                }
+            }
+            return;
+        }
+        output(Json.object("type", "assistant", "message", Json.object("content", List.of(Json.object("type", "text", "text", "Hello world"), Json.object("type", "tool_use", "id", "toolu_1", "name", "Bash", "input", Json.object("command", "echo ok"))),
+                "usage", Json.object("input_tokens", 10, "cache_creation_input_tokens", 5, "cache_read_input_tokens", 100, "output_tokens", 7)), "session_id", session));
+        String answer = "";
+        if (mode.equals("claude-question")) {
+            output(Json.object("type", "control_request", "request_id", "ask-1", "request", Json.object("subtype", "can_use_tool", "tool_name", "AskUserQuestion",
+                    "input", Json.object("questions", List.of(Json.object("question", "Which color?", "header", "Color", "options", List.of(Json.object("label", "Red", "description", "r"), Json.object("label", "Blue", "description", "b")), "multiSelect", false))))));
+            var reply = Json.parse(input.readLine());
+            if (!reply.path("type").asText().equals("control_response") || !reply.path("response").path("request_id").asText().equals("ask-1")) throw new AssertionError("Control response expected");
+            var response = reply.path("response").path("response");
+            if (!response.path("behavior").asText().equals("allow")) throw new AssertionError("Answered questions must be allowed");
+            answer = response.path("updatedInput").path("answers").path("Which color?").asText();
+        }
+        output(Json.object("type", "user", "message", Json.object("role", "user", "content", List.of(Json.object("type", "tool_result", "tool_use_id", "toolu_1", "content", "ok", "is_error", false))), "session_id", session));
+        output(Json.object("type", "stream_event", "event", Json.object("type", "content_block_start", "index", 0, "content_block", Json.object("type", "text", "text", ""))));
+        output(Json.object("type", "stream_event", "event", Json.object("type", "content_block_delta", "delta", Json.object("type", "text_delta", "text", "Done" + (answer.isEmpty() ? "" : " " + answer)))));
+        output(Json.object("type", "assistant", "message", Json.object("content", List.of(Json.object("type", "text", "text", "Done"))), "session_id", session));
+        output(Json.object("type", "result", "subtype", "success", "is_error", false, "result", "Hello world\n\nDone", "session_id", session));
+    }
+    private static void require(List<String> args, String flag, String value) {
+        int index = args.indexOf(flag);
+        if (index < 0 || !args.get(index + 1).equals(value)) throw new AssertionError("Expected " + flag + " " + value + " in " + args);
+    }
     private static void completed(String status) {
         output(Json.object("method", "turn/completed", "params", Json.object("threadId", "codex-thread", "turn", Json.object("id", "turn-1", "status", status))));
     }
     private static void output(Object value) { System.out.println(value); System.out.flush(); }
 }
-

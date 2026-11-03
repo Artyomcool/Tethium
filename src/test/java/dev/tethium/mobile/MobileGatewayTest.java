@@ -17,6 +17,24 @@ import static org.junit.jupiter.api.Assertions.*;
 class MobileGatewayTest {
     @TempDir Path root;
     private static final AgentAdapter ADAPTER=new AgentAdapter(){public Provider provider(){return Provider.CODEX;}public Result run(Request r,Consumer<Event> events,Cancellation c){throw new AssertionError("No model calls");}};
+    @Test void appCatalogRequiresPairingAndServesOnlyPublishedApksAndQueuePause()throws Exception {
+        Path project=Files.createDirectories(root.resolve("game"));Files.writeString(project.resolve("game.apk"),"signed-apk-fixture");
+        Json.MAPPER.writeValue(project.resolve(".tethium-apps.json").toFile(),Json.object("apps",List.of(Json.object("packageName","our.game","title","Game","versionCode",1,"versionName","1.0","apk","game.apk"))));
+        try(var h=new HostService(root.resolve("data"),ADAPTER);var local=new HostClient(h.descriptor());var m=new MobileGateway(root.resolve("data"),new HostClient(h.descriptor()),0,0);var client=client()){
+            String projectId=local.post("/projects",Json.object("path",project.toString())).path("id").asText();
+            String session=local.post("/sessions",Json.object("projectId",projectId)).path("id").asText();
+            assertEquals(401,call(client,m,"/apps",null,null).statusCode());
+            String code=URI.create(m.pairInfo().path("pairing").asText()).getQuery().split("code=")[1];String token=Json.parse(call(client,m,"/pair",Json.object("code",code),null).body()).path("token").asText();
+            var response=call(client,m,"/apps",null,token);assertEquals(200,response.statusCode(),response.body());
+            var apps=Json.parse(response.body()).path("apps");assertEquals("dev.tethium.mobile",apps.get(0).path("packageName").asText());
+            String path=apps.get(1).path("path").asText();assertEquals(401,call(client,m,path,null,null).statusCode());
+            assertEquals("signed-apk-fixture",call(client,m,path,null,token).body());assertNotEquals(200,call(client,m,"/apps/"+"0".repeat(64)+".apk",null,token).statusCode());
+            assertEquals(200,call(client,m,"/sessions/"+session+"/queue-pause",Json.object(),token).statusCode());
+            assertTrue(local.get("/state").path("sessions").get(0).path("queuePaused").asBoolean());
+            assertEquals(200,call(client,m,"/sessions/"+session+"/queue-resume",Json.object(),token).statusCode());
+            assertFalse(local.get("/state").path("sessions").get(0).path("queuePaused").asBoolean());
+        }
+    }
     @Test void pairingAuthenticationRevocationAndNarrowApiSurviveRestart()throws Exception{
         String token,pin;
         try(var h=new HostService(root,ADAPTER);var local=new HostClient(h.descriptor());var mobile=new MobileGateway(root,new HostClient(h.descriptor()),0,0);var client=client()){
@@ -45,6 +63,17 @@ class MobileGatewayTest {
             assertEquals("<h1>preview</h1>",call(client,m,path,null,null).body());
             assertNotEquals(200,call(client,m,path.replace("index.html","%2e%2e/secret.txt"),null,null).statusCode());
             var http=HttpRequest.newBuilder(URI.create("http://localhost:"+m.downloadPort()+"/state")).GET().build();assertEquals(404,client.send(http,HttpResponse.BodyHandlers.ofString()).statusCode());
+        }
+    }
+    @Test void pinnedDocumentCanBeOpenedRemotelyWithoutAnAgentSession()throws Exception{
+        Path project=Files.createDirectories(root.resolve("project"));Files.writeString(project.resolve("readme.md"),"| A | B |\n|---|---|\n| one | two |\n");
+        try(var h=new HostService(root.resolve("data"),ADAPTER);var local=new HostClient(h.descriptor());var m=new MobileGateway(root.resolve("data"),new HostClient(h.descriptor()),0,0);var client=client()){
+            String p=local.post("/projects",Json.object("path",project.toString())).path("id").asText();
+            String code=URI.create(m.pairInfo().path("pairing").asText()).getQuery().split("code=")[1];String t=Json.MAPPER.readTree(call(client,m,"/pair",Json.object("code",code),null).body()).path("token").asText();
+            var pin=call(client,m,"/projects/"+p+"/files",Json.object("path","readme.md"),t);assertEquals(200,pin.statusCode(),pin.body());String id=Json.parse(pin.body()).path("id").asText();
+            var preview=call(client,m,"/preview",Json.object("fileId",id),t);assertEquals(200,preview.statusCode(),preview.body());
+            String rendered=call(client,m,Json.parse(preview.body()).path("path").asText(),null,null).body();assertTrue(rendered.contains("<table>"));assertTrue(local.get("/state").path("sessions").isEmpty());
+            assertEquals(200,call(client,m,"/files/"+id+"/remove",Json.object(),t).statusCode());assertNotEquals(200,call(client,m,"/preview",Json.object("fileId",id),t).statusCode());
         }
     }
     @Test void retryingQueuedSubmissionDoesNotAppendItTwiceEvenAfterRestart()throws Exception{

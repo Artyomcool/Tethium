@@ -1,0 +1,98 @@
+[
+  {
+    "id": "project-cadabro",
+    "source": "new-project-icons-v2",
+    "row": 1,
+    "column": 3,
+    "region": [
+      500,
+      0,
+      751,
+      266
+    ],
+    "bounds": [
+      25,
+      41,
+      227,
+      243
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "project-heliara",
+    "source": "new-project-icons-v2",
+    "row": 2,
+    "column": 1,
+    "region": [
+      0,
+      266,
+      253,
+      498
+    ],
+    "bounds": [
+      36,
+      20,
+      233,
+      218
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "project-h3aispy",
+    "source": "new-project-icons-v2",
+    "row": 3,
+    "column": 2,
+    "region": [
+      252,
+      498,
+      492,
+      752
+    ],
+    "bounds": [
+      19,
+      24,
+      211,
+      237
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "project-h3mapeditor",
+    "source": "new-project-icons-v2",
+    "row": 4,
+    "column": 5,
+    "region": [
+      990,
+      752,
+      1254,
+      1051
+    ],
+    "bounds": [
+      16,
+      18,
+      243,
+      234
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+]

@@ -44,8 +44,9 @@ final class WorkerExecution implements AutoCloseable {
         if(journal.state("claimed")!=null || launched!=null&&launched.isAlive())return;
         String classpath=System.getProperty("tethium.test.classpath",System.getProperty("java.class.path"));
         classpath=String.join(File.pathSeparator,Arrays.stream(classpath.split(java.util.regex.Pattern.quote(File.pathSeparator))).map(p->Path.of(p).toAbsolutePath().toString()).toList());
-        launched=new ProcessBuilder(AppPaths.javaExecutable(true),"--enable-native-access=ALL-UNNAMED","-cp",classpath,WorkerMain.class.getName(),directory.toAbsolutePath().toString())
-                .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(directory.resolve("worker.log").toFile())).start();
+        var builder=new ProcessBuilder(AppPaths.javaExecutable(true),"--enable-native-access=ALL-UNNAMED","-cp",classpath,WorkerMain.class.getName(),directory.toAbsolutePath().toString())
+                .redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(directory.resolve("worker.log").toFile()));
+        builder.environment().putAll(dev.tethium.resources.SessionResources.environment(directory.getParent().getParent(),run.sessionId()));launched=builder.start();
     }
     /** Returns null when the host detaches; the durable run remains active for its successor. */
     AgentAdapter.Result await(BooleanSupplier detach,BooleanSupplier mayLaunch)throws Exception{

@@ -17,6 +17,21 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class RemoteClientTest {
     @TempDir Path root;
+    @Test void originalImageCopyLeavesTheOpenPreviewWorking()throws Exception{
+        Path project=Files.createDirectories(root.resolve("project")),document=Files.writeString(project.resolve("open.md"),"# Still open"),image=project.resolve("original.png");
+        var pixels=new java.awt.image.BufferedImage(640,480,java.awt.image.BufferedImage.TYPE_INT_ARGB);pixels.setRGB(639,479,0xff123456);javax.imageio.ImageIO.write(pixels,"png",image.toFile());
+        var adapter=new AgentAdapter(){public Provider provider(){return Provider.CODEX;}public Result run(Request r,Consumer<Event> e,Cancellation c){throw new AssertionError("No models");}};
+        try(var host=new HostService(root.resolve("host"),adapter);var local=new HostClient(host.descriptor());var gateway=new MobileGateway(root.resolve("host"),new HostClient(host.descriptor()),0,0)){
+            String p=local.post("/projects",Json.object("path",project.toString())).path("id").asText(),s=local.post("/sessions",Json.object("projectId",p)).path("id").asText();
+            local.post("/sessions/"+s+"/artifact",Json.object("path",image.toString(),"title","Full size"));
+            var pairing=PinnedConnection.pairing(gateway.pairInfo().path("pairing").asText());String address="127.0.0.1:"+gateway.port();String token=new PinnedConnection(address,gateway.pin(),null).json("/pair",Json.object("code",pairing.get("code"))).path("token").asText();
+            try(var remote=new RemoteClient(root.resolve("client"),Json.object("address",address,"pin",gateway.pin(),"token",token));var http=HttpClient.newHttpClient()){
+                remote.get("/state?session="+s);var url=remote.preview(document);var copied=remote.readImage(image,s);
+                assertEquals(640,copied.getWidth());assertEquals(480,copied.getHeight());assertEquals(0xff123456,copied.getRGB(639,479));
+                var response=http.send(HttpRequest.newBuilder(url).build(),HttpResponse.BodyHandlers.ofString());assertEquals(200,response.statusCode());assertTrue(response.body().contains("Still open"));
+            }
+        }
+    }
     @Test void pinnedRemoteClientPreviewsDocumentsPreservesHostDraftAndRunsDownloadedJarLocally()throws Exception{
         Path project=Files.createDirectories(root.resolve("project")),clientData=Files.createDirectories(root.resolve("client"));Path md=Files.writeString(project.resolve("readme.MD"),"# Remote document\n\n**works**");
         Path source=Files.writeString(project.resolve("Hello.java"),"public class Hello { public static void main(String[] args) throws Exception { java.nio.file.Files.writeString(java.nio.file.Path.of(\"ran-here.txt\"),\"ok\"); } }");assertEquals(0,javax.tools.ToolProvider.getSystemJavaCompiler().run(null,null,null,source.toString()));

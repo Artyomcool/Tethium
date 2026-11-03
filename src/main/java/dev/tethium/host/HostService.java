@@ -21,8 +21,12 @@ public final class HostService implements AutoCloseable {
     private final SessionStore store;
     private final UsageLedger usage;
     private CpuSampler cpu;
+    private final ProjectWidgets projectWidgets=new ProjectWidgets();
+    private final ResourceController resources;
+    private final MediaCapture media;
     private AwakeGuard awake;
     private final ScheduledExecutorService quotaMonitor=Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
+    private final ScheduledExecutorService scheduleMonitor=Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().name("session-schedules-",0).factory());
     private long quotaObserved;
     private final HttpServer server;
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
@@ -31,6 +35,7 @@ public final class HostService implements AutoCloseable {
     private final Semaphore slots = new Semaphore(16);
     private final String token = UUID.randomUUID() + "-" + UUID.randomUUID();
     private final AgentAdapter adapter;
+    private final Map<AgentAdapter.Provider, AgentAdapter> adapters = new EnumMap<>(AgentAdapter.Provider.class);
     private final boolean detachedEnabled;
     private final CodexQuotaService quota;
     private final CodexModelCatalog models;
@@ -49,27 +54,37 @@ public final class HostService implements AutoCloseable {
         Running(long startedAt){activity=new RunActivity(startedAt);}
         volatile boolean stopping, quotaBlocked;
         volatile boolean inProcessStarted;
+        volatile AgentAdapter.Provider provider;
         volatile SessionStore.WorkerRun workerRun;
         volatile WorkerExecution worker;
         volatile String phase = "В очереди";
     }
     private record Pending(String id, String sessionId, String method, JsonNode params, CompletableFuture<JsonNode> answer, WorkerExecution worker, long sequence) {}
 
-    public HostService(Path data) throws Exception { this(data, new CodexAdapter(), new CodexQuotaService(new CodexAccountClient(data)::readRateLimits,new CodexAccountClient(data)::consumeReset)); }
+    public HostService(Path data) throws Exception { this(data, List.of(new CodexAdapter(), new ClaudeAdapter()), new CodexQuotaService(new CodexAccountClient(data)::readRateLimits,new CodexAccountClient(data)::consumeReset,new ClaudeAccountClient()::readUsage), false, null); }
     public HostService(Path data, AgentAdapter adapter) throws Exception { this(data, adapter, new CodexQuotaService(null)); }
     public HostService(Path data, AgentAdapter adapter, CodexQuotaService quota) throws Exception {
         this(data, adapter, quota, false);
     }
     public HostService(Path data, AgentAdapter adapter, CodexQuotaService quota, boolean standby) throws Exception {
-        this(data, adapter, quota, standby, new CodexModelCatalog(adapter instanceof CodexAdapter && !Boolean.getBoolean("tethium.probe")
-                ? directory -> new CodexAccountClient(directory).readModels() : null));
+        this(data, List.of(adapter), quota, standby, null);
     }
     public HostService(Path data, AgentAdapter adapter, CodexQuotaService quota, boolean standby, CodexModelCatalog models) throws Exception {
+        this(data, List.of(adapter), quota, standby, models);
+    }
+    /** The first adapter is the default executor and decides detached execution; sessions choose any listed provider. */
+    public HostService(Path data, List<AgentAdapter> executors, CodexQuotaService quota, boolean standby, CodexModelCatalog models) throws Exception {
+        if (executors.isEmpty()) throw new IllegalArgumentException("At least one executor is required");
+        var adapter = executors.getFirst();
+        for (var executor : executors) if (adapters.putIfAbsent(executor.provider(), executor) != null) throw new IllegalArgumentException("Duplicate executor for " + executor.provider());
+        if (models == null) models = new CodexModelCatalog(adapter instanceof CodexAdapter && !Boolean.getBoolean("tethium.probe") ? directory -> new CodexAccountClient(directory).readModels() : null);
         this.adapter = adapter; this.quota = quota; this.draining = standby; this.models = models; this.data = data;
         detachedEnabled=adapter instanceof CodexAdapter&&!Boolean.getBoolean("tethium.probe");
         store = new SessionStore(data.resolve("tethium.db"));
         store.recoverInterruptedRuns();
         usage=new UsageLedger(data.resolve("tethium.db"));
+        resources=new ResourceController(store,data,detachedEnabled);
+        media=new MediaCapture(store,data);
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", this::handle); server.setExecutor(workers); server.start();
         if(adapter instanceof CodexAdapter && !Boolean.getBoolean("tethium.probe") && Files.exists(data.resolve("mobile/enabled"))) {
@@ -77,16 +92,17 @@ public final class HostService implements AutoCloseable {
         }
         if(adapter instanceof CodexAdapter&&!Boolean.getBoolean("tethium.probe"))quotaMonitor.scheduleWithFixedDelay(()->{try{String codexHome=System.getenv("CODEX_HOME");NativeUsageImport.read(store,usage,(codexHome==null?Path.of(System.getProperty("user.home"),".codex"):Path.of(codexHome)).resolve("sessions"));}catch(Exception e){if(!closed)System.err.println("Usage import: "+e.getMessage());}},0,5,TimeUnit.MINUTES);
         if(!Boolean.getBoolean("tethium.probe"))for(var saved:store.workerRuns()){
-            var run=new Running(saved.spec().path("startedAt").asLong(System.currentTimeMillis()));run.workerRun=saved;running.put(saved.sessionId(),run);
+            var run=new Running(saved.spec().path("startedAt").asLong(System.currentTimeMillis()));run.workerRun=saved;run.provider=AgentAdapter.Provider.of(saved.spec().path("provider").asText(null));running.put(saved.sessionId(),run);
             workers.submit(()->observeRestoredWorker(saved.sessionId(),run));
         }
         for (var project : store.projects()) for (var session : store.list(project.id())) schedule(session.id());
         quotaMonitor.scheduleWithFixedDelay(this::observeQuota,0,15,TimeUnit.SECONDS);
+        scheduleMonitor.scheduleWithFixedDelay(()->observeSchedules(System.currentTimeMillis()),1,1,TimeUnit.SECONDS);
         if(detachedEnabled)awake=new AwakeGuard(()->{try{return !closed&&store.autonomousWorkPending();}catch(Exception e){return false;}});
-        if(detachedEnabled)cpu=new CpuSampler(usage,()->{var roots=new ArrayList<CpuSampler.Root>();for(var entry:running.entrySet())try{var worker=entry.getValue().worker;if(worker!=null){var root=worker.cpuRoot(store.get(entry.getKey()).projectId());if(root!=null)roots.add(root);}}catch(Exception ignored){}return roots;});
+        if(detachedEnabled)cpu=new CpuSampler(usage,()->{var roots=new ArrayList<CpuSampler.Root>();for(var entry:running.entrySet())try{var worker=entry.getValue().worker;if(worker!=null){var root=worker.cpuRoot(store.get(entry.getKey()).projectId());if(root!=null)roots.add(root);}}catch(Exception ignored){}try{for(var p:store.claimedProcesses())roots.add(new CpuSampler.Root(p.path("pid").asLong(),p.path("started").asLong(),new CpuSampler.Owner(p.path("session").asText(),p.path("project").asText())));}catch(Exception ignored){}return roots;},store,resources);
     }
     public JsonNode descriptor() { return Json.object("port", server.getAddress().getPort(), "token", token, "version", VERSION, "protocol", BuildInfo.PROTOCOL, "build", BuildInfo.BUILD, "hostBuild", BuildInfo.HOST, "pid", ProcessHandle.current().pid()); }
-    private JsonNode health() { return Json.object("version", VERSION, "protocol", BuildInfo.PROTOCOL, "build", BuildInfo.BUILD, "hostBuild", BuildInfo.HOST, "draining", draining, "running", running.size(), "workerProtocol",dev.tethium.worker.WorkerJournal.PROTOCOL,"handoffReady",running.values().stream().noneMatch(r->r.inProcessStarted)); }
+    private JsonNode health() { return Json.object("version", VERSION, "protocol", BuildInfo.PROTOCOL, "build", BuildInfo.BUILD, "hostBuild", BuildInfo.HOST, "draining", draining, "running", running.size(), "restartProtocol",1,"resourceControlProtocol",1,"workerProtocol",dev.tethium.worker.WorkerJournal.PROTOCOL,"handoffReady",running.values().stream().noneMatch(r->r.inProcessStarted)); }
     public void onShutdown(Runnable action) { shutdown = action; }
     private void handle(HttpExchange exchange) throws IOException {
         try (exchange) {
@@ -99,10 +115,14 @@ public final class HostService implements AutoCloseable {
                 if (exchange.getRequestMethod().equals("GET")) {
                     result = switch (path) {
                         case "/health" -> health();
-                        case "/state" -> snapshot(query(exchange.getRequestURI(), "session"));
+                        case "/resources" -> resources.snapshot();
+                        case "/state" -> snapshot(query(exchange.getRequestURI(), "session"),"window".equals(query(exchange.getRequestURI(),"history")));
+                        case "/history/index" -> historyIndex(query(exchange.getRequestURI(),"session"),"true".equals(query(exchange.getRequestURI(),"gallery")));
+                        case "/history/page" -> historyPage(query(exchange.getRequestURI(),"session"),Integer.parseInt(query(exchange.getRequestURI(),"first")),Integer.parseInt(query(exchange.getRequestURI(),"count")),"true".equals(query(exchange.getRequestURI(),"gallery")));
+                        case "/trash" -> trashList();
                         case "/project" -> GitHubProjects.status(Path.of(store.projects().stream().filter(p->p.id().equals(query(exchange.getRequestURI(),"project"))).findFirst().orElseThrow().root()));
                         case "/usage" -> usage.report(query(exchange.getRequestURI(),"period"),query(exchange.getRequestURI(),"project"),query(exchange.getRequestURI(),"session"));
-                        case "/models" -> models.get(store.get(query(exchange.getRequestURI(), "session")).directory());
+                        case "/models" -> modelCatalog(query(exchange.getRequestURI(), "session"));
                         default -> throw new IllegalArgumentException("Unknown endpoint");
                     };
                 } else if (exchange.getRequestMethod().equals("POST")) {
@@ -123,8 +143,13 @@ public final class HostService implements AutoCloseable {
         synchronized(this){return commandBody(path,body);}
     }
     private Object commandBody(String path, JsonNode body) throws Exception {
+        if(path.equals("/resources")){store.cpuControl(body.path("scope").asText(),body.path("target").asText(),body.path("settings"));resources.refresh();return resources.snapshot();}
         if(path.equals("/mobile/pair")) { startMobile(); return mobile.pairInfo(); }
         if(path.equals("/mobile/revoke")) { startMobile(); return mobile.revoke(); }
+        if(path.equals("/updates/restart/prepare")){if(!body.path("confirmed").asBoolean())throw new IllegalArgumentException("Требуется явное разрешение на остановку задач");return prepareRestart(body.path("id").asText());}
+        if(path.equals("/updates/restart/stop")){var plan=WorkloadRestart.read(data,body.path("id").asText());if(plan==null||plan.path("completed").asBoolean()||!draining||!body.path("confirmed").asBoolean())throw new IllegalArgumentException("Нет подготовленного перезапуска");for(String id:List.copyOf(running.keySet()))stopRunning(id);return health();}
+        if(path.equals("/updates/restart/restore")){if(!draining)throw new IllegalStateException("Восстановление выполняется до возобновления очередей");return WorkloadRestart.restore(store,data,body.path("id").asText());}
+        if(path.equals("/updates/apply"))return Json.object("pid",dev.tethium.update.UpdateRequests.launch(data));
         if (path.equals("/updates/drain")) { draining = true; return health(); }
         if(path.equals("/updates/handoff")){
             if(running.values().stream().anyMatch(r->r.inProcessStarted))throw new IllegalStateException("Есть запуски старого типа; дождитесь их завершения");
@@ -151,21 +176,32 @@ public final class HostService implements AutoCloseable {
             Path directory = ProjectPaths.root(Files.createDirectories(Path.of(body.path("path").asText())).toRealPath());
             if (!Files.isDirectory(directory)) throw new IllegalArgumentException("Выберите каталог проекта");
             if(body.has("frequentPush")||body.path("createRepository").asBoolean())GitHubProjects.configure(directory,body);
-            return Json.object("id", store.project(directory));
+            String id=store.project(directory);resources.refresh();return Json.object("id",id);
         }
         if(path.matches("/projects/[a-zA-Z0-9-]+/settings")){
             String pid=path.split("/")[2];Path root=Path.of(store.projects().stream().filter(p->p.id().equals(pid)).findFirst().orElseThrow().root());return GitHubProjects.configure(root,body);
         }
+        if(path.matches("/projects/[a-zA-Z0-9-]+/active")){store.projectActive(path.split("/")[2],body.path("active").asBoolean());return Json.object("ok",true);}
+        if(path.matches("/projects/[a-zA-Z0-9-]+/app-publish")){
+            Path root=projectRoot(path.split("/")[2]);return dev.tethium.mobile.ApkPublisher.publish(root,root.resolve(body.path("path").asText()),body.path("title").asText());
+        }
+        if(path.matches("/projects/[a-zA-Z0-9-]+/files")){
+            String projectId=path.split("/")[2];Path root=projectRoot(projectId);Path file=pinPath(root,root,body.path("path").asText());String title=body.path("title").asText().strip();
+            return store.pinProjectFile(projectId,file.toString(),title.isBlank()?file.getFileName().toString():title);
+        }
+        if(path.matches("/files/[a-zA-Z0-9-]+/(rename|remove)")){
+            var parts=path.split("/");if(parts[3].equals("remove"))store.removeProjectFile(parts[2]);else store.renameProjectFile(parts[2],body.path("title").asText());return Json.object("ok",true);
+        }
         if (path.equals("/sessions")) {
             String projectId = body.path("projectId").asText();
             var project = store.projects().stream().filter(p -> p.id().equals(projectId)).findFirst().orElseThrow();
-            return sessionJson(store.create(projectId, null, body.path("title").asText("Новая сессия"), Path.of(project.root())));
+            var created=store.create(projectId, null, body.path("title").asText("Новая сессия"), Path.of(project.root()));resources.refresh();return sessionJson(created);
         }
         if (path.equals("/imports/conversation")) {
             Path directory = ProjectPaths.root(Path.of(body.path("projectPath").asText()));
             String projectId = store.project(directory);
             var messages = new ArrayList<SessionStore.ImportedMessage>();
-            for (var message : body.path("messages")) messages.add(new SessionStore.ImportedMessage(message.path("sourceId").asText(), message.path("role").asText(), message.path("text").asText()));
+            for (var message : body.path("messages")) messages.add(new SessionStore.ImportedMessage(message.path("sourceId").asText(), message.path("role").asText(), message.path("text").asText(),message.path("timestamp").asLong()));
             return sessionJson(store.importConversation(projectId, directory, body.path("title").asText(), body.path("sourceKey").asText(), messages));
         }
         if (path.equals("/answer")) {
@@ -181,8 +217,19 @@ public final class HostService implements AutoCloseable {
         if (parts.length != 4 || !parts[1].equals("sessions")) throw new IllegalArgumentException("Unknown endpoint");
         String id = parts[2]; store.get(id);
         switch (parts[3]) {
+            case "trash" -> {if(!body.path("confirmed").asBoolean())throw new IllegalArgumentException("Подтвердите удаление из списка");store.trash(id,true);}
+            case "restore" -> store.trash(id,false);
+            case "purge" -> {
+                if(!body.path("confirmed").asBoolean())throw new IllegalArgumentException("Подтвердите окончательное удаление");
+                if(interruptionScope(id,"tree").stream().anyMatch(running::containsKey))throw new IllegalStateException("Сначала остановите сессию и её подсессии");
+                var removed=store.purge(id);for(String run:removed)removeOwnedDirectory("workers",run);removeOwnedDirectory("attachments",id);removeOwnedDirectory("chat-media",id);return Json.object("ok",true);
+            }
+            case "pinned-file" -> {String link=body.path("path").asText();var session=store.get(id);store.pinnedFile(id,link.isBlank()?null:pinPath(projectRoot(session.projectId()),session.directory(),link).toString());}
             case "autonomy" -> {var result=store.autonomy(id,body.path("action").asText(),body.path("goalId").asText(),body.path("goal").asText(),body.path("reason").asText());if(body.path("resumeQueue").asBoolean())store.pauseQueue(id,false);if(result.path("state").asText().equals("active")){usage.autoResume(id,true);answerAutonomousQuestions(id);}schedule(id);return result;}
             case "quota-auto" -> usage.autoResume(id,body.path("enabled").asBoolean());
+            case "schedule" -> {return configureSchedule(id,body);}
+            case "attention" -> store.marked(id,body.path("marked").asBoolean());
+            case "process-track" -> {resources.checkOwner(body.path("pid").asLong(),id);return store.claimProcess(id,body.path("pid").asLong());}
             case "seen" -> store.seen(id,body.path("version").asLong());
             case "run" -> {
                 String requestId=body.path("requestId").asText();
@@ -195,17 +242,18 @@ public final class HostService implements AutoCloseable {
                 return Json.object("jobId", job);
             }
             case "stop" -> {
-                for(String target:interruptionScope(id,body.path("scope").asText())) { store.pauseQueue(target,true); store.autonomy(target,"pause","","","Остановлено пользователем");usage.waiting(target,false); stopRunning(target); }
+                for(String target:interruptionScope(id,body.path("scope").asText())) { store.pauseQueue(target,true); store.periodicSchedule(target,"pause",0,"",System.currentTimeMillis());store.autonomy(target,"pause","","","Остановлено пользователем");usage.waiting(target,false); stopRunning(target); }
             }
             case "interrupt" -> {
                 String requestId=body.path("requestId").asText(); var previous=store.operationResult(id,requestId,"interrupt"); if(previous!=null)return previous;
                 store.discardAutonomousQueue(id);
                 var affected=interruptionScope(id,body.path("scope").asText());
-                var result=store.priorityCorrection(id,affected,ImageAttachments.append(body.path("prompt").asText(),body.path("images")),requestId,!body.path("preserveDesktopDraft").asBoolean());
-                for(String target:affected){store.autonomy(target,"pause","","","Приоритетная правка пользователя");usage.waiting(target,false);stopRunning(target);}
+                var result=body.path("queueHead").asBoolean()?store.interruptQueueHead(id,affected,requestId):store.priorityCorrection(id,affected,ImageAttachments.append(body.path("prompt").asText(),body.path("images")),requestId,!body.path("preserveDesktopDraft").asBoolean());
+                for(String target:affected){store.periodicSchedule(target,"pause",0,"",System.currentTimeMillis());store.autonomy(target,"pause","","","Приоритетная правка пользователя");usage.waiting(target,false);stopRunning(target);}
                 schedule(id); return result;
             }
-            case "queue-resume" -> {var a=store.autonomy(id);if(a.path("state").asText().equals("paused"))store.autonomy(id,"resume",a.path("goalId").asText(),"",""); usage.waiting(id,false); store.pauseQueue(id, false); schedule(id); }
+            case "queue-pause" -> store.pauseQueue(id,true);
+            case "queue-resume" -> {var a=store.autonomy(id);if(a.path("state").asText().equals("paused"))store.autonomy(id,"resume",a.path("goalId").asText(),"","");if(store.periodicSchedule(id).path("state").asText().equals("paused"))store.periodicSchedule(id,"resume",0,"",System.currentTimeMillis()); usage.waiting(id,false); store.pauseQueue(id, false); schedule(id); }
             case "queue-remove" -> store.removeQueued(id, body.path("jobId").asText());
             case "queue-move" -> store.moveQueued(id, body.path("jobId").asText(), body.path("direction").asText());
             case "queue-take" -> { return store.takeQueuedPart(id, body.path("jobId").asText(), body.path("expectedPrompt").asText(), body.path("draft").asText(), body.path("requestId").asText(),!body.path("preserveDesktopDraft").asBoolean()); }
@@ -214,61 +262,133 @@ public final class HostService implements AutoCloseable {
             case "active" -> { store.setActive(id, body.path("active").asBoolean()); schedule(id); }
             case "rename" -> store.rename(id, body.path("title").asText());
             case "draft" -> { store.draft(id, body.path("draft").asText()); if(body.has("images"))store.draftImages(id,body.path("images")); }
-            case "settings" -> store.preferences(id, body.path("model").asText(null), SessionStore.SESSION_ACCESS,
-                    body.has("reasoningEffort") ? body.path("reasoningEffort").asText(null) : store.preferences(id).path("reasoningEffort").asText(null));
+            case "settings" -> {
+                var current = store.preferences(id);
+                var provider = body.has("provider") ? AgentAdapter.Provider.of(body.path("provider").asText(null)) : AgentAdapter.Provider.of(current.path("provider").asText(null));
+                if (!adapters.containsKey(provider)) throw new IllegalArgumentException("Исполнитель " + provider.title + " недоступен в этой сборке");
+                boolean switched = !provider.name().equals(current.path("provider").asText());
+                store.preferences(id, body.path("model").asText(null), SessionStore.SESSION_ACCESS,
+                        body.has("reasoningEffort") ? body.path("reasoningEffort").asText(null) : switched ? null : current.path("reasoningEffort").asText(null), provider.name());
+            }
             case "artifact" -> { return publish(id, body); }
             default -> throw new IllegalArgumentException("Unknown session action");
         }
         return Json.object("ok", true);
     }
+    private JsonNode prepareRestart(String restartId)throws Exception{
+        var previous=WorkloadRestart.read(data,restartId);if(previous!=null)return previous;
+        draining=true;var processes=new LinkedHashMap<Long,JsonNode>();
+        if(cpu!=null)for(var row:cpu.restartInventory())WorkloadRestart.process(processes,row.path("pid").asLong(),row.path("started").asLong(),row.path("session").asText(),row.path("command").asText());
+        for(var row:store.claimedProcesses())WorkloadRestart.process(processes,row.path("pid").asLong(),row.path("started").asLong(),row.path("session").asText(),ProcessHandle.of(row.path("pid").asLong()).flatMap(p->p.info().commandLine()).orElse(""));
+        for(var entry:running.entrySet()){var worker=entry.getValue().worker;if(worker!=null){var root=worker.cpuRoot(store.get(entry.getKey()).projectId());if(root!=null)WorkloadRestart.process(processes,root.pid(),root.started(),entry.getKey(),"Tethium worker");}}
+        var entries=new ArrayList<JsonNode>();for(var project:store.projects())for(var session:store.list(project.id())){
+            String id=session.id();var run=running.get(id);var owned=processes.values().stream().filter(p->p.path("session").asText().equals(id)).toList();if(run==null&&owned.isEmpty())continue;
+            var job=store.runningJob(id);String live=run==null?"":run.text.toString();var row=(com.fasterxml.jackson.databind.node.ObjectNode)sessionJson(session);
+            row.put("resume",run!=null&&!run.stopping&&job!=null);row.put("prompt",job==null?"":job.prompt());row.put("source",job==null?null:job.sourceId());row.put("detail",run==null?"":run.activity.snapshot().path("detail").asText());row.put("liveTail",live.substring(Math.max(0,live.length()-6000)));row.set("processes",Json.MAPPER.valueToTree(owned));entries.add(row);
+        }
+        var keepers=new ArrayList<JsonNode>();for(String name:List.of("resource-keeper","resource-keeper-v2")){Path file=data.resolve(name).resolve("ready.json");if(Files.exists(file)){var row=Json.MAPPER.readTree(file.toFile());long start=java.time.Instant.parse(row.path("start").asText()).toEpochMilli();if(WorkloadRestart.alive(row.path("pid").asLong(),start))keepers.add(Json.object("pid",row.path("pid").asLong(),"started",start));}}
+        var plan=Json.object("id",restartId,"createdAt",System.currentTimeMillis(),"completed",false,"state",snapshot(null,true),"sessions",entries,"processes",processes.values(),"keepers",keepers);WorkloadRestart.save(data,restartId,plan);return plan;
+    }
     private JsonNode sessionJson(SessionStore.Session s) throws Exception {
         var run = running.get(s.id());
         var attention=store.attention(s.id()); boolean question=pending.values().stream().anyMatch(p->p.sessionId.equals(s.id())&&!p.answer.isDone());
-        ((com.fasterxml.jackson.databind.node.ObjectNode)attention).put("kind",question?"question":attention.path("unread").asBoolean()?"finished":"");
+        ((com.fasterxml.jackson.databind.node.ObjectNode)attention).put("manual",store.marked(s.id()));
+        ((com.fasterxml.jackson.databind.node.ObjectNode)attention).put("kind",question?"question":attention.path("manual").asBoolean()?"manual":attention.path("unread").asBoolean()?"finished":"");
         return Json.object("id", s.id(), "projectId", s.projectId(), "parentId", s.parentId(), "title", s.title(), "active", s.active(), "directory", s.directory().toString(),
                 "running", run != null, "phase", run == null ? "" : run.phase, "stopping", run != null && run.stopping,
                 "progress", run == null ? null : run.activity.snapshot(), "queuePaused", store.queuePaused(s.id()),
-                "autonomy",store.autonomy(s.id()),"quotaWait",usage.waitState(s.id()),"status", store.lastStatus(s.id()), "queued", store.queued(s.id()).size(), "preferences", store.preferences(s.id()),"attention",attention);
+                "pinnedFile",store.pinnedFile(s.id()),"autonomy",store.autonomy(s.id()),"schedule",store.periodicSchedule(s.id()),"quotaWait",usage.waitState(s.id()),"status", store.lastStatus(s.id()), "queued", store.queued(s.id()).size(), "preferences", store.preferences(s.id()),"attention",attention);
     }
-    private Object snapshot(String selected) throws Exception {
+    private Object snapshot(String selected,boolean window) throws Exception {
         var sessions = new ArrayList<JsonNode>();
         var projects = store.projects();
-        for (var project : projects) for (var session : store.list(project.id())) sessions.add(sessionJson(session));
-        var result = Json.object("resourceUsage",usage.sidebar(),"revision", revision.get(), "projects", projects, "sessions", sessions, "quota", quota.snapshot(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
+        for (var project : projects) for (var session : store.list(project.id())) if(store.trashedAt(session.id())==0)sessions.add(sessionJson(session));
+        var projectValues=new ArrayList<JsonNode>();for(var p:projects)projectValues.add(Json.object("id",p.id(),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"widget",projectWidgets.read(Path.of(p.root()))));
+        var result = Json.object("machineUsage",cpu==null?Json.object():cpu.machineUsage(),"resources",resources.snapshot(),"files",store.projectFiles(),"resourceUsage",usage.sidebar(),"revision", revision.get(), "projects", projectValues, "sessions", sessions, "quota", quota.snapshot(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
         if (selected != null && sessions.stream().anyMatch(s -> s.path("id").asText().equals(selected))) {
             var messages = new ArrayList<SessionStore.Message>(); long cursor = 0;
-            while (true) { var page = store.messages(selected, cursor, 1000); messages.addAll(page); if (page.size() < 1000) break; cursor = page.getLast().sequence(); }
+            while (!window) { var page = store.messages(selected, cursor, 1000); messages.addAll(page); if (page.size() < 1000) break; cursor = page.getLast().sequence(); }
             var live = running.get(selected);
-            result.set("conversation", Json.object("messages", messages, "live", live == null ? "" : live.text.toString(), "events", store.events(selected),
+            result.set("conversation", Json.object("messages", messages, "live", window||live == null ? "" : live.text.toString(), "liveTimestamp",live==null?0:live.activity.snapshot().path("startedAt").asLong(),"historyVersion",historyVersion(selected),"windowed",window,"events", store.events(selected),
                     "queued", store.queued(selected), "artifacts", store.artifacts(selected), "requests", pending.values().stream().filter(p -> p.sessionId.equals(selected))
                             .map(p -> Json.object("id", p.id, "method", p.method, "params", p.params)).toList()));
         }
         return result;
     }
+    private String historyVersion(String id)throws Exception{var live=running.get(id);return store.lastSequence(id)+"-"+store.messageRevision(id)+"-"+store.mediaRevision(id)+":"+(live==null?"done":System.identityHashCode(live)+":"+live.text.length());}
+    private JsonNode historyIndex(String id,boolean gallery)throws Exception{
+        store.get(id);var entries=new ArrayList<JsonNode>(store.historyIndex(id));var live=running.get(id);
+        if(live!=null){int length;synchronized(live.text){length=live.text.codePointCount(0,live.text.length());}for(int offset=0;offset<length;offset+=SessionStore.HISTORY_CHUNK)entries.add(Json.object("sequence",-1,"role","assistant","provider",live.provider==null?"CODEX":live.provider.name(),"offset",offset,"length",Math.min(SessionStore.HISTORY_CHUNK,length-offset),"lines",10,"title","","timestamp",live.activity.snapshot().path("startedAt").asLong(),"live",true));}
+        entries.addAll(store.mediaHistory(id));entries.sort(Comparator.comparingLong((JsonNode row)->{long seq=row.has("anchor")?row.path("anchor").asLong():row.path("sequence").asLong();return seq==-1?Long.MAX_VALUE:seq;}).thenComparingInt(row->row.has("outputOffset")?row.path("outputOffset").asInt():row.path("offset").asInt()).thenComparingInt(row->row.path("kind").asText().equals("image")?1:0));
+        return Json.object("version",historyVersion(id),"entries",gallery?HistoryImages.group(entries):entries);
+    }
+    private JsonNode historyPage(String id,int first,int count,boolean gallery)throws Exception{
+        if(first<0||count<1||count>12)throw new IllegalArgumentException("History page must contain 1..12 chunks");
+        var index=historyIndex(id,gallery);var entries=index.path("entries");var result=Json.MAPPER.createArrayNode();
+        for(int i=first;i<Math.min(entries.size(),first+count);i++){
+            var entry=(com.fasterxml.jackson.databind.node.ObjectNode)entries.get(i).deepCopy();int offset=entry.path("offset").asInt(),length=entry.path("length").asInt();String text;
+            if(entry.path("kind").asText().equals("gallery")){for(var image:entry.path("images"))((com.fasterxml.jackson.databind.node.ObjectNode)image).put("thumbnail",Base64.getEncoder().encodeToString(Files.readAllBytes(Path.of(image.path("thumbnailFile").asText()))));text="";}
+            else if(entry.path("kind").asText().equals("image")){entry.put("thumbnail",Base64.getEncoder().encodeToString(Files.readAllBytes(Path.of(entry.path("thumbnailFile").asText()))));text="";}
+            else if(entry.path("live").asBoolean()){var live=running.get(id);if(live==null)return Json.object("stale",true);synchronized(live.text){int points=live.text.codePointCount(0,live.text.length());text=live.text.substring(live.text.offsetByCodePoints(0,Math.min(offset,points)),live.text.offsetByCodePoints(0,Math.min(offset+length,points)));}}
+            else text=store.historyChunk(id,entry.path("sequence").asLong(),offset,length);
+            entry.put("index",i);entry.put("text",text);result.add(entry);
+        }return Json.object("version",index.path("version"),"entries",result);
+    }
+    private Object trashList()throws Exception{var result=new ArrayList<JsonNode>();for(var p:store.projects())for(var session:store.list(p.id())){long deleted=store.trashedAt(session.id());if(deleted>0){var row=(com.fasterxml.jackson.databind.node.ObjectNode)sessionJson(session);row.put("deletedAt",deleted);row.put("projectTitle",p.title());result.add(row);}}return result;}
+    private void removeOwnedDirectory(String kind,String id)throws Exception{
+        UUID.fromString(id);Path root=data.resolve(kind).toAbsolutePath().normalize(),target=root.resolve(id).normalize();
+        if(!target.startsWith(root)||target.equals(root))throw new IllegalArgumentException("Invalid service path");
+        if(Files.exists(target))try(var paths=Files.walk(target)){for(var path:paths.sorted(Comparator.reverseOrder()).toList())Files.deleteIfExists(path);}
+    }
+    private JsonNode configureSchedule(String id,JsonNode args)throws Exception{
+        String action=args.path("action").asText("status");
+        if(action.equals("set")&&(!args.path("intervalSeconds").isIntegralNumber()||!args.path("intervalSeconds").canConvertToLong()))throw new IllegalArgumentException("Интервал задаётся целым числом секунд");
+        var result=store.periodicSchedule(id,action,args.path("intervalSeconds").asLong(),args.path("prompt").asText(),System.currentTimeMillis());
+        if(!action.equals("status")){
+            if(result.path("state").asText().equals("active")){usage.autoResume(id,true);schedule(id);}
+            revision.incrementAndGet();
+        }
+        return result;
+    }
+    synchronized void observeSchedules(long now){
+        if(closed||draining)return;
+        try{for(String id:store.dueSchedules(now)){
+            try{
+                if(running.containsKey(id)||usage.waitState(id).path("waiting").asBoolean())continue;
+                if(store.enqueueScheduled(id,now)){revision.incrementAndGet();schedule(id);}
+            }catch(Exception e){System.err.println("Session schedule "+id+": "+e.getMessage());}
+        }}catch(Exception e){System.err.println("Session schedules: "+e.getMessage());}
+    }
     private synchronized void schedule(String id) throws Exception {
         if (closed || draining || running.containsKey(id) || usage.waitState(id).path("waiting").asBoolean() || !store.get(id).active()) return;
         store.ensureAutonomousContinuation(id);
         var queue=store.queued(id); if(queue.isEmpty() || store.queuePaused(id) && !queue.getFirst().urgent()) return;
+        if(store.interruptionBlocks(id,queue.getFirst().id()))return;
         if(queue.getFirst().urgent() && store.interruptionScope(queue.getFirst().id()).stream().anyMatch(running::containsKey)) return;
         var run = new Running(); running.put(id, run);
         workers.submit(() -> execute(id, run));
     }
     private void execute(String id, Running run) {
         boolean acquired = false;
-        SessionStore.Job job = null;
+        SessionStore.Job job = null; AgentAdapter executor = null;
         try {
             while (!slots.tryAcquire(250, TimeUnit.MILLISECONDS)) if (closed || run.cancellation.isCancelled()) return;
             acquired = true;
             synchronized (this) {
                 var queue = store.queued(id);
-                if (closed || draining || run.stopping || run.cancellation.isCancelled() || !store.get(id).active() || queue.isEmpty() || store.queuePaused(id) && !queue.getFirst().urgent()) return;
+                if (closed || draining || run.stopping || run.cancellation.isCancelled() || !store.get(id).active() || queue.isEmpty() || store.queuePaused(id) && !queue.getFirst().urgent() || store.interruptionBlocks(id,queue.getFirst().id())) return;
                 job = queue.getFirst();
+                var provider=AgentAdapter.Provider.of(store.preferences(id).path("provider").asText(null));
+                executor=adapters.get(provider);
+                if(executor==null){store.jobStatus(job.id(),"FAILED");store.append(id,"system","TETHIUM","Исполнитель "+provider.title+" недоступен в этой сборке. Выберите другого исполнителя в шапке сессии.");return;}
+                run.provider=provider;
                 if(detachedEnabled){
-                    final var selected=job;
+                    final var selected=job;final var chosen=executor;
                     run.workerRun=store.transaction(()->{
                         var prefs=store.preferences(id);
-                        var prepared=new SessionRunner(store).prepareWorker(id,adapter.provider(),selected.prompt(),prefs.path("model").asText(null),prefs.path("access").asText(),prefs.path("reasoningEffort").asText(null));
-                        var spec=Json.object("protocol",dev.tethium.worker.WorkerJournal.PROTOCOL,"startedAt",run.activity.snapshot().path("startedAt").asLong(),"request",dev.tethium.worker.WorkerMain.requestJson(prepared.request()),"executable",((CodexAdapter)adapter).executable(),"tools",SessionToolsServer.catalog(tools(id)));
+                        var prepared=new SessionRunner(store).prepareWorker(id,provider,selected.prompt(),prefs.path("model").asText(null),prefs.path("access").asText(),prefs.path("reasoningEffort").asText(null));
+                        resources.refresh();
+                        var spec=Json.object("resources",resources.spec(id),"protocol",dev.tethium.worker.WorkerJournal.PROTOCOL,"startedAt",run.activity.snapshot().path("startedAt").asLong(),"request",dev.tethium.worker.WorkerMain.requestJson(prepared.request()),"provider",provider.name(),"executable",chosen.executable(),"tools",SessionToolsServer.catalog(tools(id,run)));
                         store.jobStatus(selected.id(),"RUNNING");
                         return store.registerWorker(prepared.runId(),id,selected.id(),prepared.deliveredThrough(),spec);
                     });
@@ -276,26 +396,19 @@ public final class HostService implements AutoCloseable {
                 run.activity.preparingContext(); run.phase = "Подготовка контекста"; revision.incrementAndGet();
             }
             if(run.workerRun!=null){observeWorker(id,run);return;}
-            try (var tools = new SessionToolsServer(store, id, tools(id))) {
+            try (var tools = new SessionToolsServer(store, id, tools(id,run))) {
                 var preferences = store.preferences(id);
-                var result = new SessionRunner(store).run(id, adapter, job.prompt(), tools.uri(), tools.token(), event -> {
-                    if (event.type().equals("text")) run.text.append(event.text());
-                    if((event.type().equals("error")||event.type().equals("finished"))&&quotaError(event.raw().toString()))run.quotaBlocked=true;
-                    if(event.type().equals("thread/tokenUsage/updated")){try{var payload=event.raw().path("params");var tokenUsage=payload.path("tokenUsage");usage.sample(id,store.get(id).projectId(),payload.path("threadId").asText(),System.currentTimeMillis(),tokenUsage.path("total"),tokenUsage.path("last"));}catch(Exception e){System.err.println("Usage sample: "+e.getMessage());}}
-                    String phase = run.activity.accept(event);
-                    if (!run.stopping && phase != null) run.phase = phase;
-                    revision.incrementAndGet();
-                }, run.cancellation, preferences.path("model").asText(null), preferences.path("access").asText(), (method, params, cancel) -> request(id, run, method, params, cancel), preferences.path("reasoningEffort").asText(null));
-                if(!run.stopping&&!run.cancellation.isCancelled()&&result.status()==AgentAdapter.Status.FAILED&&(run.quotaBlocked||quotaError(result.text()))){usage.waiting(id,true);store.jobStatus(job.id(),"QUEUED");quota.refresh();return;}
+                var result = new SessionRunner(store).run(id, executor, job.prompt(), tools.uri(), tools.token(), event -> observe(id, run, event), run.cancellation, preferences.path("model").asText(null), preferences.path("access").asText(), (method, params, cancel) -> request(id, run, method, params, cancel), preferences.path("reasoningEffort").asText(null));
+                if(!run.stopping&&!run.cancellation.isCancelled()&&result.status()==AgentAdapter.Status.FAILED&&codexQuota(run)&&(run.quotaBlocked||quotaError(result.text()))){usage.waiting(id,true);store.jobStatus(job.id(),"QUEUED");quota.refresh();return;}
                 store.jobStatus(job.id(), result.status().name());
                 if(result.status()==AgentAdapter.Status.FAILED&&!run.stopping)blockAutonomy(id,"Запуск завершился с ошибкой: "+result.text());
                 for(String recipient:store.resultRecipients(job)){store.append(recipient, "session", "TETHIUM", "Результат сессии «" + store.get(id).title() + "» (" + result.status() + "):\n" + result.text());store.wakeAutonomy(recipient);}
             }
         } catch (Exception e) {
             try {
-                if (job != null) {boolean blocked=!run.stopping&&!run.cancellation.isCancelled()&&(run.quotaBlocked||quotaError(e.getMessage()));if(blocked){usage.waiting(id,true);quota.refresh();}store.jobStatus(job.id(), blocked?"QUEUED":run.cancellation.isCancelled() ? "CANCELLED" : "FAILED");}
+                if (job != null) {boolean blocked=!run.stopping&&!run.cancellation.isCancelled()&&codexQuota(run)&&(run.quotaBlocked||quotaError(e.getMessage()));if(blocked){usage.waiting(id,true);quota.refresh();}store.jobStatus(job.id(), blocked?"QUEUED":run.cancellation.isCancelled() ? "CANCELLED" : "FAILED");}
                 if(!run.stopping&&!run.cancellation.isCancelled()&&!usage.waitState(id).path("waiting").asBoolean())blockAutonomy(id,"Ошибка исполнения: "+e.getMessage());
-                store.append(id, "system", "TETHIUM", run.cancellation.isCancelled() ? "Запуск остановлен." : "Ошибка Codex: " + e.getMessage());
+                store.append(id, "system", "TETHIUM", run.cancellation.isCancelled() ? "Запуск остановлен." : "Ошибка " + (run.provider == null ? "исполнителя" : run.provider.title) + ": " + e.getMessage());
             } catch (Exception ignored) { }
         } finally {
             if (acquired) slots.release();
@@ -304,6 +417,30 @@ public final class HostService implements AutoCloseable {
         }
     }
     private static boolean quotaError(String text){return text!=null&&(text.contains("usageLimitExceeded")||text.toLowerCase(Locale.ROOT).contains("usage limit")||text.toLowerCase(Locale.ROOT).contains("weekly limit"));}
+    /** Only the Codex account quota is observed by the host; other executors report limit errors as ordinary failures. */
+    private static boolean codexQuota(Running run){return run.provider==null||run.provider==AgentAdapter.Provider.CODEX;}
+    private void observe(String id,Running run,AgentAdapter.Event event){
+        if(event.type().equals("text"))run.text.append(event.text());
+        if(codexQuota(run)&&(event.type().equals("error")||event.type().equals("finished"))&&quotaError(event.raw().toString()))run.quotaBlocked=true;
+        if(event.type().equals("thread/tokenUsage/updated")){try{var payload=event.raw().path("params");var tokenUsage=payload.path("tokenUsage");usage.sample(id,store.get(id).projectId(),payload.path("threadId").asText(),System.currentTimeMillis(),tokenUsage.path("total"),tokenUsage.path("last"));}catch(Exception e){System.err.println("Usage sample: "+e.getMessage());}}
+        if(event.type().equals("rate_limit_event")){try{var windows=Json.MAPPER.createArrayNode();event.raw().path("rate_limit_info").path("unifiedWindows").properties().forEach(w->{long minutes=w.getKey().equals("seven_day")?10080:w.getKey().equals("five_hour")?300:0;if(minutes>0&&w.getValue().path("resetsAt").asLong()>0)windows.add(Json.object("kind",w.getKey(),"durationMinutes",minutes,"resetsAt",w.getValue().path("resetsAt").asLong()));});if(!windows.isEmpty())usage.snapshot(Json.object("updatedAt",System.currentTimeMillis(),"buckets",List.of(Json.object("id","claude","label","Claude","windows",windows))));}catch(Exception e){System.err.println("Rate limit event: "+e.getMessage());}}
+        String phase=run.activity.accept(event);if(!run.stopping&&phase!=null)run.phase=phase;revision.incrementAndGet();
+    }
+    /** One merged catalog: every available executor contributes its models, each entry tagged with its provider. */
+    private JsonNode modelCatalog(String sessionId)throws Exception{
+        var session=store.get(sessionId);var current=AgentAdapter.Provider.of(store.preferences(sessionId).path("provider").asText(null));
+        var providers=Json.object();var data=Json.MAPPER.createArrayNode();boolean any=false;var problems=new StringJoiner(" ");
+        for(var provider:AgentAdapter.Provider.values()){
+            if(!adapters.containsKey(provider))continue;
+            JsonNode catalog=provider==AgentAdapter.Provider.CLAUDE?ClaudeModelCatalog.get(true):models.get(session.directory());
+            boolean available=catalog.path("available").asBoolean();any|=available;
+            providers.set(provider.name(),Json.object("title",provider.title,"available",available,"error",catalog.path("error").asText(""),"configuredModel",catalog.path("configuredModel"),"configuredEffort",catalog.path("configuredEffort")));
+            if(!available){problems.add(catalog.path("error").asText(provider.title+": каталог недоступен"));continue;}
+            for(var entry:catalog.path("data")){var row=(com.fasterxml.jackson.databind.node.ObjectNode)entry.deepCopy();row.put("provider",provider.name());data.add(row);}
+        }
+        var active=providers.path(current.name());
+        return Json.object("available",any,"provider",current.name(),"providers",providers,"data",data,"configuredModel",active.path("configuredModel"),"configuredEffort",active.path("configuredEffort"),"error",problems.toString());
+    }
     private void observeRestoredWorker(String id,Running run){
         boolean acquired=false;
         try{while(!slots.tryAcquire(100,TimeUnit.MILLISECONDS))if(closed)return;acquired=true;observeWorker(id,run);}
@@ -315,13 +452,8 @@ public final class HostService implements AutoCloseable {
             while(!closed){
                 try{
                     if(run.worker==null)run.worker=new WorkerExecution(data,store,run.workerRun,this,new WorkerExecution.Listener(){
-                        public void event(AgentAdapter.Event event){
-                            if(event.type().equals("text"))run.text.append(event.text());
-                            if((event.type().equals("error")||event.type().equals("finished"))&&quotaError(event.raw().toString()))run.quotaBlocked=true;
-                            if(event.type().equals("thread/tokenUsage/updated")){try{var p=event.raw().path("params");var u=p.path("tokenUsage");usage.sample(id,store.get(id).projectId(),p.path("threadId").asText(),System.currentTimeMillis(),u.path("total"),u.path("last"));}catch(Exception e){System.err.println("Usage sample: "+e.getMessage());}}
-                            String phase=run.activity.accept(event);if(!run.stopping&&phase!=null)run.phase=phase;revision.incrementAndGet();
-                        }
-                        public Object tool(JsonNode params)throws Exception{return SessionToolsServer.dispatch(store,id,tools(id),params);}
+                        public void event(AgentAdapter.Event event){observe(id,run,event);}
+                        public Object tool(JsonNode params)throws Exception{return SessionToolsServer.dispatch(store,id,tools(id,run),params);}
                         public void question(WorkerExecution worker,long sequence,JsonNode value)throws Exception{
                             var automatic=automaticAnswer(id,value.path("method").asText(),value.path("params"));if(automatic!=null){worker.answer(sequence,automatic);return;}
                             String key=worker.run.runId()+":"+sequence;
@@ -331,13 +463,13 @@ public final class HostService implements AutoCloseable {
                     });
                     var result=run.worker.await(()->closed,()->!draining);
                     if(result==null)return;
-                    boolean quotaBlocked=!run.stopping&&result.status()==AgentAdapter.Status.FAILED&&(run.quotaBlocked||quotaError(result.text()));
+                    boolean quotaBlocked=!run.stopping&&result.status()==AgentAdapter.Status.FAILED&&codexQuota(run)&&(run.quotaBlocked||quotaError(result.text()));
                     if(quotaBlocked){usage.waiting(id,true);quota.refresh();}
                     synchronized(this){
                         if(closed)return;
                         store.transaction(()->{
                             var saved=run.workerRun;
-                            store.completeRun(saved.runId(),id,AgentAdapter.Provider.CODEX,result,saved.deliveredThrough());
+                            store.completeRun(saved.runId(),id,AgentAdapter.Provider.of(saved.spec().path("provider").asText(null)),result,saved.deliveredThrough());
                             store.jobStatus(saved.jobId(),quotaBlocked?"QUEUED":result.status().name());
                             if(!quotaBlocked&&!run.stopping&&result.status()==AgentAdapter.Status.FAILED)blockAutonomy(id,"Запуск завершился с ошибкой: "+result.text());
                             if(!quotaBlocked)for(String recipient:store.resultRecipients(store.job(saved.jobId()))){store.append(recipient,"session","TETHIUM","Результат сессии «"+store.get(id).title()+"» ("+result.status()+"):\n"+result.text());store.wakeAutonomy(recipient);}
@@ -391,6 +523,12 @@ public final class HostService implements AutoCloseable {
             return Json.object("action", "cancel", "content", null);
         } finally { pending.remove(p.id); run.phase = "Работает"; revision.incrementAndGet(); }
     }
+    private Path projectRoot(String id)throws Exception{return Path.of(store.projects().stream().filter(p->p.id().equals(id)).findFirst().orElseThrow(()->new IllegalArgumentException("Проект не найден")).root()).toRealPath();}
+    private static Path pinPath(Path root,Path directory,String link)throws Exception{
+        if(link.isBlank())throw new IllegalArgumentException("Укажите файл");Path path=directory.resolve(link).toRealPath();
+        if(!Files.isRegularFile(path)||!path.getFileName().toString().toLowerCase(Locale.ROOT).matches(".*\\.(md|markdown|html?|svg|png|jpe?g|gif|webp)$"))throw new IllegalArgumentException("Выберите Markdown, HTML или изображение");
+        if(!path.startsWith(root)&&!path.startsWith(directory.toRealPath()))throw new IllegalArgumentException("Файл должен находиться внутри проекта или рабочего каталога сессии");return path;
+    }
     private Object publish(String sessionId, JsonNode args) throws Exception {
         var session = store.get(sessionId);
         Path file = session.directory().resolve(args.path("path").asText()).toRealPath();
@@ -399,13 +537,14 @@ public final class HostService implements AutoCloseable {
         String id = store.artifact(sessionId, file, args.path("title").asText(file.getFileName().toString()));
         revision.incrementAndGet(); return Json.object("id", id, "path", file.toString());
     }
-    private SessionToolsServer.Extension tools(String caller) {
+    private SessionToolsServer.Extension tools(String caller,Running owner) {
         return new SessionToolsServer.Extension() {
             public List<JsonNode> tools() {
-                return List.of(Autonomy.tool(),tool("session_spawn", "Create and start a Codex child session in this project. Returns its id immediately. Result is delivered to the parent history. Do not create worktrees automatically.", "title", "prompt"),
+                return List.of(Autonomy.tool(),SessionSchedule.tool(),tool("process_track","Attribute CPU of an existing or detached background process and its descendants to this session. Register long-lived helper services you start or reuse that were launched outside this session. PID reuse is guarded by start time.","pid"),tool("session_spawn", "Create and start a child session in this project; it inherits your executor, model and settings. Returns its id immediately. Result is delivered to the parent history. Do not create worktrees automatically.", "title", "prompt"),
                         tool("session_delegate", "Queue work for an active session in the same project. Returns immediately; result is delivered to your history.", "session_id", "prompt"),
                         tool("session_message", "Send an informational message to another session in this project without starting a run.", "session_id", "text"),
                         tool("artifact_publish", "Publish HTML, Markdown, images, or a runnable build (JAR, EXE, or ZIP containing it). Remote clients can download builds and launch them on their computer. Paths are relative to your working directory or absolute.", "path", "title"),
+                        tool("app_publish", "Publish a signed standalone APK from this project to the user's local Android app store. Reads package/version from the APK, verifies signing, freezes the build and updates .tethium-apps.json. Phones can install or update it in Apps. Keep the signing key and increase versionCode for automatic updates; same-version builds can be reinstalled manually. Does not install anything on a device. Path relative to the session directory or absolute; title can be empty to use the APK label.", "path", "title"),
                         tool("session_rename", "Give your session a concise descriptive title.", "title"),
                         tool("session_directory", "Set this session's working directory for subsequent runs to an existing checkout in the same Git project. Use only when the user requested a worktree. Does not create worktrees.", "path"));
             }
@@ -413,8 +552,24 @@ public final class HostService implements AutoCloseable {
                 var source = store.get(caller);
                 Object response;
                 switch (name) {
-                    case "session_autonomy" -> {response=store.autonomy(caller,args.path("action").asText(),args.path("goalId").asText(),args.path("goal").asText(),args.path("reason").asText());if(((JsonNode)response).path("state").asText().equals("active")){store.enableAutomaticQuota(caller);answerAutonomousQuestions(caller);}schedule(caller);}
+                    case "session_autonomy" -> {
+                        synchronized(HostService.this){
+                            // Serialize with Stop and reject calls from a cancelled or superseded run.
+                            if(closed||running.get(caller)!=owner||owner.stopping||owner.cancellation.isCancelled())throw new IllegalStateException("Запуск уже остановлен; он не может менять автономию");
+                            response=store.autonomy(caller,args.path("action").asText(),args.path("goalId").asText(),args.path("goal").asText(),args.path("reason").asText());
+                            if(((JsonNode)response).path("state").asText().equals("active")){store.enableAutomaticQuota(caller);answerAutonomousQuestions(caller);}
+                            schedule(caller);
+                        }
+                    }
+                    case "session_schedule" -> {
+                        synchronized(HostService.this){
+                            if(closed||running.get(caller)!=owner||owner.stopping||owner.cancellation.isCancelled())throw new IllegalStateException("Запуск уже остановлен; он не может менять расписание");
+                            response=configureSchedule(caller,args);
+                        }
+                    }
                     case "artifact_publish" -> response = publish(caller, args);
+                    case "app_publish" -> response=dev.tethium.mobile.ApkPublisher.publish(projectRoot(source.projectId()),source.directory().resolve(args.path("path").asText()),args.path("title").asText());
+                    case "process_track" -> {resources.checkOwner(args.path("pid").asLong(),caller);response=store.claimProcess(caller,args.path("pid").asLong());}
                     case "session_rename" -> { store.rename(caller, args.path("title").asText()); response = Json.object("ok", true); }
                     case "session_directory" -> {
                         Path target = source.directory().resolve(args.path("path").asText()).toRealPath();
@@ -463,11 +618,11 @@ public final class HostService implements AutoCloseable {
         Files.writeString(Files.createDirectories(data.resolve("mobile")).resolve("enabled"),"true");
     }
     @Override public void close() throws Exception {
-        closed = true; quotaMonitor.shutdownNow(); quota.close();
+        closed = true; scheduleMonitor.shutdownNow();quotaMonitor.shutdownNow(); quota.close();
         if(mobile!=null)mobile.close();
         if(!handoff){for(String id:running.keySet())stopRunning(id);}
         server.stop(0); workers.shutdown();
         if (!workers.awaitTermination(15, TimeUnit.SECONDS)) workers.shutdownNow();
-        if(cpu!=null)cpu.close();if(awake!=null)awake.close();usage.close();store.close();
+        media.close();if(cpu!=null)cpu.close();resources.close();if(awake!=null)awake.close();usage.close();store.close();
     }
 }

@@ -26,11 +26,10 @@ final class RunStatusPanel extends JPanel {
     private String queueSignature = "";
     private String pendingFocus;
     private String sessionId;
-    private final JButton more = Theme.iconButton("more", "Действия с выбранными сообщениями", this::toggleActions);
-    private boolean actionsOpen;
+    private boolean paused;
     private record Queued(String id, String text, int partsCount, boolean urgent) { @Override public String toString() { return text; } }
 
-    RunStatusPanel(Runnable resumeQueue, Consumer<String> removeQueued, BiConsumer<String, String> moveQueued, BiConsumer<String, String> takeQueued, BiConsumer<Boolean,JsonNode> groupQueued) {
+    RunStatusPanel(Runnable pauseQueue, Runnable resumeQueue, Consumer<String> removeQueued, BiConsumer<String, String> moveQueued, BiConsumer<String, String> takeQueued, BiConsumer<Boolean,JsonNode> groupQueued) {
         super(new BorderLayout(0, Theme.GAP)); setName("run.status"); setBorder(new EmptyBorder(Theme.GAP, Theme.GUTTER, 0, Theme.GUTTER));
         var row = new JPanel(new BorderLayout(Theme.GAP, 0));
         spinner.setPreferredSize(new Dimension(28, 4)); spinner.setBorderPainted(false);
@@ -44,12 +43,11 @@ final class RunStatusPanel extends JPanel {
         add(activity, BorderLayout.NORTH);
         var queueHeader = new JPanel(new BorderLayout(Theme.UNIT, 0)); queueTitle.setName("queue.title"); queueTitle.setFont(queueTitle.getFont().deriveFont(11f)); queueTitle.setForeground(Theme.MUTED); queueHeader.add(queueTitle);
         var buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, Theme.UNIT, 0));
-        resume = Theme.button("Продолжить", "Выполнить сохранённые сообщения очереди по порядку", resumeQueue);
+        resume = Theme.button("Продолжить", "Приостановить следующие сообщения, не прерывая текущий ответ", () -> { if(paused) resumeQueue.run(); else pauseQueue.run(); });
         resume.setIcon(Theme.icon("play")); Theme.toolbar(resume);
         resume.setName("queue.resume"); buttons.add(resume);
         queueToggle = Theme.button("Раскрыть", "Полный текст сообщений · двойной клик или Enter в списке", this::toggleQueue);
         queueToggle.setName("queue.expand"); Theme.toolbar(queueToggle); buttons.add(queueToggle);
-        more.setName("queue.actions"); buttons.add(more);
         remove = Theme.iconButton("queue-delete", "Удалить только выбранное сообщение из очереди", () -> {
             var chosen = queueList.getSelectedValue(); if (chosen != null) removeQueued.accept(chosen.id);
         }); remove.setName("queue.remove"); queueHeader.add(buttons, BorderLayout.EAST); queue.add(queueHeader, BorderLayout.NORTH);
@@ -82,7 +80,7 @@ final class RunStatusPanel extends JPanel {
                 if (!e.isPopupTrigger()) return;
                 int index = queueList.locationToIndex(e.getPoint());
                 if (index >= 0 && !queueList.isSelectedIndex(index)) queueList.setSelectedIndex(index);
-                actionsOpen = true; queueActions.setVisible(true); revalidate();
+                if (!queueExpanded) toggleQueue();
             }
             @Override public void mouseClicked(MouseEvent e) {
                 int index = queueList.locationToIndex(e.getPoint());
@@ -110,7 +108,6 @@ final class RunStatusPanel extends JPanel {
         queueScroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER); queueScroll.setBorder(null); queue.add(queueScroll);
         add(queue, BorderLayout.CENTER); setVisible(false);
     }
-    private void toggleActions() { actionsOpen = !actionsOpen; queueActions.setVisible(actionsOpen); revalidate(); }
     void focusJob(String id) { pendingFocus = id; applyPendingFocus(); }
     private void applyPendingFocus() {
         if (pendingFocus == null) return;
@@ -147,7 +144,7 @@ final class RunStatusPanel extends JPanel {
         if (queueModel.isEmpty()) return;
         queueExpanded = !queueExpanded; queueToggle.setText(queueExpanded ? "Свернуть" : "Раскрыть");
         queueToggle.getAccessibleContext().setAccessibleDescription(queueExpanded ? "Очередь раскрыта" : "Очередь свёрнута");
-        queueList.setFixedCellHeight(queueExpanded ? -1 : 28); sizeQueue();
+        queueActions.setVisible(queueExpanded); queueList.setFixedCellHeight(queueExpanded ? -1 : 28); sizeQueue(); revalidate();
         queueList.repaint();
     }
     boolean queueExpanded() { return queueExpanded; }
@@ -199,8 +196,8 @@ final class RunStatusPanel extends JPanel {
     }
     void update(JsonNode session, JsonNode conversation) {
         String id=session.path("id").asText();
-        if(!java.util.Objects.equals(id,sessionId)){sessionId=id;pendingFocus=null;actionsOpen=false;queueSignature="";}
-        boolean busy = session.path("running").asBoolean(), paused = session.path("queuePaused").asBoolean();
+        if(!java.util.Objects.equals(id,sessionId)){sessionId=id;pendingFocus=null;queueSignature="";}
+        boolean busy = session.path("running").asBoolean(); paused = session.path("queuePaused").asBoolean();
         activity.setVisible(busy); spinner.setIndeterminate(busy);
         if (busy) {
             var progress = session.path("progress"); long now = System.currentTimeMillis();
@@ -224,11 +221,13 @@ final class RunStatusPanel extends JPanel {
             if (previousIndex != queueList.getSelectedIndex()) SwingUtilities.invokeLater(() -> queueList.ensureIndexIsVisible(queueList.getSelectedIndex()));
         }
         queueTitle.setText((paused ? "Пауза · " : session.path("quotaWait").path("waiting").asBoolean()?"Ждём квоту · ":"Очередь · ") + queueModel.size());
-        queueTitle.setToolTipText(paused ? "Стоп сохранил сообщения. Продолжите очередь, когда будете готовы." : "Сообщения выполняются по порядку");
-        resume.setVisible(paused); resume.setEnabled(!busy && session.path("active").asBoolean());
-        queueActions.setVisible(actionsOpen && !queueModel.isEmpty()); more.setVisible(!queueModel.isEmpty()); updateQueueActions();
+        queueTitle.setToolTipText(paused ? "Следующие сообщения ждут. Снять паузу можно и во время текущего ответа." : "Сообщения выполняются по порядку");
+        resume.setVisible(true); resume.setEnabled(session.path("active").asBoolean());
+        resume.setText(paused ? "Продолжить" : "Пауза"); resume.setIcon(Theme.icon(paused ? "play" : "queue-pause"));
+        resume.setToolTipText(paused ? "Снять паузу, в том числе при пустой очереди" : "Не запускать следующие сообщения; текущий ответ продолжится");
+        queueActions.setVisible(queueExpanded && !queueModel.isEmpty()); updateQueueActions();
         queueToggle.setVisible(!queueModel.isEmpty()); queueScroll.setVisible(!queueModel.isEmpty()); sizeQueue();
-        queue.setVisible(paused || !queueModel.isEmpty()); setVisible(busy || paused || !queueModel.isEmpty()); revalidate(); applyPendingFocus();
+        queue.setVisible(session.path("active").asBoolean() || paused || !queueModel.isEmpty()); setVisible(session.path("active").asBoolean() || busy || paused || !queueModel.isEmpty()); revalidate(); applyPendingFocus();
     }
     private static String duration(long seconds) { return seconds >= 60 ? seconds / 60 + "м " + seconds % 60 + "с" : seconds + "с"; }
 }

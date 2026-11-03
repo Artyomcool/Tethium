@@ -14,11 +14,15 @@ public final class SessionStore implements AutoCloseable {
     public static final String SESSION_ACCESS = "danger-full-access";
     public static final String QUEUE_SEPARATOR = "\n\n---\n\n";
     public record Session(String id, String projectId, String parentId, String title, boolean active, Path directory) {}
-    public record Message(long sequence, String role, String provider, String text) {}
+    public record Message(long sequence, String role, String provider, String text,long timestamp) {
+        public Message(long sequence,String role,String provider,String text){this(sequence,role,provider,text,0);}
+    }
     public record Binding(String conversationId, long lastSequence) {}
     public record Project(String id, String root, String title) {}
     public record Job(String id, String sessionId, String sourceId, String prompt, int partsCount, boolean urgent) {}
-    public record ImportedMessage(String sourceId, String role, String text) {}
+    public record ImportedMessage(String sourceId, String role, String text,long timestamp) {
+        public ImportedMessage(String sourceId,String role,String text){this(sourceId,role,text,0);}
+    }
     public record WorkerRun(String runId, String sessionId, String jobId, long deliveredThrough, JsonNode spec, long cursor) {}
     private final Connection connection;
 
@@ -32,6 +36,8 @@ public final class SessionStore implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, root TEXT NOT NULL UNIQUE)");
             s.execute("CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), parent_id TEXT REFERENCES sessions(id), title TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, directory TEXT NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS messages(sequence INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id), role TEXT NOT NULL, provider TEXT NOT NULL, text TEXT NOT NULL)");
+            boolean hasTimestamp=false;try(var columns=s.executeQuery("PRAGMA table_info(messages)")){while(columns.next())hasTimestamp|=columns.getString("name").equals("created_at");}
+            if(!hasTimestamp)s.execute("ALTER TABLE messages ADD COLUMN created_at INTEGER NOT NULL DEFAULT 0");
             s.execute("CREATE TABLE IF NOT EXISTS bindings(session_id TEXT NOT NULL REFERENCES sessions(id), provider TEXT NOT NULL, conversation_id TEXT NOT NULL, last_sequence INTEGER NOT NULL, PRIMARY KEY(session_id,provider))");
             s.execute("CREATE TABLE IF NOT EXISTS runs(id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), provider TEXT NOT NULL, status TEXT NOT NULL)");
             s.execute("CREATE UNIQUE INDEX IF NOT EXISTS one_running_turn ON runs(session_id) WHERE status='RUNNING'");
@@ -44,12 +50,13 @@ public final class SessionStore implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS artifacts(id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), path TEXT NOT NULL, title TEXT NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS imports(source_key TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id))");
             s.execute("CREATE TABLE IF NOT EXISTS imported_messages(source_key TEXT NOT NULL REFERENCES imports(source_key), source_message_id TEXT NOT NULL, PRIMARY KEY(source_key,source_message_id))");
-            boolean hasEffort = false, hasImages = false;
+            boolean hasEffort = false, hasImages = false, hasProvider = false;
             try (var columns = s.executeQuery("PRAGMA table_info(preferences)")) {
-                while (columns.next()) { if (columns.getString("name").equals("reasoning_effort")) hasEffort = true; if (columns.getString("name").equals("draft_images")) hasImages = true; }
+                while (columns.next()) { if (columns.getString("name").equals("reasoning_effort")) hasEffort = true; if (columns.getString("name").equals("draft_images")) hasImages = true; if (columns.getString("name").equals("provider")) hasProvider = true; }
             }
             if (!hasEffort) s.execute("ALTER TABLE preferences ADD COLUMN reasoning_effort TEXT");
             if (!hasImages) s.execute("ALTER TABLE preferences ADD COLUMN draft_images TEXT NOT NULL DEFAULT '[]'");
+            if (!hasProvider) s.execute("ALTER TABLE preferences ADD COLUMN provider TEXT");
             var jobColumns = new HashSet<String>();
             try (var columns = s.executeQuery("PRAGMA table_info(jobs)")) { while (columns.next()) jobColumns.add(columns.getString("name")); }
             if (!jobColumns.contains("queue_order")) s.execute("ALTER TABLE jobs ADD COLUMN queue_order INTEGER");
@@ -60,15 +67,97 @@ public final class SessionStore implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS queue_merges(job_id TEXT PRIMARY KEY REFERENCES jobs(id), snapshot TEXT NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS queue_operations(request_id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), kind TEXT NOT NULL, result TEXT NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS queue_interruptions(job_id TEXT PRIMARY KEY REFERENCES jobs(id), affected TEXT NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS run_messages(run_id TEXT PRIMARY KEY,session_id TEXT NOT NULL,input_sequence INTEGER NOT NULL DEFAULT 0,result_sequence INTEGER)");
+            s.execute("CREATE TABLE IF NOT EXISTS media_jobs(event_id INTEGER PRIMARY KEY,run_id TEXT NOT NULL,session_id TEXT NOT NULL,item_id TEXT NOT NULL,output_offset INTEGER NOT NULL,input_sequence INTEGER NOT NULL,payload TEXT NOT NULL,done INTEGER NOT NULL DEFAULT 0,UNIQUE(run_id,item_id))");
+            s.execute("CREATE TABLE IF NOT EXISTS session_media(id INTEGER PRIMARY KEY AUTOINCREMENT,session_id TEXT NOT NULL,run_id TEXT NOT NULL,item_id TEXT NOT NULL,output_offset INTEGER NOT NULL,input_sequence INTEGER NOT NULL,path TEXT NOT NULL,thumbnail TEXT NOT NULL,width INTEGER NOT NULL,height INTEGER NOT NULL,title TEXT NOT NULL,UNIQUE(run_id,item_id))");
+            s.execute("CREATE INDEX IF NOT EXISTS media_session ON session_media(session_id,id)");
+            s.execute("CREATE TABLE IF NOT EXISTS media_migrations(name TEXT PRIMARY KEY)");
+            s.execute("CREATE TABLE IF NOT EXISTS session_marks(session_id TEXT PRIMARY KEY REFERENCES sessions(id),marked INTEGER NOT NULL DEFAULT 0)");
+            s.execute("CREATE TABLE IF NOT EXISTS cpu_claims(process_key TEXT PRIMARY KEY,session_id TEXT NOT NULL REFERENCES sessions(id),pid INTEGER NOT NULL,started INTEGER NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS cpu_controls(scope TEXT NOT NULL,target TEXT NOT NULL,settings TEXT NOT NULL,PRIMARY KEY(scope,target))");
             s.execute("CREATE TABLE IF NOT EXISTS session_seen(session_id TEXT PRIMARY KEY REFERENCES sessions(id), last_run INTEGER NOT NULL DEFAULT 0)");
             s.execute("CREATE TABLE IF NOT EXISTS worker_runs(run_id TEXT PRIMARY KEY REFERENCES runs(id), session_id TEXT NOT NULL, job_id TEXT NOT NULL REFERENCES jobs(id), delivered_through INTEGER NOT NULL, spec TEXT NOT NULL, cursor INTEGER NOT NULL DEFAULT 0, finished INTEGER NOT NULL DEFAULT 0)");
             s.execute("CREATE TABLE IF NOT EXISTS worker_replies(run_id TEXT NOT NULL REFERENCES worker_runs(run_id), sequence INTEGER NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(run_id,sequence))");
+            s.execute("CREATE TABLE IF NOT EXISTS project_files(id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id),path TEXT NOT NULL,title TEXT NOT NULL,UNIQUE(project_id,path))");
+            s.execute("CREATE INDEX IF NOT EXISTS messages_session_sequence ON messages(session_id,sequence)");
+            s.execute("CREATE TABLE IF NOT EXISTS project_visibility(project_id TEXT PRIMARY KEY REFERENCES projects(id),active INTEGER NOT NULL DEFAULT 1)");
+            s.execute("CREATE TABLE IF NOT EXISTS session_trash(session_id TEXT PRIMARY KEY REFERENCES sessions(id),deleted_at INTEGER NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS session_files(session_id TEXT PRIMARY KEY REFERENCES sessions(id),path TEXT NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS session_autonomy(session_id TEXT PRIMARY KEY REFERENCES sessions(id),goal_id TEXT NOT NULL,goal TEXT NOT NULL,state TEXT NOT NULL,reason TEXT NOT NULL DEFAULT '',updated_at INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS autonomy_jobs(job_id TEXT PRIMARY KEY REFERENCES jobs(id),goal_id TEXT NOT NULL,trigger_id TEXT NOT NULL,UNIQUE(goal_id,trigger_id))");
+            s.execute("CREATE TABLE IF NOT EXISTS session_schedules(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,schedule_id TEXT NOT NULL,state TEXT NOT NULL,interval_seconds INTEGER NOT NULL,prompt TEXT NOT NULL,next_at INTEGER NOT NULL,last_at INTEGER NOT NULL DEFAULT 0)");
+            s.execute("CREATE TABLE IF NOT EXISTS schedule_jobs(job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,schedule_id TEXT NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS compaction_notices(run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,item_id TEXT NOT NULL,phase TEXT NOT NULL,PRIMARY KEY(run_id,item_id,phase))");
+            s.execute("CREATE TABLE IF NOT EXISTS compaction_messages(run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,item_id TEXT NOT NULL,message_sequence INTEGER NOT NULL REFERENCES messages(sequence) ON DELETE CASCADE,started_at INTEGER NOT NULL,PRIMARY KEY(run_id,item_id))");
+            s.execute("CREATE TABLE IF NOT EXISTS message_revisions(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,revision INTEGER NOT NULL)");
         }
     }
 
+    public synchronized boolean projectActive(String id)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT active FROM project_visibility WHERE project_id=?")){q.setString(1,id);try(var r=q.executeQuery()){return !r.next()||r.getBoolean(1);}}
+    }
+    public synchronized void projectActive(String id,boolean active)throws SQLException{
+        execute("INSERT INTO project_visibility VALUES(?,?) ON CONFLICT(project_id) DO UPDATE SET active=excluded.active",id,active);
+    }
+    public synchronized long trashedAt(String id)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT deleted_at FROM session_trash WHERE session_id=?")){q.setString(1,id);try(var r=q.executeQuery()){return r.next()?r.getLong(1):0;}}
+    }
+    public synchronized void trash(String id,boolean hidden)throws SQLException{
+        get(id);if(hidden)execute("INSERT OR IGNORE INTO session_trash VALUES(?,?)",id,System.currentTimeMillis());else execute("DELETE FROM session_trash WHERE session_id=?",id);
+    }
+    /** Remove only Tethium-owned metadata. Project files and other sessions remain intact. */
+    public synchronized List<String> purge(String id)throws Exception{
+        if(trashedAt(id)==0)throw new IllegalStateException("Сначала переместите сессию в корзину");
+        try(var q=connection.prepareStatement("SELECT 1 FROM runs WHERE session_id=? AND status='RUNNING'")){q.setString(1,id);try(var r=q.executeQuery()){if(r.next())throw new IllegalStateException("Сначала остановите работу сессии");}}
+        return transaction(()->{
+            var runs=new ArrayList<String>();try(var q=connection.prepareStatement("SELECT id FROM runs WHERE session_id=?")){q.setString(1,id);try(var r=q.executeQuery()){while(r.next())runs.add(r.getString(1));}}
+            execute("UPDATE sessions SET parent_id=NULL WHERE parent_id=?",id);execute("UPDATE jobs SET source_id=NULL WHERE source_id=?",id);
+            execute("DELETE FROM worker_replies WHERE run_id IN (SELECT run_id FROM worker_runs WHERE session_id=?)",id);
+            execute("DELETE FROM worker_runs WHERE session_id=?",id);
+            for(String table:List.of("autonomy_jobs","queue_merges","queue_interruptions"))execute("DELETE FROM "+table+" WHERE job_id IN (SELECT id FROM jobs WHERE session_id=?)",id);
+            execute("DELETE FROM imported_messages WHERE source_key IN (SELECT source_key FROM imports WHERE session_id=?)",id);
+            for(String table:List.of("imports","messages","run_messages","media_jobs","session_media","bindings","run_progress","events","runs","jobs","preferences","queue_state","queue_returns","queue_operations","session_seen","session_marks","cpu_claims","session_files","session_autonomy","artifacts","session_trash"))execute("DELETE FROM "+table+" WHERE session_id=?",id);
+            for(String table:List.of("token_samples","cpu_samples","cpu_processes","quota_wait")){try(var q=connection.prepareStatement("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")){q.setString(1,table);try(var r=q.executeQuery()){if(r.next())execute("DELETE FROM "+table+" WHERE session_id=?",id);}}}
+            execute("DELETE FROM sessions WHERE id=?",id);historyIndexes.remove(id);return runs;
+        });
+    }
+    public static final int HISTORY_CHUNK=8000;
+    private record HistoryIndex(long last,long revision,List<JsonNode> entries){}
+    private final Map<String,HistoryIndex> historyIndexes=new LinkedHashMap<>();
+    public synchronized List<JsonNode> historyIndex(String id)throws SQLException{
+        long last=lastSequence(id),revision=messageRevision(id);var saved=historyIndexes.get(id);if(saved!=null&&saved.last==last&&saved.revision==revision)return saved.entries;
+        var entries=new ArrayList<JsonNode>();
+        try(var q=connection.prepareStatement("SELECT sequence,role,provider,length(text),substr(text,1,320),length(text)-length(replace(text,char(10),'')),created_at FROM messages WHERE session_id=? ORDER BY sequence")){
+            q.setString(1,id);try(var r=q.executeQuery()){while(r.next()){
+                int length=r.getInt(4);for(int offset=0;offset<Math.max(1,length);offset+=HISTORY_CHUNK){int count=Math.min(HISTORY_CHUNK,length-offset);entries.add(Json.object("sequence",r.getLong(1),"role",r.getString(2),"provider",r.getString(3),"timestamp",r.getLong(7),"revision",revision,"offset",offset,"length",count,"lines",Math.max(1,(int)((long)r.getInt(6)*count/Math.max(1,length))),"title",offset==0&&r.getString(2).equals("user")?r.getString(5):""));}
+            }}
+        }
+        if(historyIndexes.size()>=16)historyIndexes.remove(historyIndexes.keySet().iterator().next());historyIndexes.put(id,new HistoryIndex(last,revision,List.copyOf(entries)));return List.copyOf(entries);
+    }
+    public synchronized long messageRevision(String id)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT revision FROM message_revisions WHERE session_id=?")){q.setString(1,id);try(var r=q.executeQuery()){return r.next()?r.getLong(1):0;}}
+    }
+    public synchronized String historyChunk(String id,long sequence,int offset,int count)throws SQLException{
+        if(offset<0||count<0||count>HISTORY_CHUNK)throw new IllegalArgumentException("Некорректная часть истории");
+        try(var q=connection.prepareStatement("SELECT substr(text,?,?) FROM messages WHERE session_id=? AND sequence=?")){q.setInt(1,offset+1);q.setInt(2,count);q.setString(3,id);q.setLong(4,sequence);try(var r=q.executeQuery()){return r.next()?r.getString(1):"";}}
+    }
+
+    public record ProjectFile(String id,String projectId,String path,String title){}
+    public synchronized List<ProjectFile> projectFiles()throws SQLException{
+        var result=new ArrayList<ProjectFile>();try(var q=connection.createStatement();var r=q.executeQuery("SELECT * FROM project_files ORDER BY rowid")){while(r.next())result.add(new ProjectFile(r.getString("id"),r.getString("project_id"),r.getString("path"),r.getString("title")));}return result;
+    }
+    public synchronized ProjectFile projectFile(String id)throws SQLException{return projectFiles().stream().filter(f->f.id().equals(id)).findFirst().orElseThrow(()->new IllegalArgumentException("Закреплённый файл не найден"));}
+    public synchronized ProjectFile pinProjectFile(String project,String path,String title)throws SQLException{
+        String id=UUID.randomUUID().toString();execute("INSERT INTO project_files VALUES(?,?,?,?) ON CONFLICT(project_id,path) DO UPDATE SET title=excluded.title",id,project,path,title);
+        return projectFiles().stream().filter(f->f.projectId().equals(project)&&f.path().equals(path)).findFirst().orElseThrow();
+    }
+    public synchronized void renameProjectFile(String id,String title)throws SQLException{if(title==null||title.isBlank())throw new IllegalArgumentException("Укажите название");projectFile(id);execute("UPDATE project_files SET title=? WHERE id=?",title.strip(),id);}
+    public synchronized void removeProjectFile(String id)throws SQLException{execute("DELETE FROM project_files WHERE id=?",id);}
+    public synchronized String pinnedFile(String session)throws SQLException{try(var q=connection.prepareStatement("SELECT path FROM session_files WHERE session_id=?")){q.setString(1,session);try(var r=q.executeQuery()){return r.next()?r.getString(1):null;}}}
+    public synchronized void pinnedFile(String session,String path)throws SQLException{get(session);if(path==null||path.isBlank())execute("DELETE FROM session_files WHERE session_id=?",session);else execute("INSERT INTO session_files VALUES(?,?) ON CONFLICT(session_id) DO UPDATE SET path=excluded.path",session,path);}
+
     public synchronized boolean autonomousWorkPending()throws SQLException{
+        try(var q=connection.createStatement();var r=q.executeQuery("SELECT 1 FROM session_schedules t JOIN sessions s ON s.id=t.session_id LEFT JOIN queue_state q ON q.session_id=s.id WHERE s.active=1 AND t.state='active' AND COALESCE(q.paused,0)=0 LIMIT 1")){if(r.next())return true;}
         try(var q=connection.createStatement();var r=q.executeQuery("SELECT 1 FROM session_autonomy a JOIN sessions s ON s.id=a.session_id LEFT JOIN queue_state q ON q.session_id=s.id WHERE s.active=1 AND a.state IN ('active','waiting') AND COALESCE(q.paused,0)=0 LIMIT 1")){return r.next();}
     }
     public synchronized JsonNode autonomy(String id)throws SQLException{
@@ -86,11 +175,15 @@ public final class SessionStore implements AutoCloseable {
                 if(Set.of("complete","blocked","waiting").contains(state)&&(reason==null||reason.isBlank()))throw new IllegalArgumentException("Укажите результат или причину");
                 if(state.equals("waiting")){try(var q=connection.prepareStatement("SELECT 1 FROM jobs WHERE source_id=? AND status IN ('QUEUED','RUNNING') LIMIT 1")){q.setString(1,id);try(var r=q.executeQuery()){if(!r.next())state="active";}}}
                 execute("UPDATE session_autonomy SET state=?,reason=?,updated_at=? WHERE session_id=?",state,reason==null?"":reason,System.currentTimeMillis(),id);if(action.equals("resume"))execute("UPDATE session_autonomy SET goal_id=? WHERE session_id=?",UUID.randomUUID().toString(),id);if(!state.equals("active"))discardAutonomousQueue(id);
-            }return autonomy(id);
+            }
+            // Explicit activation must also release the queue pause left by a correction or Stop.
+            if(action.equals("start")||action.equals("resume"))pauseQueue(id,false);
+            return autonomy(id);
         });
     }
     public synchronized void discardAutonomousQueue(String id)throws SQLException{execute("UPDATE jobs SET status='CANCELLED' WHERE session_id=? AND status='QUEUED' AND id IN (SELECT job_id FROM autonomy_jobs)",id);}
     public synchronized void ensureAutonomousContinuation(String id)throws Exception{
+        if(periodicSchedule(id).path("state").asText().equals("active"))return;
         var a=autonomy(id);if(!a.path("state").asText().equals("active")||queuePaused(id)||!get(id).active()||!queued(id).isEmpty())return;
         String trigger="start:"+a.path("goalId").asText();
         try(var q=connection.prepareStatement("SELECT id FROM jobs WHERE session_id=? AND status='COMPLETED' ORDER BY rowid DESC LIMIT 1")){q.setString(1,id);try(var r=q.executeQuery()){if(r.next())trigger=r.getString(1);}}
@@ -103,6 +196,65 @@ public final class SessionStore implements AutoCloseable {
     }
     public synchronized void enableAutomaticQuota(String id)throws SQLException{execute("INSERT INTO quota_wait(session_id,auto_resume) VALUES(?,1) ON CONFLICT(session_id) DO UPDATE SET auto_resume=1",id);}
     public synchronized void wakeAutonomy(String id)throws SQLException{execute("UPDATE session_autonomy SET state='active',reason='' WHERE session_id=? AND state='waiting'",id);}
+
+    public synchronized JsonNode periodicSchedule(String id)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT * FROM session_schedules WHERE session_id=?")){
+            q.setString(1,id);try(var r=q.executeQuery()){return r.next()?Json.object("state",r.getString("state"),"scheduleId",r.getString("schedule_id"),"intervalSeconds",r.getLong("interval_seconds"),"prompt",r.getString("prompt"),"nextAt",r.getLong("next_at"),"lastAt",r.getLong("last_at")):Json.object("state","off","intervalSeconds",300,"prompt","","nextAt",0,"lastAt",0);}
+        }
+    }
+    public synchronized JsonNode periodicSchedule(String id,String action,long seconds,String prompt,long now)throws Exception{
+        return transaction(()->{
+            get(id);var previous=periodicSchedule(id);
+            switch(action){
+                case "status" -> {return previous;}
+                case "set" -> {
+                    if(seconds<1||seconds>SessionSchedule.MAX_INTERVAL_SECONDS)throw new IllegalArgumentException("Интервал должен быть от 1 секунды до 365 дней");
+                    if(prompt==null||prompt.isBlank()||prompt.length()>16000)throw new IllegalArgumentException("Укажите периодическую задачу (до 16000 символов)");
+                    discardScheduledQueue(id);
+                    execute("INSERT INTO session_schedules VALUES(?,?,'active',?,?,?,0) ON CONFLICT(session_id) DO UPDATE SET schedule_id=excluded.schedule_id,state='active',interval_seconds=excluded.interval_seconds,prompt=excluded.prompt,next_at=excluded.next_at,last_at=0",id,UUID.randomUUID().toString(),seconds,prompt.strip(),Math.addExact(now,seconds*1000));
+                    autonomy(id,"disable","","","");pauseQueue(id,false);
+                }
+                case "resume" -> {
+                    if(!previous.has("scheduleId"))throw new IllegalArgumentException("Сначала задайте расписание");
+                    execute("UPDATE session_schedules SET state='active',next_at=? WHERE session_id=?",Math.addExact(now,previous.path("intervalSeconds").asLong()*1000),id);
+                    autonomy(id,"disable","","","");pauseQueue(id,false);
+                }
+                case "pause", "disable" -> {
+                    if(action.equals("pause")&&!previous.path("state").asText().equals("active"))return previous;
+                    if(!previous.path("state").asText().equals("off"))autonomy(id,action.equals("pause")?"pause":"disable","","","Периодическая задача приостановлена");
+                    execute("UPDATE session_schedules SET state=? WHERE session_id=?",action.equals("pause")?"paused":"off",id);discardScheduledQueue(id);
+                }
+                default -> throw new IllegalArgumentException("Неизвестное действие расписания");
+            }
+            return periodicSchedule(id);
+        });
+    }
+    private void discardScheduledQueue(String id)throws SQLException{
+        execute("UPDATE jobs SET status='CANCELLED' WHERE session_id=? AND status='QUEUED' AND urgent=0 AND id IN (SELECT job_id FROM schedule_jobs)",id);
+    }
+    public synchronized List<String> dueSchedules(long now)throws SQLException{
+        var ids=new ArrayList<String>();try(var q=connection.prepareStatement("SELECT session_id FROM session_schedules WHERE state='active' AND next_at<=?")){q.setLong(1,now);try(var r=q.executeQuery()){while(r.next())ids.add(r.getString(1));}}return ids;
+    }
+    /** Advance the durable deadline and enqueue exactly one wake in the same transaction. */
+    public synchronized boolean enqueueScheduled(String id,long now)throws Exception{
+        return transaction(()->{
+            var timer=periodicSchedule(id);
+            if(!timer.path("state").asText().equals("active")||timer.path("nextAt").asLong()>now||!get(id).active()||trashedAt(id)>0||queuePaused(id))return false;
+            try(var q=connection.prepareStatement("SELECT 1 FROM jobs WHERE session_id=? AND status IN ('QUEUED','RUNNING') UNION ALL SELECT 1 FROM runs WHERE session_id=? AND status='RUNNING' LIMIT 1")){
+                q.setString(1,id);q.setString(2,id);try(var r=q.executeQuery()){if(r.next())return false;}
+            }
+            String job=enqueue(id,null,SessionSchedule.prompt(timer));
+            execute("INSERT INTO schedule_jobs VALUES(?,?)",job,timer.path("scheduleId").asText());
+            // Missed intervals coalesce into one pass; never replay a backlog after restart.
+            execute("UPDATE session_schedules SET last_at=?,next_at=? WHERE session_id=?",now,Math.addExact(now,timer.path("intervalSeconds").asLong()*1000),id);
+            return true;
+        });
+    }
+    public synchronized boolean scheduledInput(String id,String prompt)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT 1 FROM jobs JOIN schedule_jobs ON job_id=jobs.id WHERE session_id=? AND prompt=? AND status IN ('QUEUED','RUNNING')")){
+            q.setString(1,id);q.setString(2,prompt);try(var r=q.executeQuery()){return r.next();}
+        }
+    }
 
     public synchronized String project(Path directory) throws Exception {
         String root = ProjectPaths.root(directory).toString();
@@ -150,6 +302,23 @@ public final class SessionStore implements AutoCloseable {
             }
         }
     }
+    public synchronized boolean marked(String id)throws SQLException{try(var q=connection.prepareStatement("SELECT marked FROM session_marks WHERE session_id=?")){q.setString(1,id);try(var r=q.executeQuery()){return r.next()&&r.getBoolean(1);}}}
+    public synchronized void marked(String id,boolean value)throws SQLException{get(id);execute("INSERT INTO session_marks VALUES(?,?) ON CONFLICT(session_id) DO UPDATE SET marked=excluded.marked",id,value);}
+    public synchronized JsonNode claimProcess(String session,long pid)throws SQLException{
+        get(session);var process=ProcessHandle.of(pid).filter(ProcessHandle::isAlive).orElseThrow(()->new IllegalArgumentException("Процесс уже завершён"));long started=process.info().startInstant().orElseThrow().toEpochMilli();
+        execute("INSERT INTO cpu_claims VALUES(?,?,?,?) ON CONFLICT(process_key) DO UPDATE SET session_id=excluded.session_id",pid+":"+started,session,pid,started);return Json.object("pid",pid,"started",started,"session",session);
+    }
+    public synchronized List<JsonNode> claimedProcesses()throws SQLException{var rows=new ArrayList<JsonNode>();try(var q=connection.createStatement();var r=q.executeQuery("SELECT c.*,s.project_id FROM cpu_claims c JOIN sessions s ON s.id=c.session_id")){while(r.next())rows.add(Json.object("pid",r.getLong("pid"),"started",r.getLong("started"),"session",r.getString("session_id"),"project",r.getString("project_id")));}return rows;}
+    public synchronized JsonNode cpuControl(String scope,String target)throws Exception{
+        try(var q=connection.prepareStatement("SELECT settings FROM cpu_controls WHERE scope=? AND target=?")){q.setString(1,scope);q.setString(2,target);try(var r=q.executeQuery()){return r.next()?Json.parse(r.getString(1)):dev.tethium.resources.ResourcePolicy.defaults(scope);}}
+    }
+    public synchronized void cpuControl(String scope,String target,JsonNode settings)throws Exception{
+        if(scope.equals("global")){if(!target.isEmpty())throw new IllegalArgumentException("Global CPU target");}
+        else if(scope.equals("session"))get(target);
+        else if(scope.equals("project")){if(projects().stream().noneMatch(p->p.id().equals(target)))throw new IllegalArgumentException("Unknown project");}
+        else throw new IllegalArgumentException("Unknown CPU scope");
+        var value=dev.tethium.resources.ResourcePolicy.validate(scope,settings);execute("INSERT INTO cpu_controls VALUES(?,?,?) ON CONFLICT(scope,target) DO UPDATE SET settings=excluded.settings",scope,target,value.toString());
+    }
     public synchronized void seen(String id,long version) throws SQLException {
         long bounded=Math.max(0,Math.min(version,attention(id).path("version").asLong()));
         execute("INSERT INTO session_seen(session_id,last_run) VALUES(?,?) ON CONFLICT(session_id) DO UPDATE SET last_run=MAX(last_run,excluded.last_run)",id,bounded);
@@ -168,7 +337,7 @@ public final class SessionStore implements AutoCloseable {
         boolean owner=connection.getAutoCommit();
         if(owner)connection.setAutoCommit(false);
         try {
-            if (!result.text().isEmpty()) append(sessionId, "assistant", provider.name(), result.text());
+            if (!result.text().isEmpty()) {append(sessionId, "assistant", provider.name(), result.text());linkRunMessage(runId,sessionId);}
             else saveInterruptedOutput(runId, sessionId, provider);
             if (result.conversationId() != null && result.status() == AgentAdapter.Status.COMPLETED)
                 bind(sessionId, provider, result.conversationId(), deliveredThrough);
@@ -225,18 +394,73 @@ public final class SessionStore implements AutoCloseable {
         }
     }
     public synchronized void recordEvent(String runId, String sessionId, AgentAdapter.Event event) throws SQLException {
+        var compaction=event.raw().path("params").path("item");
+        if((event.type().equals("item/started")||event.type().equals("item/completed"))&&compaction.path("type").asText().equals("contextCompaction")&&!compaction.path("id").asText().isBlank()){
+            recordCompaction(runId,sessionId,event);return;
+        }
         if (event.type().equals("text")) {
             execute("INSERT INTO run_progress(run_id,session_id,output) VALUES(?,?,?) ON CONFLICT(run_id) DO UPDATE SET output=run_progress.output || excluded.output", runId, sessionId, event.text());
         } else if (event.type().equals("conversation")) {
             execute("INSERT INTO bindings(session_id,provider,conversation_id,last_sequence) SELECT ?,provider,?,0 FROM runs WHERE id=? ON CONFLICT(session_id,provider) DO UPDATE SET conversation_id=excluded.conversation_id", sessionId, event.text(), runId);
         } else if (event.type().equals("item/started") || event.type().equals("item/completed") || event.type().equals("error") || event.type().equals("request")) {
             execute("INSERT INTO events(session_id,run_id,type,payload) VALUES(?,?,?,?)", sessionId, runId, event.type(), event.raw().toString());
+            var item=event.raw().path("params").path("item");
+            if(event.type().equals("item/completed")&&Set.of("imageView","imageGeneration").contains(item.path("type").asText())&&(!item.has("status")||item.path("status").asText().equals("completed"))){
+                long eventId;try(var q=connection.createStatement();var r=q.executeQuery("SELECT last_insert_rowid()")){r.next();eventId=r.getLong(1);}
+                execute("INSERT OR IGNORE INTO media_jobs(event_id,run_id,session_id,item_id,output_offset,input_sequence,payload) VALUES(?,?,?,?,COALESCE((SELECT length(output) FROM run_progress WHERE run_id=?),0),?,?)",eventId,runId,sessionId,item.path("id").asText(),runId,lastSequence(sessionId),item.toString());
+            }
         }
+    }
+    private void recordCompaction(String runId,String sessionId,AgentAdapter.Event event)throws SQLException{
+        var params=event.raw().path("params");String item=params.path("item").path("id").asText();
+        boolean completed=event.type().equals("item/completed"),owner=connection.getAutoCommit();
+        if(owner)connection.setAutoCommit(false);
+        try{
+            // Keep the receipt and chat message atomic, including during worker-journal replay.
+            boolean alreadyCompleted=false;
+            if(!completed)try(var q=connection.prepareStatement("SELECT 1 FROM compaction_notices WHERE run_id=? AND item_id=? AND phase='completed'")){
+                q.setString(1,runId);q.setString(2,item);try(var r=q.executeQuery()){alreadyCompleted=r.next();}
+            }
+            if(!alreadyCompleted)try(var q=connection.prepareStatement("INSERT OR IGNORE INTO compaction_notices VALUES(?,?,?)")){
+                q.setString(1,runId);q.setString(2,item);q.setString(3,completed?"completed":"started");
+                if(q.executeUpdate()==1){
+                    execute("INSERT INTO events(session_id,run_id,type,payload) VALUES(?,?,?,?)",sessionId,runId,event.type(),event.raw().toString());
+                    long timestamp=params.path(completed?"completedAtMs":"startedAtMs").asLong();if(timestamp<=0)timestamp=System.currentTimeMillis();
+                    if(!completed){
+                        append(sessionId,"system","TETHIUM","Сжатие контекста началось.",timestamp);
+                        execute("INSERT INTO compaction_messages VALUES(?,?,?,?)",runId,item,lastSequence(sessionId),timestamp);
+                    }else{
+                        long sequence=0,started=params.path("startedAtMs").asLong();
+                        try(var lookup=connection.prepareStatement("SELECT message_sequence,started_at FROM compaction_messages WHERE run_id=? AND item_id=?")){
+                            lookup.setString(1,runId);lookup.setString(2,item);try(var r=lookup.executeQuery()){if(r.next()){sequence=r.getLong(1);started=r.getLong(2);}}
+                        }
+                        // An older core may have written the start before this update was installed.
+                        if(sequence==0)try(var lookup=connection.prepareStatement("SELECT m.sequence,m.created_at FROM events e JOIN messages m ON m.session_id=e.session_id AND m.created_at=json_extract(e.payload,'$.params.startedAtMs') WHERE e.run_id=? AND e.type='item/started' AND json_extract(e.payload,'$.params.item.type')='contextCompaction' AND json_extract(e.payload,'$.params.item.id')=? AND m.role='system' AND m.provider='TETHIUM' AND m.text='Сжатие контекста началось.' ORDER BY e.sequence DESC LIMIT 1")){
+                            lookup.setString(1,runId);lookup.setString(2,item);try(var r=lookup.executeQuery()){if(r.next()){sequence=r.getLong(1);started=r.getLong(2);}}
+                        }
+                        String text=started>0?"Контекст сжат за "+compactionDuration(Math.max(0,timestamp-started))+".":"Контекст сжат.";
+                        if(sequence>0){
+                            execute("UPDATE messages SET text=? WHERE sequence=? AND session_id=?",text,sequence,sessionId);
+                            execute("INSERT INTO message_revisions VALUES(?,1) ON CONFLICT(session_id) DO UPDATE SET revision=revision+1",sessionId);
+                        }else append(sessionId,"system","TETHIUM",text,timestamp);
+                    }
+                }
+            }
+            if(owner)connection.commit();
+        }catch(SQLException|RuntimeException failure){if(owner)connection.rollback();throw failure;}
+        finally{if(owner)connection.setAutoCommit(true);}
+    }
+    private static String compactionDuration(long millis){
+        long seconds=millis/1000;
+        if(seconds==0)return "менее 1 с";
+        if(seconds<60)return seconds+" с";
+        if(seconds<3600)return seconds/60+" мин "+seconds%60+" с";
+        return seconds/3600+" ч "+seconds/60%60+" мин "+seconds%60+" с";
     }
     public synchronized void saveInterruptedOutput(String runId, String sessionId, Provider provider) throws SQLException {
         try (var q = connection.prepareStatement("SELECT output FROM run_progress WHERE run_id=?")) {
             q.setString(1, runId);
-            try (var row = q.executeQuery()) { if (row.next() && !row.getString(1).isEmpty()) append(sessionId, "assistant", provider.name(), row.getString(1)); }
+            try (var row = q.executeQuery()) { if (row.next() && !row.getString(1).isEmpty()) {append(sessionId, "assistant", provider.name(), row.getString(1));linkRunMessage(runId,sessionId);} }
         }
         execute("DELETE FROM run_progress WHERE run_id=?", runId);
     }
@@ -269,7 +493,7 @@ public final class SessionStore implements AutoCloseable {
             for (var message : messages) {
                 try (var q = connection.prepareStatement("INSERT OR IGNORE INTO imported_messages(source_key,source_message_id) VALUES(?,?)")) {
                     q.setString(1, sourceKey); q.setString(2, message.sourceId());
-                    if (q.executeUpdate() == 1) append(session.id(), message.role(), "IMPORTED", message.text());
+                    if (q.executeUpdate() == 1) append(session.id(), message.role(), "IMPORTED", message.text(),message.timestamp());
                 }
             }
             connection.commit(); return session;
@@ -282,18 +506,24 @@ public final class SessionStore implements AutoCloseable {
     }
     public synchronized void directory(String id, Path path) throws Exception { execute("UPDATE sessions SET directory=? WHERE id=?", path.toRealPath().toString(), id); }
     public synchronized JsonNode preferences(String id) throws SQLException {
-        try (var q = connection.prepareStatement("SELECT model,access,draft,reasoning_effort,draft_images FROM preferences WHERE session_id=?")) {
+        try (var q = connection.prepareStatement("SELECT model,access,draft,reasoning_effort,draft_images,provider FROM preferences WHERE session_id=?")) {
             q.setString(1, id);
-            try (var row = q.executeQuery()) { return row.next() ? Json.object("model", row.getString(1), "access", SESSION_ACCESS, "draft", row.getString(3), "reasoningEffort", row.getString(4), "draftImages", parseStored(row.getString(5))) : Json.object("model", null, "access", SESSION_ACCESS, "draft", "", "reasoningEffort", null, "draftImages", List.of()); }
+            try (var row = q.executeQuery()) { return row.next() ? Json.object("model", preferenceValue(row.getString(1)), "access", SESSION_ACCESS, "draft", row.getString(3), "reasoningEffort", preferenceValue(row.getString(4)), "draftImages", parseStored(row.getString(5)), "provider", Provider.of(row.getString(6)).name()) : Json.object("model", null, "access", SESSION_ACCESS, "draft", "", "reasoningEffort", null, "draftImages", List.of(), "provider", Provider.CODEX.name()); }
         }
     }
     public synchronized void preferences(String id, String model, String access) throws SQLException {
         preferences(id, model, access, preferences(id).path("reasoningEffort").asText(null));
     }
     public synchronized void preferences(String id, String model, String access, String reasoningEffort) throws SQLException {
-        // Older windows may still send their former per-session mode. The host policy takes precedence.
-        execute("INSERT INTO preferences(session_id,model,access,reasoning_effort) VALUES(?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET model=excluded.model,access=excluded.access,reasoning_effort=excluded.reasoning_effort", id, model == null || model.isBlank() ? null : model, SESSION_ACCESS, reasoningEffort == null || reasoningEffort.isBlank() ? null : reasoningEffort);
+        preferences(id, model, access, reasoningEffort, preferences(id).path("provider").asText(null));
     }
+    /** Model and effort belong to one executor; switching the executor without naming them resets both to its defaults. */
+    public synchronized void preferences(String id, String model, String access, String reasoningEffort, String provider) throws SQLException {
+        // Older windows may still send their former per-session mode. The host policy takes precedence.
+        String executor = Provider.of(provider).name();
+        execute("INSERT INTO preferences(session_id,model,access,reasoning_effort,provider) VALUES(?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET model=excluded.model,access=excluded.access,reasoning_effort=excluded.reasoning_effort,provider=excluded.provider", id, preferenceValue(model), SESSION_ACCESS, preferenceValue(reasoningEffort), executor);
+    }
+    private static String preferenceValue(String value) { return value == null || value.isBlank() || value.strip().equals("null") ? null : value.strip(); }
     public synchronized void draft(String id, String draft) throws SQLException {
         execute("INSERT INTO preferences(session_id,draft,access) VALUES(?,?,?) ON CONFLICT(session_id) DO UPDATE SET draft=excluded.draft", id, draft, SESSION_ACCESS);
     }
@@ -309,7 +539,7 @@ public final class SessionStore implements AutoCloseable {
     public synchronized List<JsonNode> events(String id) throws Exception {
         var result = new ArrayList<JsonNode>();
         try (var q = connection.prepareStatement("SELECT payload FROM events WHERE session_id=? ORDER BY sequence DESC LIMIT 100")) {
-            q.setString(1, id); try (var row = q.executeQuery()) { while (row.next()) result.add(Json.parse(row.getString(1))); }
+            q.setString(1, id); try (var row = q.executeQuery()) { while (row.next()) {var event=Json.parse(row.getString(1));var item=event.path("params").path("item");if(item.path("type").asText().equals("imageGeneration")&&item instanceof com.fasterxml.jackson.databind.node.ObjectNode object)object.remove("result");result.add(event);} }
         }
         Collections.reverse(result); return result;
     }
@@ -333,6 +563,16 @@ public final class SessionStore implements AutoCloseable {
             if (id != null) { parts.add(prompt); updatePrompt(id, parts); return id; }
         }
         return enqueue(target, null, prompt);
+    }
+    /** A restart is a new turn at the front; it must never unpause a user's queue. */
+    public synchronized JsonNode restartContinuation(String session,String prompt,String requestId,String source)throws Exception{
+        String key=requestId+"-"+session+"-job";var previous=operationResult(session,key,"restart");if(previous!=null)return previous;
+        return transaction(()->{String job=enqueue(session,source,prompt);execute("UPDATE jobs SET queue_order=(SELECT COALESCE(MIN(queue_order),0)-1 FROM jobs WHERE session_id=? AND status='QUEUED') WHERE id=?",session,job);
+            var result=Json.object("jobId",job);rememberOperation(session,key,"restart",result);return result;});
+    }
+    public synchronized void rememberRestartNotice(String session,String requestId)throws SQLException{rememberOperation(session,requestId+"-"+session+"-notice","restart-notice",Json.object("ok",true));}
+    public synchronized Job runningJob(String session)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT id,source_id,prompt,prompt_parts,urgent FROM jobs WHERE session_id=? AND status='RUNNING' ORDER BY rowid DESC LIMIT 1")){q.setString(1,session);try(var r=q.executeQuery()){return r.next()?new Job(r.getString(1),session,r.getString(2),r.getString(3),promptParts(r.getString(3),r.getString(4)).size(),r.getBoolean(5)):null;}}
     }
     public synchronized List<Job> queued(String sessionId) throws SQLException {
         var result = new ArrayList<Job>();
@@ -516,17 +756,51 @@ public final class SessionStore implements AutoCloseable {
         var previous=operationResult(target,requestId,"interrupt"); if(previous!=null)return previous;
         connection.setAutoCommit(false);
         try {
-            for(String id:affected) { pauseQueue(id,true); execute("UPDATE jobs SET urgent=0 WHERE session_id=? AND status='QUEUED'",id); }
+            for(String id:affected) execute("UPDATE jobs SET urgent=0 WHERE session_id=? AND status='QUEUED'",id);
             String job=enqueue(target,null,prompt); execute("UPDATE jobs SET urgent=1 WHERE id=?",job);
             execute("INSERT INTO queue_interruptions(job_id,affected) VALUES(?,?)",job,Json.MAPPER.valueToTree(affected).toString());
             if(updateDesktopDraft){draft(target,""); draftImages(target,Json.MAPPER.createArrayNode());}
             var result=Json.object("jobId",job,"affected",affected); rememberOperation(target,requestId,"interrupt",result); connection.commit(); return result;
         } catch(SQLException|RuntimeException e) { connection.rollback(); throw e; } finally { connection.setAutoCommit(true); }
     }
+    /** Promote the existing head atomically: keep grouped parts, attachments and delegation recipients. */
+    public synchronized JsonNode interruptQueueHead(String target,List<String> affected,String requestId)throws SQLException{
+        var previous=operationResult(target,requestId,"interrupt");if(previous!=null)return previous;
+        connection.setAutoCommit(false);try{
+            var queue=queued(target);if(queue.isEmpty())throw new IllegalStateException("Очередь уже пуста");String job=queue.getFirst().id();
+            for(String id:affected)execute("UPDATE jobs SET urgent=0 WHERE session_id=? AND status='QUEUED'",id);execute("UPDATE jobs SET urgent=1 WHERE id=?",job);
+            execute("INSERT INTO queue_interruptions VALUES(?,?) ON CONFLICT(job_id) DO UPDATE SET affected=excluded.affected",job,Json.MAPPER.valueToTree(affected).toString());
+            var result=Json.object("jobId",job,"affected",affected);rememberOperation(target,requestId,"interrupt",result);connection.commit();return result;
+        }catch(SQLException|RuntimeException error){connection.rollback();throw error;}finally{connection.setAutoCommit(true);}
+    }
+    /** Transient ordering barrier, independent of the user's durable queue pause. */
+    public synchronized boolean interruptionBlocks(String session,String candidateJob)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT i.affected FROM queue_interruptions i JOIN jobs j ON j.id=i.job_id WHERE j.urgent=1 AND j.status IN ('QUEUED','RUNNING') AND j.id<>?")){
+            q.setString(1,candidateJob);try(var rows=q.executeQuery()){while(rows.next())for(var affected:parseStored(rows.getString(1)))if(session.equals(affected.asText()))return true;}
+        }return false;
+    }
     public synchronized List<String> interruptionScope(String jobId) throws SQLException {
         try(var q=connection.prepareStatement("SELECT affected FROM queue_interruptions WHERE job_id=?")) {
             q.setString(1,jobId); try(var r=q.executeQuery()) { var result=new ArrayList<String>(); if(r.next()) parseStored(r.getString(1)).forEach(n->result.add(n.asText())); return result; }
         }
+    }
+    private void linkRunMessage(String run,String session)throws SQLException{execute("INSERT INTO run_messages(run_id,session_id,result_sequence) VALUES(?,?,?) ON CONFLICT(run_id) DO UPDATE SET result_sequence=excluded.result_sequence",run,session,lastSequence(session));}
+    public synchronized void seedMediaJobs()throws SQLException{
+        try(var q=connection.createStatement();var r=q.executeQuery("SELECT 1 FROM media_migrations WHERE name='events-v1'")){if(r.next())return;}
+        execute("INSERT OR IGNORE INTO media_jobs(event_id,run_id,session_id,item_id,output_offset,input_sequence,payload) SELECT e.sequence,e.run_id,e.session_id,json_extract(e.payload,'$.params.item.id'),0,COALESCE(w.delivered_through,0),json_extract(e.payload,'$.params.item') FROM events e LEFT JOIN worker_runs w ON w.run_id=e.run_id WHERE e.type='item/completed' AND json_extract(e.payload,'$.params.item.type') IN ('imageView','imageGeneration') AND COALESCE(json_extract(e.payload,'$.params.item.status'),'completed')='completed'");
+        execute("INSERT OR IGNORE INTO media_migrations VALUES('events-v1')");
+    }
+    public synchronized List<JsonNode> mediaJobs()throws Exception{var rows=new ArrayList<JsonNode>();try(var q=connection.createStatement();var r=q.executeQuery("SELECT * FROM media_jobs WHERE done=0 ORDER BY event_id LIMIT 4")){while(r.next())rows.add(Json.object("event",r.getLong("event_id"),"session",r.getString("session_id"),"run",r.getString("run_id"),"itemId",r.getString("item_id"),"offset",r.getInt("output_offset"),"input",r.getLong("input_sequence"),"item",Json.parse(r.getString("payload"))));}return rows;}
+    public synchronized void finishMediaJob(long event)throws SQLException{execute("UPDATE media_jobs SET done=1,payload='' WHERE event_id=?",event);}
+    public synchronized void saveMedia(JsonNode job,Path file,Path thumb,int width,int height,String title)throws Exception{transaction(()->{
+        execute("INSERT OR IGNORE INTO session_media(session_id,run_id,item_id,output_offset,input_sequence,path,thumbnail,width,height,title) VALUES(?,?,?,?,?,?,?,?,?,?)",job.path("session").asText(),job.path("run").asText(),job.path("itemId").asText(),job.path("offset").asInt(),job.path("input").asLong(),file.toString(),thumb.toString(),width,height,title);
+        try(var q=connection.prepareStatement("SELECT 1 FROM artifacts WHERE session_id=? AND path=?")){q.setString(1,job.path("session").asText());q.setString(2,file.toString());try(var r=q.executeQuery()){if(!r.next())artifact(job.path("session").asText(),file,title);}}
+        finishMediaJob(job.path("event").asLong());return null;
+    });}
+    public synchronized long mediaRevision(String session)throws SQLException{try(var q=connection.prepareStatement("SELECT COALESCE(MAX(id),0) FROM session_media WHERE session_id=?")){q.setString(1,session);try(var r=q.executeQuery()){r.next();return r.getLong(1);}}}
+    public synchronized List<JsonNode> mediaHistory(String session)throws SQLException{
+        var rows=new ArrayList<JsonNode>();String sql="SELECT m.*,r.status,COALESCE(l.result_sequence,(SELECT MIN(sequence) FROM messages WHERE session_id=m.session_id AND role='assistant' AND sequence>m.input_sequence AND m.input_sequence>0)) result FROM session_media m LEFT JOIN runs r ON r.id=m.run_id LEFT JOIN run_messages l ON l.run_id=m.run_id WHERE m.session_id=? ORDER BY m.id";
+        try(var q=connection.prepareStatement(sql)){q.setString(1,session);try(var r=q.executeQuery()){while(r.next()){long anchor=r.getLong("result");if(anchor==0)anchor="RUNNING".equals(r.getString("status"))?-1:r.getLong("input_sequence");rows.add(Json.object("kind","image","sequence",-100-r.getLong("id"),"mediaId",r.getLong("id"),"anchor",anchor,"outputOffset",r.getInt("output_offset"),"role","assistant","provider","CODEX","offset",0,"length",0,"lines",8,"file",r.getString("path"),"thumbnailFile",r.getString("thumbnail"),"width",r.getInt("width"),"height",r.getInt("height"),"title",r.getString("title")));}}}return rows;
     }
     public synchronized String artifact(String sessionId, Path file, String title) throws Exception {
         String id = UUID.randomUUID().toString();
@@ -541,17 +815,20 @@ public final class SessionStore implements AutoCloseable {
         return result;
     }
     public synchronized void append(String sessionId, String role, String provider, String text) throws SQLException {
-        execute("INSERT INTO messages(session_id,role,provider,text) VALUES(?,?,?,?)", sessionId, role, provider, text);
+        append(sessionId,role,provider,text,System.currentTimeMillis());
+    }
+    private void append(String sessionId,String role,String provider,String text,long timestamp)throws SQLException{
+        execute("INSERT INTO messages(session_id,role,provider,text,created_at) VALUES(?,?,?,?,?)",sessionId,role,provider,text,Math.max(0,timestamp));
     }
     public synchronized long appendInput(String sessionId, String text) throws SQLException {
-        boolean autonomous=autonomousInput(sessionId,text);append(sessionId, autonomous?"system":"user", autonomous?"TETHIUM":"USER", text); return lastSequence(sessionId);
+        boolean automated=autonomousInput(sessionId,text)||scheduledInput(sessionId,text);append(sessionId, automated?"system":"user", automated?"TETHIUM":"USER", text); return lastSequence(sessionId);
     }
     public synchronized List<Message> messages(String sessionId, long after, int limit) throws SQLException {
         if (limit < 1 || limit > 1000) throw new IllegalArgumentException("History limit must be 1..1000");
         var result = new ArrayList<Message>();
-        try (var q = connection.prepareStatement("SELECT sequence,role,provider,text FROM messages WHERE session_id=? AND sequence>? ORDER BY sequence LIMIT ?")) {
+        try (var q = connection.prepareStatement("SELECT sequence,role,provider,text,created_at FROM messages WHERE session_id=? AND sequence>? ORDER BY sequence LIMIT ?")) {
             q.setString(1, sessionId); q.setLong(2, after); q.setInt(3, limit);
-            try (var rows = q.executeQuery()) { while (rows.next()) result.add(new Message(rows.getLong(1), rows.getString(2), rows.getString(3), rows.getString(4))); }
+            try (var rows = q.executeQuery()) { while (rows.next()) result.add(new Message(rows.getLong(1), rows.getString(2), rows.getString(3), rows.getString(4),rows.getLong(5))); }
         }
         return List.copyOf(result);
     }

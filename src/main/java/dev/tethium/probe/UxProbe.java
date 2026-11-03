@@ -201,7 +201,7 @@ public final class UxProbe {
             });
             Thread.sleep(700);
             SwingUtilities.invokeAndWait(() -> {
-                var picker = (JComboBox<?>) named(frame[0], "chat.tasks"); require(picker.getSelectedIndex() == 1, "Deferred caret/layout changed the selected task");
+                var picker = (JComboBox<?>) named(frame[0], "chat.tasks"); require(picker.getSelectedIndex() == 1, "Deferred caret/layout changed the selected task: "+picker.getSelectedIndex()+" y="+((JScrollPane) named(frame[0], "chat.history")).getVerticalScrollBar().getValue());
                 require(((JScrollPane) named(frame[0], "chat.history")).getVerticalScrollBar().getValue() > 100, "Task navigation was undone by a deferred scroll");
                 ((JButton) named(frame[0], "chat.previousTask")).doClick(); require(picker.getSelectedIndex() == 0, "Previous task navigation");
             });
@@ -221,7 +221,7 @@ public final class UxProbe {
             Thread.sleep(700);
             SwingUtilities.invokeAndWait(() -> {
                 var bar = ((JScrollPane) named(frame[0], "chat.history")).getVerticalScrollBar();
-                require(bar.getValue() + bar.getVisibleAmount() >= bar.getMaximum() - 4, "Latest position was undone after layout");
+                require(bar.getValue() + bar.getVisibleAmount() >= bar.getMaximum() - 4, "Latest position was undone after layout: "+bar.getValue()+" + "+bar.getVisibleAmount()+" / "+bar.getMaximum());
             });
             client.post("/sessions/" + id + "/stop", Json.object());
             await(()->!state(client,id).path("sessions").get(0).path("running").asBoolean(),"final stop");
@@ -236,7 +236,34 @@ public final class UxProbe {
             Thread.sleep(600);SwingUtilities.invokeAndWait(()->{frame[0].inputArea().setText("fix-now");press(frame[0].inputArea(),InputEvent.SHIFT_DOWN_MASK);});
             await(()->state(client,id).path("sessions").get(0).path("status").asText().equals("COMPLETED"),"priority message completes");
             require(state(client,id).path("sessions").get(0).path("queuePaused").asBoolean()&&state(client,id).path("conversation").path("queued").size()==3,"Priority message resumed or lost old queue");
-            Json.MAPPER.writerWithDefaultPrettyPrinter().writeValue(root.resolve("report.json").toFile(), Json.object("passed", true, "pinnedRequestTracksScroll", true, "requestMapClickAndPreview", true, "streamKeepsReadingPosition", true, "queuePriorityAndPartReturn", true, "modelAndEffortReachAdapter", true, "enterSendsCtrlEnterNewline", true, "altGrQueuesSeparately",true,"selectionQuotePreservesDraft",true, "enterAppendsAltEnterQueuesSeparately", true, "expandQueuePreservesFullTextAndLiveUpdates", true, "fullscreenClickAndEscape", true, "previewStatePreserved", true, "widths", List.of(920, 1280), "stopPreservesQueue", true, "progressVisible", true));
+            SwingUtilities.invokeAndWait(()->{
+                try {
+                    var usageField=WorkspaceFrame.class.getDeclaredField("resourceUsage");usageField.setAccessible(true);
+                    usageField.set(frame[0],Json.object("total",1000,"projects",Json.object(pid,400),"sessions",Json.object(id,100,other,300),"cpu",Json.object("totalNanos",1000,"projects",Json.object(pid,600),"sessions",Json.object(id,200,other,400))));
+                    var tree=(JTree)read(frame[0],"active");var projectPath=tree.getPathForRow(0);
+                    tree.expandPath(projectPath);checkLayout(frame[0],920,600);capture(frame[0],root.resolve("resource-shares-expanded.png"));
+                    tree.collapsePath(projectPath);checkLayout(frame[0],920,600);capture(frame[0],root.resolve("resource-shares-collapsed.png"));
+                } catch(Exception e){throw new RuntimeException(e);}
+            });
+            ProjectTreeProbe.indicators(frame[0],state(client,id),id,other,pid,root);
+            // A project file is a separate workspace entry, not an agent session.
+            String document=client.post("/projects/"+pid+"/files",Json.object("path",manual.toString(),"title","Закреплённый план")).path("id").asText();
+            await(()->((java.util.Map<?,?>)read(frame[0],"documents")).containsKey(document),"file entry visible");
+            SwingUtilities.invokeAndWait(()->{frame[0].inputArea().setText("Черновик остаётся у сессии");frame[0].selectDocument(document);});
+            await(()->image(frame[0])!=null&&document.equals(read(frame[0],"selectedFile")),"project file opens");
+            SwingUtilities.invokeAndWait(()->{var split=(JSplitPane)read(frame[0],"content");require(split.getLeftComponent()==null,"File entry leaves chat visible");require(!frame[0].inputArea().isEnabled(),"File entry accepts prompts");frame[0].setSize(1280,860);frame[0].validate();require(split.getRightComponent().getWidth()>900,"File does not fill workspace");capture(frame[0],root.resolve("pinned-project-file.png"));});
+            var handoff=new java.util.concurrent.atomic.AtomicReference<CompletableFuture<JsonNode>>();SwingUtilities.invokeAndWait(()->handoff.set(frame[0].prepareHandoff()));var saved=handoff.get().get(5,TimeUnit.SECONDS);SwingUtilities.invokeAndWait(()->frame[0].setEnabled(true));require(document.equals(saved.path("fileId").asText()),"Handoff lost file selection");
+            SwingUtilities.invokeAndWait(()->frame[0].selectSession(id));await(()->read(frame[0],"restoreViewFor")==null,"session restored from file");
+            require(frame[0].inputArea().getText().equals("Черновик остаётся у сессии"),"File selection lost draft");
+            client.post("/sessions/"+id+"/pinned-file",Json.object("path",manual.toString()));
+            await(()->Boolean.TRUE.equals(read(frame[0],"previewOpen"))&&image(frame[0])!=null,"session pin opens");
+            SwingUtilities.invokeAndWait(()->{call(frame[0],"showPreview",new Class<?>[]{boolean.class},false);frame[0].selectSession(other);});await(()->read(frame[0],"restoreViewFor")==null,"switch away from pinned session");
+            SwingUtilities.invokeAndWait(()->frame[0].selectSession(id));await(()->read(frame[0],"restoreViewFor")==null&&Boolean.TRUE.equals(read(frame[0],"previewOpen"))&&image(frame[0])!=null,"pinned file reopens by default");
+            SwingUtilities.invokeAndWait(()->{checkLayout(frame[0],1280,860);capture(frame[0],root.resolve("pinned-session-file.png"));frame[0].selectDocument(document);frame[0].adoptHandoff(saved);});
+            await(()->read(frame[0],"pendingHandoff")==null&&document.equals(read(frame[0],"selectedFile")),"file handoff restored");
+            client.post("/files/"+document+"/remove",Json.object());await(()->frame[0].selectedSession()!=null,"removed file returns to session");require(Files.exists(manual),"Unpin deleted file");
+            ProjectTreeProbe.restoration(frame[0],host,id,pid,root);
+            Json.MAPPER.writerWithDefaultPrettyPrinter().writeValue(root.resolve("report.json").toFile(), Json.object("passed", true, "projectIndicatorsAligned",true,"projectActivityAndAttention",true,"collapsedProjectsSurviveRestartAndHandoff",true,"pinnedRequestTracksScroll", true, "requestMapClickAndPreview", true, "streamKeepsReadingPosition", true, "queuePriorityAndPartReturn", true, "modelAndEffortReachAdapter", true, "enterSendsCtrlEnterNewline", true, "altGrQueuesSeparately",true,"selectionQuotePreservesDraft",true, "enterAppendsAltEnterQueuesSeparately", true, "expandQueuePreservesFullTextAndLiveUpdates", true, "fullscreenClickAndEscape", true, "previewStatePreserved", true, "projectFileWorkspace",true,"pinnedSessionReopens",true,"fileHandoffPreservesDraft",true, "widths", List.of(920, 1280), "stopPreservesQueue", true, "progressVisible", true));
             System.out.println("UX_PROBE_PASSED " + root);
         } catch (Throwable failure) { failure.printStackTrace(); exit = 1; }
         finally { if (frame[0] != null) SwingUtilities.invokeAndWait(frame[0]::closeWindow); }

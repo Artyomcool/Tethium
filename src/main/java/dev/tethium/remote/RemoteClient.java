@@ -23,7 +23,7 @@ public final class RemoteClient extends HostClient {
         var value=connection.json(path,null);
         if(path.startsWith("/state")){
             for(var s:value.path("sessions")){var d=drafts.get(s.path("id").asText());var prefs=(ObjectNode)s.path("preferences");prefs.put("draft",d==null?"":d.path("draft").asText());prefs.set("draftImages",d==null?Json.MAPPER.createArrayNode():d.path("images"));}
-            if(path.contains("?session=")){session=path.substring(path.indexOf("?session=")+9);artifactIds.clear();for(var a:value.path("conversation").path("artifacts"))artifactIds.put(a.path("path").asText(),a.path("id").asText());}
+            if(path.contains("?session=")){session=path.substring(path.indexOf("?session=")+9).split("&")[0];artifactIds.clear();for(var a:value.path("conversation").path("artifacts"))artifactIds.put(a.path("path").asText(),a.path("id").asText());}
         }return value;
     }
     private synchronized void saveDraft(String id,JsonNode value)throws IOException{drafts.put(id,value);Path temp=Files.createTempFile(data,"draft-",".tmp");try{Json.MAPPER.writeValue(temp.toFile(),drafts);Files.move(temp,data.resolve("drafts.json"),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}finally{Files.deleteIfExists(temp);}}
@@ -36,7 +36,20 @@ public final class RemoteClient extends HostClient {
         var result=connection.json(path,value);if(path.endsWith("/queue-take"))saveDraft(id,Json.object("draft",result.path("draft").asText(),"images",drafts.getOrDefault(id,Json.object()).path("images")));if(path.endsWith("/run")||path.endsWith("/interrupt"))saveDraft(id,Json.object("draft","","images",List.of()));return result;
     }
     public synchronized URI preview(Path path)throws Exception{
-        if(preview!=null)preview.stop(0);if(previewWorkers!=null)previewWorkers.shutdownNow();String id=artifactIds.get(path.toString());var response=connection.json("/preview",id==null?Json.object("session",session,"file",path.toString()):Json.object("session",session,"artifact",id));
+        String id=artifactIds.get(path.toString());var response=connection.json("/preview",id==null?Json.object("session",session,"file",path.toString()):Json.object("session",session,"artifact",id));
+        return servePreview(response);
+    }
+    public synchronized URI previewDocument(String id)throws Exception{return servePreview(connection.json("/preview",Json.object("fileId",id)));}
+    public java.awt.image.BufferedImage readImage(Path path,String sessionId)throws Exception{
+        // Fetch the original without replacing the proxy used by the currently open preview.
+        var body=Json.object("session",sessionId,"file",path.toString());
+        var state=connection.json("/state?session="+URLEncoder.encode(sessionId,java.nio.charset.StandardCharsets.UTF_8),null);
+        for(var artifact:state.path("conversation").path("artifacts"))if(artifact.path("path").asText().equals(path.toString()))body.put("artifact",artifact.path("id").asText());
+        var info=connection.json("/preview",body);var request=connection.open(info.path("path").asText());
+        try{if(request.getResponseCode()!=200)throw new IOException("Не удалось получить изображение");try(var in=request.getInputStream()){return javax.imageio.ImageIO.read(in);}}finally{request.disconnect();}
+    }
+    private URI servePreview(JsonNode response)throws Exception{
+        if(preview!=null)preview.stop(0);if(previewWorkers!=null)previewWorkers.shutdownNow();
         String remote=response.path("path").asText(),remoteBase=remote.substring(0,remote.lastIndexOf('/')+1),prefix="/"+UUID.randomUUID()+"/";
         preview=HttpServer.create(new InetSocketAddress("127.0.0.1",0),0);previewWorkers=Executors.newVirtualThreadPerTaskExecutor();preview.setExecutor(previewWorkers);
         preview.createContext("/",e->{try(e){String request=e.getRequestURI().getRawPath();if(!e.getRequestMethod().equals("GET")||!request.startsWith(prefix)){e.sendResponseHeaders(404,-1);return;}try{var c=connection.open(remoteBase+request.substring(prefix.length())+(e.getRequestURI().getRawQuery()==null?"":"?"+e.getRequestURI().getRawQuery()));try{int status=c.getResponseCode();if(status!=200){e.sendResponseHeaders(status,-1);return;}String type=c.getContentType();e.getResponseHeaders().set("Content-Type",type==null?"application/octet-stream":type);e.getResponseHeaders().set("Content-Security-Policy","default-src 'self' data:; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; object-src 'none'; frame-src 'none'; base-uri 'none'");e.sendResponseHeaders(200,0);try(var in=c.getInputStream()){in.transferTo(e.getResponseBody());}}finally{c.disconnect();}}catch(Exception failure){try{e.sendResponseHeaders(502,-1);}catch(Exception ignored){}}}});preview.start();return URI.create("http://127.0.0.1:"+preview.getAddress().getPort()+prefix+remote.substring(remote.lastIndexOf('/')+1));

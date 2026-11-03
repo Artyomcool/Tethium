@@ -12,7 +12,10 @@ final class Connection {
     static final class ApiException extends IOException { final int status; ApiException(int status,String text){super(text);this.status=status;} }
     final String address,pin,token;
     private final SSLSocketFactory factory;
-    Connection(String address,String pin,String token)throws Exception{
+    private final android.net.Network network;
+    Connection(String address,String pin,String token)throws Exception{this(address,pin,token,null);}
+    Connection(String address,String pin,String token,android.net.Network network)throws Exception{
+        this.network=network;
         if(!address.matches("[a-zA-Z0-9.\\-]+:[0-9]{1,5}")||!pin.matches("[a-f0-9]{64}"))throw new IOException("Некорректная ссылка подключения");
         this.address=address;this.pin=pin;this.token=token;
         var tls=SSLContext.getInstance("TLS");
@@ -26,7 +29,7 @@ final class Connection {
     }
     HttpsURLConnection open(String path)throws Exception{
         if(!path.startsWith("/")||path.startsWith("//"))throw new IOException("Invalid path");
-        var c=(HttpsURLConnection)new URL("https://"+address+path).openConnection();
+        var url=new URL("https://"+address+path);var c=(HttpsURLConnection)(network==null?url.openConnection():network.openConnection(url));
         c.setSSLSocketFactory(factory);c.setHostnameVerifier((h,s)->h.equals(address.substring(0,address.lastIndexOf(':'))));c.setConnectTimeout(5000);c.setReadTimeout(path.equals("/quota/reset")?70000:15000);c.setInstanceFollowRedirects(false);
         if(token!=null&&!token.isEmpty())c.setRequestProperty("Authorization","Bearer "+token);return c;
     }

@@ -12,12 +12,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /** Stable, name-based identities shared by every project and future session. */
 final class IdentityIcons {
-    private static final String ROOT="identity/v1/";
+    private static final String ROOT="identity/v3/";
     private static final Properties NAMES=loadNames();
     private static final Map<String, Icon> CACHE=new ConcurrentHashMap<>();
-    // Keep this order stable: unknown names use a repeatable fallback without model calls.
-    private static final String[] FALLBACK={"session-general","session-research","session-experiments",
-            "session-docs","session-maintenance","session-architecture"};
     private IdentityIcons() {}
     static String normalize(String title) {
         return Normalizer.normalize(Objects.requireNonNullElse(title,""),Normalizer.Form.NFKC)
@@ -32,7 +29,7 @@ final class IdentityIcons {
         String normalized=normalize(name);
         String mapped=NAMES.getProperty((project?"project.":"session.")+normalized);
         if(mapped!=null)return mapped;
-        return project?"project-general":FALLBACK[Math.floorMod(normalized.hashCode(),FALLBACK.length)];
+        return project?"svg:project-folder":"svg:session-chat";
     }
     static Icon of(boolean project,String title,String directory) {
         return CACHE.computeIfAbsent(asset(project,title,directory),IdentityIcons::load);
@@ -45,6 +42,7 @@ final class IdentityIcons {
         } catch(java.io.IOException e){throw new IllegalStateException(e);}
     }
     private static Icon load(String name) {
+        if(name.startsWith("svg:"))return UiIcons.of(name.substring(4),22);
         var images=new ArrayList<Image>();
         for(int size:new int[]{22,28,33,44,66,88}) {
             try(var stream=IdentityIcons.class.getResourceAsStream(ROOT+name+"-"+size+".png")) {

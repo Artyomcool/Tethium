@@ -12,8 +12,8 @@ public final class HostMain {
         try (var channel = FileChannel.open(data.resolve("host.lock"), StandardOpenOption.CREATE, StandardOpenOption.WRITE); var lock = channel.tryLock()) {
             if (lock == null) return;
             var account=new CodexAccountClient(data);
-            var quota = new CodexQuotaService(Boolean.getBoolean("tethium.probe") ? null : account::readRateLimits,Boolean.getBoolean("tethium.probe")?null:account::consumeReset);
-            try (var host = new HostService(data, new CodexAdapter(), quota, Boolean.getBoolean("tethium.standby"))) {
+            var quota = new CodexQuotaService(Boolean.getBoolean("tethium.probe") ? null : account::readRateLimits,Boolean.getBoolean("tethium.probe")?null:account::consumeReset,Boolean.getBoolean("tethium.probe")?null:new ClaudeAccountClient()::readUsage);
+            try (var host = new HostService(data, java.util.List.of(new CodexAdapter(), new ClaudeAdapter()), quota, Boolean.getBoolean("tethium.standby"), null)) {
                 var done = new CountDownLatch(1); host.onShutdown(done::countDown);
                 Path temporary = data.resolve("host.json.tmp");
                 Json.MAPPER.writeValue(temporary.toFile(), host.descriptor());

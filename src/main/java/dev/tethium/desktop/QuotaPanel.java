@@ -11,11 +11,13 @@ import java.util.*;
 
 /** Account-wide quota: actual server windows, never inferred numbers of remaining requests. */
 final class QuotaPanel extends JPanel {
-    private final JLabel title = new JLabel("Квота Codex"), notice = new JLabel(), timestamp = new JLabel("—");
+    private final JLabel title = new JLabel("Квота"), notice = new JLabel(), timestamp = new JLabel("—");
     private final JButton refresh;
     private final javax.swing.Timer animation;
     private double angle;
     private final JPanel windows = new JPanel();
+    private final MachineUsagePanel machine=new MachineUsagePanel();
+    void machineUsage(JsonNode value){machine.update(value);}
     private final JComboBox<Bucket> selector = new JComboBox<>();
     private JsonNode state = Json.object();
     private String signature = "";
@@ -34,7 +36,7 @@ final class QuotaPanel extends JPanel {
         var header = new JPanel(new BorderLayout(Theme.GAP, 0)); header.setOpaque(false);
         title.setFont(title.getFont().deriveFont(Font.PLAIN, 11f)); title.setForeground(Theme.MUTED); title.setIcon(Theme.icon("quota-gauge")); title.setIconTextGap(Theme.GAP); header.add(title);
         title.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));title.addMouseListener(new java.awt.event.MouseAdapter(){public void mouseClicked(java.awt.event.MouseEvent e){usageAction.run();}});
-        refresh = Theme.iconButton("quota-refresh", "Обновить квоту аккаунта Codex", refreshAction);
+        refresh = Theme.iconButton("quota-refresh", "Обновить квоты аккаунтов Codex и Claude", refreshAction);
         refresh.setName("quota.refresh"); refresh.getAccessibleContext().setAccessibleName("Обновить квоту");
         Icon normal = Theme.icon("quota-refresh");
         refresh.setIcon(new Icon() {
@@ -47,7 +49,7 @@ final class QuotaPanel extends JPanel {
         animation = new javax.swing.Timer(60, e -> { angle += Math.PI / 12; refresh.repaint(); });
         timestamp.setName("quota.updatedAt"); timestamp.setForeground(Theme.MUTED); timestamp.setFont(timestamp.getFont().deriveFont(10f));
         var actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, Theme.UNIT, 0)); actions.setOpaque(false); actions.add(timestamp); actions.add(refresh); header.add(actions, BorderLayout.EAST);
-        add(header, BorderLayout.NORTH);
+        add(header, BorderLayout.NORTH);add(machine,BorderLayout.SOUTH);
         windows.setOpaque(false); windows.setLayout(new BoxLayout(windows, BoxLayout.Y_AXIS)); add(windows);
         notice.setName("quota.notice"); notice.setFont(notice.getFont().deriveFont(11f)); notice.setForeground(Theme.MUTED);
         selector.setName("quota.selector"); selector.setMaximumRowCount(8);
@@ -68,19 +70,19 @@ final class QuotaPanel extends JPanel {
     private boolean stale() { return state.path("state").asText().equals("error") || state.path("updatedAt").asLong() > 0 && System.currentTimeMillis() - state.path("updatedAt").asLong() > 6 * 60_000; }
     private void render() {
         windows.removeAll(); boolean refreshing = state.path("refreshing").asBoolean();
-        refresh.setEnabled(!refreshing); refresh.setToolTipText(refreshing ? "Обновляем квоту…" : "Обновить квоту аккаунта Codex");
+        refresh.setEnabled(!refreshing); refresh.setToolTipText(refreshing ? "Обновляем квоту…" : "Обновить квоты аккаунтов Codex и Claude");
         if (refreshing && isDisplayable()) animation.start(); else { animation.stop(); angle = 0; }
         if (selector.getItemCount() > 1) { selector.setAlignmentX(LEFT_ALIGNMENT); windows.add(selector); windows.add(Box.createVerticalStrut(3)); }
         if (selector.getSelectedItem() instanceof Bucket bucket) {
-            title.setText("Квота " + (selector.getItemCount() == 1 ? bucket.label : "Codex"));
+            title.setText(selector.getItemCount() == 1 ? "Квота " + bucket.label : "Квота");
             for (var window : bucket.value.path("windows")) {
                 int left = window.path("remainingPercent").asInt();
                 Color color = stale() ? Theme.MUTED : left <= 5 ? Theme.RED : left <= 20 ? Theme.AMBER : Theme.ACCENT;
                 var labels = new JPanel(new BorderLayout()); labels.setOpaque(false); labels.setAlignmentX(LEFT_ALIGNMENT);
                 var count=state.path("resetCredits").path("availableCount");
-                var period = new JLabel(windowName(window)+(window.path("durationMinutes").asLong()==10080&&count.isNumber()?" ["+count.asInt()+"]":"")); period.setFont(period.getFont().deriveFont(11f)); labels.add(period);
-                if(window.path("durationMinutes").asLong()==10080&&count.isNumber())period.setToolTipText("Доступно сбросов: "+count.asInt()+". Сброс — при остатке ≤5%, с подтверждением.");
-                if(left<=5&&count.asInt()>0&&!stale()&&state.path("resetSupported").asBoolean()){
+                boolean codex=bucket.id.equals("codex"); var period = new JLabel(windowName(window)+(codex&&window.path("durationMinutes").asLong()==10080&&count.isNumber()?" ["+count.asInt()+"]":"")); period.setFont(period.getFont().deriveFont(11f)); labels.add(period);
+                if(codex&&window.path("durationMinutes").asLong()==10080&&count.isNumber())period.setToolTipText("Доступно сбросов: "+count.asInt()+". Сброс — при остатке ≤5%, с подтверждением.");
+                if(codex&&left<=5&&count.asInt()>0&&!stale()&&state.path("resetSupported").asBoolean()){
                     period.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));period.addMouseListener(new java.awt.event.MouseAdapter(){public void mouseClicked(java.awt.event.MouseEvent e){var menu=new JPopupMenu();menu.add(new AbstractAction("Использовать один сброс…"){public void actionPerformed(java.awt.event.ActionEvent event){resetAction.run();}});menu.show(period,period.getWidth(),0);}});
                 }
                 var amount = new JLabel(left + "%"); amount.setName("quota.remaining"); amount.setForeground(color); amount.setFont(amount.getFont().deriveFont(Font.BOLD, 12f)); labels.add(amount, BorderLayout.EAST); windows.add(labels);
@@ -95,7 +97,7 @@ final class QuotaPanel extends JPanel {
             notice.setText(stale() ? "Устаревшие данные" : "");
             notice.setForeground(stale() ? Theme.AMBER : Theme.MUTED);
         } else {
-            title.setText("Квота Codex");
+            title.setText("Квота");
             notice.setText(state.path("state").asText().equals("loading") ? "Получаем квоту…" : "Квота недоступна");
             notice.setForeground(Theme.MUTED);
             windows.add(notice);

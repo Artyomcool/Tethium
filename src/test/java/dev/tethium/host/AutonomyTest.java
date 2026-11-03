@@ -54,6 +54,78 @@ class AutonomyTest {
             c.post("/sessions/"+id+"/autonomy",Json.object("action","disable"));a.finish.release();idle(c,id);assertNull(a.requests.poll(200,TimeUnit.MILLISECONDS));
         }
     }
+    @Test void explicitToolStartAfterCorrectionResumesQueueAndLaterStopSurvivesRestart()throws Exception{
+        var a=new Adapter();String id;
+        try(var host=new HostService(data,a);var c=new HostClient(host.descriptor())){
+            id=session(c);c.post("/sessions/"+id+"/run",Json.object("prompt","Initial work"));a.next();
+            c.post("/sessions/"+id+"/run",Json.object("prompt","Queued work","separate",true));
+            c.post("/sessions/"+id+"/queue-pause",Json.object());
+            c.post("/sessions/"+id+"/interrupt",Json.object("requestId","autonomy-correction","prompt","Continue autonomously"));
+            var correction=a.next();assertTrue(correction.prompt().endsWith("Continue autonomously"));
+            assertTrue(c.get("/state").path("sessions").get(0).path("queuePaused").asBoolean());
+            var goal=tool(correction,Json.object("action","start","goal","Finish the requested work"));
+            assertEquals("active",goal.path("state").asText());
+            assertFalse(c.get("/state").path("sessions").get(0).path("queuePaused").asBoolean(),"Explicit autonomy start must release the correction pause");
+            a.finish.release();assertTrue(a.next().prompt().endsWith("Queued work"));
+            a.finish.release();assertTrue(a.next().prompt().contains("Tethium autonomous continuation:"));
+            c.post("/sessions/"+id+"/stop",Json.object());
+            var stopped=idle(c,id).path("sessions").get(0);
+            assertTrue(stopped.path("queuePaused").asBoolean());assertEquals("paused",stopped.path("autonomy").path("state").asText());
+            c.post("/sessions/"+id+"/run",Json.object("prompt","Keep stopped","separate",true));
+            assertNull(a.requests.poll(200,TimeUnit.MILLISECONDS));
+        }
+        try(var host=new HostService(data,a);var c=new HostClient(host.descriptor())){
+            var state=c.get("/state?session="+id);var stopped=state.path("sessions").get(0);
+            assertTrue(stopped.path("queuePaused").asBoolean());assertEquals("paused",stopped.path("autonomy").path("state").asText());
+            assertEquals(1,state.path("conversation").path("queued").size());assertNull(a.requests.poll(200,TimeUnit.MILLISECONDS));
+        }
+    }
+    @Test void explicitResumeClearsPersistedCorrectionPauseButInvalidRequestsDoNot()throws Exception{
+        String id,other,goal;Path db=data.resolve("resume.db");
+        try(var s=new SessionStore(db)){
+            String project=s.project(data);id=s.create(project,null,"Resume",data).id();other=s.create(project,null,"Other",data).id();
+            goal=s.autonomy(id,"start","","Goal","").path("goalId").asText();
+            s.pauseQueue(id,true);s.pauseQueue(other,true);
+            s.priorityCorrection(id,List.of(id,other),"Correction","resume-correction");
+            s.autonomy(id,"pause","","","Priority correction");
+            s.jobStatus(s.queued(id).getFirst().id(),"COMPLETED");
+        }
+        try(var s=new SessionStore(db)){
+            assertTrue(s.queuePaused(id));
+            var resumed=s.autonomy(id,"resume",goal,"","");
+            assertEquals("active",resumed.path("state").asText());assertFalse(s.queuePaused(id));assertTrue(s.queuePaused(other));
+            s.ensureAutonomousContinuation(id);assertEquals(1,s.queued(id).size());
+            s.pauseQueue(id,true);s.autonomy(id,"pause","","","Explicit stop");
+            assertThrows(IllegalArgumentException.class,()->s.autonomy(id,"resume",goal,"",""));
+            assertThrows(IllegalArgumentException.class,()->s.autonomy(id,"start","","",""));
+            assertTrue(s.queuePaused(id));assertEquals("paused",s.autonomy(id).path("state").asText());
+            s.wakeAutonomy(id);s.ensureAutonomousContinuation(id);assertTrue(s.queuePaused(id));assertTrue(s.queued(id).isEmpty());
+        }
+    }
+    @Test void lateAutonomyToolCannotUndoExplicitStop()throws Exception{
+        var started=new LinkedBlockingQueue<AgentAdapter.Request>();var cancelled=new CountDownLatch(1);var allowExit=new CountDownLatch(1);
+        var adapter=new AgentAdapter(){
+            public Provider provider(){return Provider.CODEX;}
+            public Result run(Request request,Consumer<Event> events,Cancellation cancel)throws Exception{
+                started.add(request);while(!cancel.isCancelled())Thread.sleep(10);
+                cancelled.countDown();assertTrue(allowExit.await(10,TimeUnit.SECONDS));
+                return new Result("stopped-thread",Status.CANCELLED,"");
+            }
+        };
+        try(var host=new HostService(data,adapter);var c=new HostClient(host.descriptor())){
+            String id=session(c);c.post("/sessions/"+id+"/run",Json.object("prompt","Work"));
+            var request=started.poll(5,TimeUnit.SECONDS);assertNotNull(request);
+            tool(request,Json.object("action","start","goal","Authorized work"));
+            c.post("/sessions/"+id+"/stop",Json.object());assertTrue(cancelled.await(5,TimeUnit.SECONDS));
+            try(var http=HttpClient.newHttpClient()){
+                var body=Json.object("jsonrpc","2.0","id",2,"method","tools/call","params",Json.object("name","session_autonomy","arguments",Json.object("action","start","goal","Late request")));
+                var response=http.send(HttpRequest.newBuilder(request.toolsUrl()).header("Authorization","Bearer "+request.toolsToken()).POST(HttpRequest.BodyPublishers.ofString(body.toString())).build(),HttpResponse.BodyHandlers.ofString());
+                assertTrue(Json.parse(response.body()).path("result").path("isError").asBoolean(),"A cancelled run cannot restart autonomy");
+                var stopped=c.get("/state").path("sessions").get(0);assertTrue(stopped.path("queuePaused").asBoolean());assertEquals("paused",stopped.path("autonomy").path("state").asText());
+            }finally{allowExit.countDown();}
+            idle(c,id);assertNull(started.poll(200,TimeUnit.MILLISECONDS));
+        }finally{allowExit.countDown();}
+    }
     @Test void durableReceiptsAndChildResultsPreventDuplicatesAndMissedWakeups()throws Exception{
         String id,goal;try(var s=new SessionStore(data.resolve("db"))){id=s.create(s.project(data),null,"A",data).id();goal=s.autonomy(id,"start","","Goal","").path("goalId").asText();s.ensureAutonomousContinuation(id);s.ensureAutonomousContinuation(id);assertEquals(1,s.queued(id).size());s.jobStatus(s.queued(id).get(0).id(),"COMPLETED");}
         try(var s=new SessionStore(data.resolve("db"))){s.ensureAutonomousContinuation(id);s.ensureAutonomousContinuation(id);assertEquals(1,s.queued(id).size());s.autonomy(id,"wait",goal,"","Results already arrived");assertEquals("active",s.autonomy(id).path("state").asText());

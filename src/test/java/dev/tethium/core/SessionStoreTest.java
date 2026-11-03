@@ -9,6 +9,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class SessionStoreTest {
     @TempDir Path root;
+    @Test void mobileLiteralNullNeverBecomesAnEffortOrModel() throws Exception {
+        try(var store=new SessionStore(root.resolve("settings.db"))){
+            String id=store.create(store.project(root),null,"Settings",root).id();
+            store.preferences(id,"null",SessionStore.SESSION_ACCESS,"null");
+            assertTrue(store.preferences(id).path("model").isNull());assertTrue(store.preferences(id).path("reasoningEffort").isNull());
+            store.preferences(id,"gpt-6-astra",SessionStore.SESSION_ACCESS,"xhigh");store.draft(id,"Keep settings");
+            assertEquals("xhigh",store.preferences(id).path("reasoningEffort").asText());
+        }
+    }
     @Test void oldDatabaseMigratesAndLegacySettingsAndDraftsKeepReasoningEffort() throws Exception {
         Path database = root.resolve("legacy.db"); String id;
         try (var store = new SessionStore(database)) {

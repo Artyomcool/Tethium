@@ -41,6 +41,40 @@ class HostServiceTest {
         while (System.nanoTime() < deadline) { var s = c.get("/state?session=" + id); if (condition.test(s)) return s; Thread.sleep(30); }
         throw new AssertionError("Host state did not converge");
     }
+    @Test void queuePauseKeepsCurrentRunAndResumeWorksDuringUrgentRunAndEmptyQueue() throws Exception {
+        var adapter=new Adapter();
+        try(var host=new HostService(data,adapter);var c=new HostClient(host.descriptor())) {
+            String id=session(c), path="/sessions/"+id;
+            c.post(path+"/run",Json.object("prompt","first")); assertNotNull(adapter.started.poll(5,TimeUnit.SECONDS));
+            c.post(path+"/queue-pause",Json.object());
+            c.post(path+"/run",Json.object("prompt","second"));
+            assertTrue(c.get("/state").path("sessions").get(0).path("running").asBoolean());
+            adapter.release.release();
+            var paused=until(c,id,x->!x.path("sessions").get(0).path("running").asBoolean());
+            assertEquals("COMPLETED",paused.path("sessions").get(0).path("status").asText());
+            assertEquals(List.of("second"),prompts(paused));
+            assertNull(adapter.started.poll(150,TimeUnit.MILLISECONDS));
+            c.post(path+"/interrupt",Json.object("queueHead",true,"requestId","urgent"));
+            assertNotNull(adapter.started.poll(5,TimeUnit.SECONDS));
+            assertTrue(c.get("/state").path("sessions").get(0).path("queuePaused").asBoolean());
+            c.post(path+"/queue-resume",Json.object()); // Must be possible before this run ends, even with no queued messages.
+            assertFalse(c.get("/state").path("sessions").get(0).path("queuePaused").asBoolean());
+            c.post(path+"/run",Json.object("prompt","third")); adapter.release.release();
+            assertTrue(adapter.started.poll(5,TimeUnit.SECONDS).prompt().endsWith("third"));
+            adapter.release.release(); until(c,id,x->!x.path("sessions").get(0).path("running").asBoolean());
+        }
+    }
+    @Test void queuePauseWithoutStopPersistsAndCanBeClearedWhenEmpty() throws Exception {
+        var adapter=new Adapter();String id;
+        try(var host=new HostService(data,adapter);var c=new HostClient(host.descriptor())) {
+            id=session(c);c.post("/sessions/"+id+"/queue-pause",Json.object());
+        }
+        try(var host=new HostService(data,adapter);var c=new HostClient(host.descriptor())) {
+            assertTrue(c.get("/state").path("sessions").get(0).path("queuePaused").asBoolean());
+            c.post("/sessions/"+id+"/queue-resume",Json.object());
+            assertFalse(c.get("/state").path("sessions").get(0).path("queuePaused").asBoolean());
+        }
+    }
     @Test void sixteenSessionsRunAndTheSeventeenthWaitsForAFreeSlot() throws Exception {
         var adapter = new Adapter();
         try (var host = new HostService(data, adapter); var c = new HostClient(host.descriptor())) {
@@ -278,6 +312,53 @@ class HostServiceTest {
             assertTrue(adapter.started.poll(5, TimeUnit.SECONDS).prompt().endsWith("next\n\n---\n\nduring drain"));
             adapter.release.release(); until(c, id, s -> !s.path("sessions").get(0).path("running").asBoolean());
             assertEquals(2, adapter.prompts.size());
+        }
+    }
+    private static final class Executor implements AgentAdapter {
+        final Provider provider; final List<Request> requests = new CopyOnWriteArrayList<>();
+        Executor(Provider provider) { this.provider = provider; }
+        public Provider provider() { return provider; }
+        public Result run(Request r, Consumer<Event> events, Cancellation cancel) {
+            requests.add(r); String thread = provider.name().toLowerCase(Locale.ROOT) + "-thread";
+            events.accept(new Event("conversation", thread, Json.object()));
+            return new Result(thread, Status.COMPLETED, provider.title + " says " + requests.size());
+        }
+    }
+    @Test void sessionsSwitchExecutorsAndCarryHistoryAcrossTheSwitch() throws Exception {
+        var codex = new Executor(AgentAdapter.Provider.CODEX); var claude = new Executor(AgentAdapter.Provider.CLAUDE);
+        try (var host = new HostService(data, List.of(codex, claude), new CodexQuotaService(null), false, new CodexModelCatalog(null)); var c = new HostClient(host.descriptor())) {
+            String id = session(c), path = "/sessions/" + id;
+            assertEquals("CODEX", c.get("/state").path("sessions").get(0).path("preferences").path("provider").asText());
+            var catalog = c.get("/models?session=" + id);
+            assertEquals("CODEX", catalog.path("provider").asText()); assertTrue(catalog.path("available").asBoolean());
+            assertTrue(catalog.path("providers").path("CLAUDE").path("available").asBoolean()); assertFalse(catalog.path("providers").path("CODEX").path("available").asBoolean(), "No Codex catalog reader in this test");
+            assertTrue(catalog.path("data").toString().contains("\"model\":\"fable\""));
+            for (var entry : catalog.path("data")) assertEquals("CLAUDE", entry.path("provider").asText());
+            c.post(path + "/settings", Json.object("model", "gpt-x", "reasoningEffort", "high"));
+            c.post(path + "/run", Json.object("prompt", "Original requirements"));
+            until(c, id, s -> codex.requests.size() == 1 && !s.path("sessions").get(0).path("running").asBoolean());
+            assertEquals("gpt-x", codex.requests.getFirst().model());
+            c.post(path + "/settings", Json.object("provider", "CLAUDE", "model", null, "reasoningEffort", null));
+            var prefs = c.get("/state").path("sessions").get(0).path("preferences");
+            assertEquals("CLAUDE", prefs.path("provider").asText()); assertTrue(prefs.path("model").isNull()); assertTrue(prefs.path("reasoningEffort").isNull());
+            assertEquals("CLAUDE", c.get("/models?session=" + id).path("provider").asText());
+            c.post(path + "/run", Json.object("prompt", "Review the result"));
+            until(c, id, s -> claude.requests.size() == 1 && !s.path("sessions").get(0).path("running").asBoolean());
+            var review = claude.requests.getFirst();
+            assertNull(review.conversationId()); assertTrue(review.prompt().contains("Original requirements")); assertTrue(review.prompt().contains("Codex says 1"));
+            c.post(path + "/settings", Json.object("provider", "CODEX", "model", null, "reasoningEffort", null));
+            c.post(path + "/run", Json.object("prompt", "Apply the review"));
+            until(c, id, s -> codex.requests.size() == 2 && !s.path("sessions").get(0).path("running").asBoolean());
+            var returning = codex.requests.getLast();
+            assertEquals("codex-thread", returning.conversationId()); assertTrue(returning.prompt().contains("Claude says 1")); assertFalse(returning.prompt().contains("Codex says 1"));
+            var messages = c.get("/state?session=" + id).path("conversation").path("messages");
+            assertEquals("CLAUDE", messages.get(3).path("provider").asText()); assertEquals("CODEX", messages.get(5).path("provider").asText());
+        }
+        try (var host = new HostService(data, codex); var c = new HostClient(host.descriptor())) {
+            String id = c.get("/state").path("sessions").get(0).path("id").asText();
+            var rejected = assertThrows(HostClient.ApiException.class, () -> c.post("/sessions/" + id + "/settings", Json.object("provider", "CLAUDE")));
+            assertTrue(rejected.getMessage().contains("Claude"));
+            assertEquals("CODEX", c.get("/state").path("sessions").get(0).path("preferences").path("provider").asText(), "A rejected switch leaves the stored executor untouched");
         }
     }
     private static List<String> prompts(JsonNode state) {

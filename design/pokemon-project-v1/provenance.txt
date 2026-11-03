@@ -1,0 +1,3 @@
+Source: C:/git/PokemonFamily/public/arena/bulbasaur.png
+Retouched using built-in image_gen, transparent background.
+Prompt: Retouch the supplied existing Bulbasaur game asset for a desktop project icon. Preserve character, pose, facial expression, proportions and colors. Remove stray edge pixels and fringes, refine antialiased contour, gently clarify eyes and face and simplify noisy shading for readability at 22px. Modest contrast, no oversaturation or glow. Entire character and bulb visible, centered with transparent padding. No circle, badge, text or added objects.

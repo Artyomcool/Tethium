@@ -25,6 +25,13 @@ class CpuSamplerTest {
         owners=CpuSampler.attribute(samples,roots,Map.of("5:5",new CpuSampler.Assignment(b,true)),List.of());assertFalse(owners.containsKey(4L));assertFalse(owners.containsKey(5L));
         assertTrue(CpuSampler.attribute(List.of(rootA),List.of(new CpuSampler.Root(1,999,a)),Map.of(),List.of()).isEmpty());
     }
+    @Test void reusedParentPidDoesNotCaptureAnOlderOrphan(){
+        var parent=new CpuSampler.Sample(1,0,100,10,"worker");var orphan=new CpuSampler.Sample(2,1,50,10,"java test");
+        var owners=CpuSampler.attribute(List.of(parent,orphan),List.of(new CpuSampler.Root(1,100,new CpuSampler.Owner("s","p"))),Map.of(),List.of());assertFalse(owners.containsKey(2L));
+    }
+    @Test void ipv6GradleConnectionIsRecognized(){
+        assertEquals(List.of(new CpuSampler.Link(3,4)),CpuSampler.connections(" TCP [::1]:123 [::1]:456 ESTABLISHED 3\n TCP [::1]:456 [::1]:123 ESTABLISHED 4"));
+    }
     @Test void loopbackConnectionsRequireMatchingEndpoints(){
         var edges=CpuSampler.connections(" TCP 127.0.0.1:123 127.0.0.1:456 ESTABLISHED 3\n TCP 127.0.0.1:456 127.0.0.1:123 ESTABLISHED 4\n TCP 10.0.0.1:42 10.0.0.2:43 ESTABLISHED 8");assertEquals(List.of(new CpuSampler.Link(3,4)),edges);
     }

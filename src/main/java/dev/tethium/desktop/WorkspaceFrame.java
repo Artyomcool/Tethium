@@ -27,6 +27,7 @@ public final class WorkspaceFrame extends JFrame {
     private final QuotaPanel quota = new QuotaPanel(this::refreshQuota,this::resetQuota,this::showUsage);
     private final ChatTranscript transcript = new ChatTranscript();
     private final JScrollPane history = new JScrollPane(transcript);
+    private VirtualHistory pagedHistory;
     private final ChatNavigation chatNavigation = new ChatNavigation(transcript, history);
     private final JTextArea input = new PromptInput();
     private final ModelSelector model = new ModelSelector(this::saveSettings);
@@ -34,11 +35,11 @@ public final class WorkspaceFrame extends JFrame {
     private final JButton send = Theme.button("Отправить", "Enter — отправить; если есть очередь — дополнить последнее сообщение", this::send);
     private final JButton sendOptions = Theme.button("", "Способы отправки · Alt+Enter — отдельное сообщение", this::sendMenu);
     private final JButton stop = Theme.button("Стоп", "Остановить текущий запуск; сохранить очередь на паузе", this::stop);
-    private final JButton interrupt = Theme.button("Сейчас", "Прервать работу и выполнить это сообщение сейчас · Shift+Enter. Очередь сохранится на паузе", this::interrupt);
+    private final JButton interrupt = Theme.button("Сейчас", "Прервать работу и выполнить это сообщение сейчас · Shift+Enter. Очередь продолжится; ручная пауза сохранится", this::interrupt);
     private final AttachmentStrip imageStrip = new AttachmentStrip(this::openArtifact,this::removeImage);
-    private final JButton results = Theme.button("Результаты", "Изображения и HTML от агента", () -> showPreview(!this.previewOpen));
+    private final JButton results = Theme.button("Результаты", "Изображения и HTML от агента", () -> {if(this.previewOpen)closePreview();else showPreview(true);});
     private final JPanel requests = new JPanel();
-    private final RunStatusPanel runStatus = new RunStatusPanel(this::resumeQueue, this::removeQueued, this::moveQueued, this::takeQueued, this::groupQueued);
+    private final RunStatusPanel runStatus = new RunStatusPanel(this::pauseQueue, this::resumeQueue, this::removeQueued, this::moveQueued, this::takeQueued, this::groupQueued);
     private final JPanel chat = new JPanel(new BorderLayout());
     private final JPanel preview = new JPanel(new BorderLayout());
     private final ArtifactView viewer = new ArtifactView();
@@ -63,6 +64,10 @@ public final class WorkspaceFrame extends JFrame {
     private long catalogAttempt;
     private boolean catalogLoading;
     private final Map<String, JsonNode> sessions = new HashMap<>();
+    private final Map<String,JsonNode> documents=new LinkedHashMap<>();
+    private String selectedFile,initialDocument,documentSignature="",pinnedSignature="";
+    private final JButton pinPreview=Theme.iconButton("attachment","Закрепить этот файл у сессии",this::togglePinnedPreview);
+    private final JButton closePreview=Theme.iconButton("close","Закрыть просмотр",this::closePreview);
     private final Map<String,Long> acknowledged = new HashMap<>();
     private final Map<String, JsonNode> projects = new LinkedHashMap<>();
     private volatile String selected;
@@ -75,15 +80,20 @@ public final class WorkspaceFrame extends JFrame {
     private JsonNode pendingHandoff;
     private boolean externalUpdate;
     private final Map<String,JsonNode> sessionViews=new LinkedHashMap<>();
+    private final Set<String> collapsedProjects=new HashSet<>();
     private String restoreViewFor;private boolean switchingView;
     private void rememberPreview(){
         if(selected==null||switchingView||Objects.equals(restoreViewFor,selected))return;
         int divider=previewOpen&&fullScreenPreview==null?content.getDividerLocation():previewDivider;
         sessionViews.put(selected,Json.object("open",previewOpen,"divider",divider,"path",artifacts.getSelectedItem() instanceof Artifact a?a.path.toString():"","title",artifacts.getSelectedItem() instanceof Artifact a?a.title:""));
+        persistViews();
+    }
+    private void persistViews(){
         var copy=Json.MAPPER.valueToTree(sessionViews);io.submit(()->{try{Path file=dev.tethium.host.AppPaths.data().resolve("session-views.json");Files.createDirectories(file.getParent());Path temp=Files.createTempFile(file.getParent(),"views-",".tmp");try{Json.MAPPER.writeValue(temp.toFile(),copy);Files.move(temp,file,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}finally{Files.deleteIfExists(temp);}}catch(Exception ignored){}});
     }
     private void restorePreview(){
-        if(!Objects.equals(restoreViewFor,selected))return;restoreViewFor=null;var saved=sessionViews.get(selected);if(saved==null)return;
+        if(!Objects.equals(restoreViewFor,selected))return;restoreViewFor=null;var saved=sessionViews.get(selected);
+        String pin=selected==null?"":sessions.get(selected).path("pinnedFile").asText("");if(!pin.isBlank())saved=Json.object("open",true,"divider",saved==null?-1:saved.path("divider").asInt(-1),"path",pin,"title",Path.of(pin).getFileName().toString());if(saved==null)return;
         previewDivider=saved.path("divider").asInt(-1);String path=saved.path("path").asText();
         if(!path.isBlank()){applying=true;Artifact chosen=null;for(int i=0;i<artifacts.getItemCount();i++)if(artifacts.getItemAt(i).path.toString().equals(path))chosen=artifacts.getItemAt(i);if(chosen==null){chosen=new Artifact(saved.path("title").asText(Path.of(path).getFileName().toString()),Path.of(path));artifacts.addItem(chosen);}artifacts.setSelectedItem(chosen);applying=false;}
         showPreview(saved.path("open").asBoolean());
@@ -95,7 +105,11 @@ public final class WorkspaceFrame extends JFrame {
     private JsonNode pendingTake;
     private final Runnable onClose;
     private final javax.swing.Timer draftTimer;
-    private record Node(String id, String title, boolean project, boolean running, String status, String path, String attention) { public String toString() { return title; } }
+    private record Node(String id, String title, boolean project, boolean running, String status, String path, String attention,boolean file,int pausedQueued) {
+        Node(String id,String title,boolean project,boolean running,String status,String path,String attention){this(id,title,project,running,status,path,attention,false,0);}
+        Node(String id,String title,boolean project,boolean running,String status,String path,String attention,boolean file){this(id,title,project,running,status,path,attention,file,0);}
+        public String toString() { return title; }
+    }
     private record Artifact(String title, Path path) { public String toString() { return title; } }
 
     public WorkspaceFrame(HostClient host, Runnable onClose) {
@@ -106,46 +120,109 @@ public final class WorkspaceFrame extends JFrame {
         setIconImages(AppIcon.images());
         this.initialSelection = initialSelection;
         try{Path saved=dev.tethium.host.AppPaths.data().resolve("session-views.json");if(Files.isRegularFile(saved))Json.MAPPER.readTree(saved.toFile()).properties().forEach(e->sessionViews.put(e.getKey(),e.getValue()));}catch(Exception ignored){}
+        restoreProjectExpansion();
+        if(initialSelection==null)initialDocument=sessionViews.getOrDefault("$document",Json.MAPPER.nullNode()).asText(null);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE); setMinimumSize(new Dimension(920, 600)); setSize(1280, 860); setLocationRelativeTo(null);
         draftTimer = new javax.swing.Timer(600, e -> saveDraft()); draftTimer.setRepeats(false);
-        build();
+        build();pagedHistory=new VirtualHistory(host,transcript,history,chatNavigation);transcript.setText(page("<p class='muted'>Загружаем проекты и сессии…</p>"));
         addWindowListener(new WindowAdapter() { @Override public void windowClosing(WindowEvent e) { closeWindow(); } });
         poller.scheduleWithFixedDelay(this::poll, 0, 500, TimeUnit.MILLISECONDS);
     }
-    private JsonNode resourceUsage=Json.object();
+    private JsonNode resourceUsage=Json.object(),resourceControl=Json.object(),machineUsage=Json.object();
+    private final ProjectWidget projectWidgets=new ProjectWidget();
     private JTree tree() {
-        var tree = new JTree(new DefaultMutableTreeNode("root")) { @Override public boolean getScrollableTracksViewportWidth() { return true; } };
-        tree.setRootVisible(false); tree.setShowsRootHandles(true); tree.setRowHeight(32);
-        tree.setBorder(new EmptyBorder(Theme.GAP, Theme.GAP, Theme.GAP, Theme.GAP)); tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+        var tree = new JTree(new DefaultMutableTreeNode("root")) {
+            @Override public boolean getScrollableTracksViewportWidth() { return true; }
+            @Override protected void paintComponent(Graphics g){super.paintComponent(g);paintTreeIndicators(this,g);}
+            @Override public String getToolTipText(MouseEvent event){String resource=resourceTooltip(this,event);return resource==null?super.getToolTipText(event):resource;}
+        };
+        tree.setRootVisible(false); tree.setShowsRootHandles(true); tree.setRowHeight(28);
+        tree.setExpandsSelectedPaths(false);
+        tree.addComponentListener(new ComponentAdapter(){int lastWidth;@Override public void componentResized(ComponentEvent event){if(lastWidth!=tree.getWidth()){lastWidth=tree.getWidth();tree.treeDidChange();}}});
+        tree.setBorder(new EmptyBorder(Theme.UNIT, Theme.UNIT, Theme.UNIT, Theme.UNIT)); tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         tree.setCellRenderer(new DefaultTreeCellRenderer() {
             private final ResourceBars rowPanel = new ResourceBars();
-            private final JLabel dot = new JLabel("●");
             @Override public Component getTreeCellRendererComponent(JTree t, Object value, boolean selected, boolean expanded, boolean leaf, int row, boolean focus) {
                 var label = (JLabel) super.getTreeCellRendererComponent(t, value, selected, expanded, leaf, row, focus);
                 label.setIcon(null); setBackgroundNonSelectionColor(Theme.SIDEBAR); setBackgroundSelectionColor(Theme.SELECTED); setBorderSelectionColor(Theme.SELECTED);
                 var user = ((DefaultMutableTreeNode) value).getUserObject();
                 if (user instanceof Node n) {
-                    label.setText(n.title); label.setFont(t.getFont().deriveFont(n.project ? Font.BOLD : Font.PLAIN));
-                    label.setIcon(IdentityIcons.of(n.project, n.title, n.path)); label.setIconTextGap(Theme.GAP);
+                    label.setText(n.title); label.setFont(n.project?projectFont(t):t.getFont().deriveFont(Font.PLAIN));
+                    label.setIcon(null);
                     label.setForeground(n.running ? Theme.ACCENT : n.status.equals("FAILED") ? Theme.RED : Theme.TEXT);
-                    label.setToolTipText(n.path); label.setBorder(new EmptyBorder(0, Theme.UNIT, 0, Theme.UNIT));
+                    label.setToolTipText(n.path); label.setBorder(new EmptyBorder(0, (n.project?Theme.UNIT/2:Theme.UNIT)+22+Theme.GAP, 0, Theme.UNIT));
                     rowPanel.removeAll(); rowPanel.setBackground(selected?Theme.SELECTED:Theme.SIDEBAR); rowPanel.add(label);
-                    dot.setName("session.attention"); dot.setForeground(n.attention.equals("question")?Theme.AMBER:Theme.ACCENT);
-                    dot.setVisible(!n.attention.isEmpty()); dot.setBorder(new EmptyBorder(0,0,0,Theme.GAP));
-                    dot.setToolTipText(n.attention.equals("question")?"Ждёт ответа":"Работа завершена · новый результат");
-                    rowPanel.add(dot,BorderLayout.EAST); rowPanel.setToolTipText(n.path+(n.attention.isEmpty()?"":" · "+dot.getToolTipText()));
-                    String pid=n.project?n.id:sessions.getOrDefault(n.id,Json.object()).path("projectId").asText();
-                    rowPanel.share=ResourceBars.share(resourceUsage,n.id,n.project,pid);
-                    String hint=n.path+" · "+rowPanel.share.tooltip()+" · с последнего сброса; CPU измеряется с момента включения учёта";
+                    rowPanel.add(Box.createHorizontalStrut((n.pausedQueued>0?Theme.GUTTER*2:n.project?Theme.GAP:Theme.GUTTER)+(n.project&&expanded&&projectWidgets.available(projects.get(n.id),"right")?rightWidgetWidth(projects.get(n.id))+2+(n.pausedQueued==0&&!n.attention.isEmpty()?12:0):0)),BorderLayout.EAST);
+                    String hint=n.path+(n.attention.isEmpty()?"":n.attention.equals("question")?" · Ждёт ответа":n.attention.equals("manual")?" · Отмечено: требует внимания":" · Работа завершена · новый результат");
+                    if(n.pausedQueued>0)hint+=" · Очередь на паузе: "+n.pausedQueued;
+                    if(n.project){var widget=projects.get(n.id);if(widget!=null){var w=widget.path("widget");for(String slot:List.of("bottom","right")){var v=w.path(slot);if(v.isObject())hint+=" · "+v.path("description").asText()+" · "+v.path("error").asText();}}}
                     rowPanel.setToolTipText(hint);label.setToolTipText(hint);
                     rowPanel.setPreferredSize(null); var size=rowPanel.getPreferredSize();
-                    if(t.getWidth()>0)size.width=Math.max(48,t.getWidth()-((DefaultMutableTreeNode)value).getLevel()*20-Theme.GUTTER);
+                    if(t.getWidth()>0)size.width=Math.max(48,t.getWidth()-((DefaultMutableTreeNode)value).getLevel()*treeIndent(t)-t.getInsets().left-t.getInsets().right);
+                    boolean below=n.project&&expanded&&projectWidgets.available(projects.get(n.id),"bottom");
+                    rowPanel.setBorder(new EmptyBorder(0,0,below?12:ResourceBars.HEIGHT+1,0));size.height=28;
                     rowPanel.setPreferredSize(size);return rowPanel;
                 }
                 return label;
             }
         });
+        tree.addTreeExpansionListener(new TreeExpansionListener(){
+            public void treeExpanded(TreeExpansionEvent e){rememberProjectExpansion(tree,e.getPath(),false);}
+            public void treeCollapsed(TreeExpansionEvent e){rememberProjectExpansion(tree,e.getPath(),true);}
+        });
         ToolTipManager.sharedInstance().registerComponent(tree); return tree;
+    }
+    private static int treeIndent(JTree tree){return tree.getUI() instanceof javax.swing.plaf.basic.BasicTreeUI ui?ui.getLeftChildIndent()+ui.getRightChildIndent():20;}
+    private static Font projectFont(JTree tree){return tree.getFont().deriveFont(Font.BOLD,Math.max(11f,tree.getFont().getSize2D()-1));}
+    private int rightWidgetWidth(JsonNode project){return Math.min(96,projectWidgets.preferredWidth(project,"right",26));}
+    private static int resourceLeft(JTree tree){return tree.getInsets().left+2*treeIndent(tree)+Theme.UNIT+22+Theme.GAP;}
+    private String resourceTooltip(JTree tree,MouseEvent event){
+        int row=tree.getClosestRowForLocation(event.getX(),event.getY());if(row<0)return null;
+        var bounds=tree.getRowBounds(row);if(bounds==null||event.getY()<bounds.y||event.getY()>=bounds.y+bounds.height)return null;
+        var path=tree.getPathForRow(row);var value=((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject();
+        if(!(value instanceof Node n)||n.file||n.project&&tree.isExpanded(path))return null;
+        if(!ResourceBars.share(resourceUsage,machineUsage,resourceControl,n.id,n.project).hasUsage())return null;
+        if(event.getX()<resourceLeft(tree)||event.getX()>=tree.getWidth()-tree.getInsets().right-Theme.GAP)return null;
+        int lane=ResourceBars.lane(event.getY(),bounds.y+bounds.height);
+        return lane<0?null:ResourceBars.tooltip(lane,resourceUsage,machineUsage,resourceControl,n.id,n.project);
+    }
+    private void paintTreeIndicators(JTree tree,Graphics g){
+        // Paint in tree coordinates: neither nesting nor title length changes the scale or dot position.
+        int x=resourceLeft(tree);
+        int right=tree.getWidth()-tree.getInsets().right-Theme.GAP;
+        Rectangle clip=g.getClipBounds();if(clip==null)clip=new Rectangle(0,0,tree.getWidth(),tree.getHeight());
+        for(int row=Math.max(0,tree.getClosestRowForLocation(0,clip.y));row<tree.getRowCount();row++){
+            Rectangle bounds=tree.getRowBounds(row);if(bounds==null||bounds.y>clip.y+clip.height)break;
+            var path=tree.getPathForRow(row);var value=((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject();
+            if(!(value instanceof Node n))continue;var icon=n.file?Theme.icon("attachment"):IdentityIcons.of(n.project,n.title,n.path);icon.paintIcon(tree,g,bounds.x+(n.project?Theme.UNIT/2:Theme.UNIT)+(22-icon.getIconWidth())/2,bounds.y+(bounds.height-icon.getIconHeight())/2);if(n.file)continue;
+            if(!n.project||!tree.isExpanded(path))ResourceBars.paint(g,x,bounds.y+bounds.height,Math.max(0,right-x),ResourceBars.share(resourceUsage,machineUsage,resourceControl,n.id,n.project));
+            if(n.project&&tree.isExpanded(path)&&projectWidgets.available(projects.get(n.id))){
+                var project=projects.get(n.id);int start=bounds.x+Theme.UNIT/2+22+Theme.GAP,edge=right-(n.pausedQueued>0?28:!n.attention.isEmpty()?12:0);
+                if(projectWidgets.available(project,"right")){
+                    int textWidth=tree.getFontMetrics(projectFont(tree)).stringWidth(n.title),widgetWidth=rightWidgetWidth(project);
+                    int contentWidth=Math.max(textWidth,projectWidgets.preferredWidth(project,"bottom",13));
+                    int gap=widgetWidth>44?8:2;
+                    int widgetX=Math.max(start,Math.min(edge-widgetWidth,start+contentWidth+gap));
+                    projectWidgets.paint(g,project,"right",widgetX,bounds.y+1,Math.min(widgetWidth,edge-widgetX),26);edge=widgetX-gap;
+                }
+                projectWidgets.paint(g,project,"bottom",start,bounds.y+14,Math.max(0,edge-start),13);
+            }
+            if(!n.attention.isEmpty()){g.setColor(!n.attention.equals("finished")?Theme.AMBER:Theme.ACCENT);g.fillOval(right-7,bounds.y+(bounds.height-7)/2-3,7,7);}
+            if(n.pausedQueued>0){int y=bounds.y+(bounds.height-8)/2-3;g.setColor(Theme.AMBER);g.fillRect(right-22,y,2,8);g.fillRect(right-17,y,2,8);}
+        }
+    }
+    private String expansionKey(JTree tree,String project){return (tree==inactive?"inactive:":"active:")+project;}
+    private void rememberProjectExpansion(JTree tree,TreePath path,boolean collapsed){
+        if(changingTree||disposed)return;
+        if(((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject() instanceof Node n&&n.project){
+            String key=expansionKey(tree,n.id);boolean changed=collapsed?collapsedProjects.add(key):collapsedProjects.remove(key);
+            if(changed){sessionViews.put("$collapsedProjects",Json.MAPPER.valueToTree(collapsedProjects));persistViews();}
+        }
+        tree.repaint();
+    }
+    private void restoreProjectExpansion(){
+        var saved=sessionViews.get("$collapsedProjects");if(saved==null||!saved.isArray())return;
+        collapsedProjects.clear();saved.forEach(value->collapsedProjects.add(value.asText()));
     }
     private void build() {
         var sidebar = new JPanel(new BorderLayout()); sidebar.setBackground(Theme.SIDEBAR); sidebar.setMinimumSize(new Dimension(210, 100));
@@ -153,7 +230,7 @@ public final class WorkspaceFrame extends JFrame {
         var actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, Theme.UNIT, 0)); actions.setOpaque(false);
         var addProject = Theme.button("Проект", "Добавить каталог проекта", this::addProject); addProject.setIcon(Theme.icon("project-add")); Theme.toolbar(addProject); addProject.setVisible(!host.remote()); actions.add(addProject);
         var addSession = Theme.button("Сессия", "Новая сессия в выбранном проекте", this::newSession); addSession.setIcon(Theme.icon("session-new")); Theme.toolbar(addSession); actions.add(addSession);
-        var phone = Theme.iconButton("phone", "Подключить телефон по Wi-Fi", () -> MobileConnectDialog.open(this)); phone.getAccessibleContext().setAccessibleName("Подключить телефон"); phone.setVisible(!host.remote()); actions.add(phone); brand.add(actions, BorderLayout.WEST);
+        var phone = Theme.iconButton("phone", "Подключить телефон по Wi-Fi", () -> MobileConnectDialog.open(this)); phone.getAccessibleContext().setAccessibleName("Подключить телефон"); phone.setVisible(!host.remote()); actions.add(phone);actions.add(Theme.iconButton("more","Настройки",this::workspaceSettings)); brand.add(actions, BorderLayout.WEST);
         var sidebarHeader = new JPanel(new BorderLayout()); sidebarHeader.setOpaque(false); sidebarHeader.add(brand, BorderLayout.NORTH); sidebarHeader.add(quota); sidebar.add(sidebarHeader, BorderLayout.NORTH);
         var scroll = new JScrollPane(active); scroll.setBorder(null); scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER); sidebar.add(scroll);
         var archive = new JPanel(new BorderLayout()); archive.setBackground(Theme.SIDEBAR); archive.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, Theme.BORDER));
@@ -163,14 +240,14 @@ public final class WorkspaceFrame extends JFrame {
             tree.addTreeSelectionListener(e -> {
                 if (changingTree) return;
                 var node = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent(); if (node == null || !(node.getUserObject() instanceof Node n)) return;
-                if (n.project) selectedProject = n.id; else selectSession(n.id);
+                if (n.project) selectedProject = n.id; else if(n.file)selectDocument(n.id);else selectSession(n.id);
             });
             tree.addMouseListener(new MouseAdapter() {
                 @Override public void mousePressed(MouseEvent e) { popup(e, tree); }
                 @Override public void mouseReleased(MouseEvent e) { popup(e, tree); }
             });
         }
-        var header = new JPanel(new BorderLayout(Theme.INSET, 0)); header.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BORDER), new EmptyBorder(Theme.GAP, Theme.GUTTER, Theme.GAP, Theme.GUTTER)));
+        var header = new JPanel(new BorderLayout(Theme.INSET, 0)); header.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BORDER), new EmptyBorder(Theme.UNIT, Theme.GUTTER, Theme.UNIT, Theme.GUTTER)));
         heading.setFont(heading.getFont().deriveFont(Font.BOLD, 14f));
         var titleGroup = new JPanel(new BorderLayout(0, Theme.UNIT)); titleGroup.add(heading); titleGroup.add(status, BorderLayout.SOUTH); header.add(titleGroup);
         var controls = new JPanel(new FlowLayout(FlowLayout.RIGHT, Theme.GAP, 0));
@@ -184,7 +261,7 @@ public final class WorkspaceFrame extends JFrame {
         quote.setName("chat.quote"); quote.setVisible(false); controls.add(quote,0);
         transcript.addCaretListener(e -> quote.setVisible(transcript.getSelectedText()!=null&&!transcript.getSelectedText().isBlank()));
         var quoteMenu = new JPopupMenu(); quoteMenu.add(new AbstractAction("Цитировать выделение") { public void actionPerformed(ActionEvent e){quoteSelection();} });
-        quoteMenu.add(new AbstractAction("Копировать") { public void actionPerformed(ActionEvent e){transcript.copy();} }); transcript.setComponentPopupMenu(quoteMenu);
+        quoteMenu.add(new AbstractAction("Копировать") { public void actionPerformed(ActionEvent e){transcript.copy();} }); transcript.imageCopyMenu(quoteMenu,this::copyChatImage);
         transcript.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_Q,InputEvent.CTRL_DOWN_MASK|InputEvent.SHIFT_DOWN_MASK),"quote");
         transcript.getActionMap().put("quote",new AbstractAction(){public void actionPerformed(ActionEvent e){quoteSelection();}});
         history.setName("chat.history"); history.setBorder(null); history.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
@@ -194,9 +271,9 @@ public final class WorkspaceFrame extends JFrame {
         chat.setMinimumSize(new Dimension(340, 0));
         var bottom = new JPanel(new BorderLayout()); requests.setLayout(new BoxLayout(requests, BoxLayout.Y_AXIS));
         var feedback = new JPanel(new BorderLayout()); feedback.add(requests, BorderLayout.NORTH); feedback.add(runStatus); bottom.add(feedback, BorderLayout.NORTH);
-        var composerWrap = new JPanel(new BorderLayout()); composerWrap.setBorder(new EmptyBorder(Theme.GAP, Theme.GUTTER, Theme.INSET, Theme.GUTTER));
+        var composerWrap = new JPanel(new BorderLayout()); composerWrap.setBorder(new EmptyBorder(Theme.UNIT, Theme.GUTTER, Theme.GAP, Theme.GUTTER));
         var composer = new ComposerPanel(input); composerWrap.add(composer);
-        input.setLineWrap(true); input.setWrapStyleWord(true); input.setFont(input.getFont().deriveFont(14f)); input.setBorder(new EmptyBorder(Theme.UNIT, Theme.UNIT, Theme.UNIT, Theme.UNIT)); input.putClientProperty("JTextArea.placeholderText", "Сообщение Codex…");
+        input.setLineWrap(true); input.setWrapStyleWord(true); input.setFont(input.getFont().deriveFont(14f)); input.setBorder(new EmptyBorder(Theme.UNIT, Theme.UNIT, Theme.UNIT, Theme.UNIT)); input.putClientProperty("JTextArea.placeholderText", "Сообщение агенту…");
         input.setToolTipText("Enter — отправить или дополнить очередь; Shift+Enter — прервать и выполнить сейчас; Ctrl+Enter — новая строка; Alt+Enter — отдельное сообщение в очередь.");
         input.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "send");
         input.addFocusListener(new FocusAdapter() { @Override public void focusGained(FocusEvent e) { viewer.releaseFocus(); } });
@@ -247,12 +324,12 @@ public final class WorkspaceFrame extends JFrame {
                 return label;
             }
         });
-        var previewBar = new JPanel(new BorderLayout(Theme.GAP, 0)); previewBar.setBorder(new EmptyBorder(Theme.GAP, Theme.GAP, Theme.GAP, Theme.GAP)); previewBar.add(artifacts);
+        var previewBar = new JPanel(new BorderLayout(Theme.GAP, 0)); previewBar.setBorder(new EmptyBorder(Theme.UNIT, Theme.GAP, Theme.UNIT, Theme.GAP)); previewBar.add(artifacts);
         var pvActions = new JPanel(new FlowLayout(FlowLayout.RIGHT, Theme.UNIT, 0));
         fitPreview.setIcon(Theme.icon("preview-fit")); actualPreview.setIcon(Theme.icon("preview-actual-size")); fitPreview.setVisible(false); actualPreview.setVisible(false); pvActions.add(fitPreview); pvActions.add(actualPreview);
         expandPreview.setIcon(Theme.previewIcon(true)); Theme.toolbar(expandPreview); expandPreview.setName("artifact.fullscreen"); expandPreview.getAccessibleContext().setAccessibleName("На весь экран"); pvActions.add(expandPreview); getBuild.setVisible(host.remote());runBuild.setVisible(false);pvActions.add(getBuild);pvActions.add(runBuild);
         var reload = Theme.iconButton("refresh", "Обновить результат", viewer::reload);
-        pvActions.add(reload); pvActions.add(Theme.iconButton("close", "Закрыть просмотр", () -> showPreview(false))); previewBar.add(pvActions, BorderLayout.EAST);
+        pvActions.add(pinPreview);pvActions.add(reload); pvActions.add(closePreview); previewBar.add(pvActions, BorderLayout.EAST);
         preview.setMinimumSize(new Dimension(270, 0));
         preview.add(previewBar, BorderLayout.NORTH); preview.add(viewer);
         viewer.onExpand(this::enterFullScreen); viewer.onEscape(this::exitFullScreen);
@@ -271,20 +348,31 @@ public final class WorkspaceFrame extends JFrame {
         tree.setSelectionPath(path); var n = (Node) ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
         var menu = new JPopupMenu();
         var create = new JMenuItem("Новая сессия"); create.addActionListener(e -> newSession()); menu.add(create);
-        if (!n.project) {
+        if (!n.project&&!n.file) {
             var rename = new JMenuItem("Переименовать"); rename.addActionListener(e -> rename()); menu.add(rename);
             var state = new JMenuItem(sessions.get(n.id).path("active").asBoolean() ? "Деактивировать" : "Активировать"); state.addActionListener(e -> toggleActive()); menu.add(state);
+            var attention=new JCheckBoxMenuItem("Требует внимания",sessions.get(n.id).path("attention").path("manual").asBoolean());attention.addActionListener(e->toggleAttention(n.id));menu.add(attention);
+            var trash=new JMenuItem("Удалить сессию…");trash.addActionListener(e->trashSession(n.id));menu.add(trash);
         }
+        if(n.file){
+            var rename=new JMenuItem("Переименовать пункт…");rename.addActionListener(e->{String title=JOptionPane.showInputDialog(this,"Название",n.title);if(title!=null&&!title.isBlank())action(()->host.post("/files/"+n.id+"/rename",Json.object("title",title)));});menu.add(rename);
+            var remove=new JMenuItem("Открепить файл");remove.addActionListener(e->unpinDocument(n.id));menu.add(remove);menu.show(tree,event.getX(),event.getY());return;
+        }
+        if(!n.project&&!n.file){var pinSession=new JMenuItem("Закрепить файл справа…");pinSession.addActionListener(e->choosePinnedFile(false));menu.add(pinSession);}
+        if(n.project){var archive=new JMenuItem(projects.get(n.id).path("active").asBoolean(true)?"В неактивные весь проект":"Вернуть проект в активные");archive.addActionListener(e->action(()->host.post("/projects/"+n.id+"/active",Json.object("active",!projects.get(n.id).path("active").asBoolean(true)))));menu.add(archive);}
+        if(n.project){var pin=new JMenuItem("Закрепить файл в проекте…");pin.addActionListener(e->choosePinnedFile(true));menu.add(pin);}
         if(n.project&&!host.remote()){var settings=new JMenuItem("Настройки проекта и GitHub…");settings.addActionListener(e->ProjectDialog.open(this,host,projects.get(n.id),value->{}));menu.add(settings);}
+        var cpuItem=new JMenuItem("CPU: лимит и приоритет…");cpuItem.addActionListener(e->configureCpu(n.project?"project":"session",n.id,n.title));menu.add(cpuItem);
         var usageItem=new JMenuItem("Токены и история квоты…");usageItem.addActionListener(e->UsageDialog.open(this,host,projects,sessions,n.project?n.id:sessions.get(n.id).path("projectId").asText(),n.project?null:n.id));menu.add(usageItem);
         menu.show(tree, event.getX(), event.getY());
     }
     private void sessionMenu() {
+        if(selectedFile!=null){var doc=documents.get(selectedFile);if(doc==null)return;var menu=new JPopupMenu();var unpin=new JMenuItem("Открепить файл от проекта");String id=selectedFile;unpin.addActionListener(e->unpinDocument(id));menu.add(unpin);menu.show(heading,0,heading.getHeight());return;}
         var menu = new JPopupMenu();
         var accessInfo = new JMenuItem("Полный доступ"); accessInfo.setEnabled(false); menu.add(accessInfo); menu.addSeparator();
         for (var entry : List.<Map.Entry<String, Runnable>>of(Map.entry("Новая сессия", this::newSession), Map.entry("Переименовать", this::rename),
-                Map.entry("Активировать / деактивировать", this::toggleActive), Map.entry("Результаты агента", () -> showPreview(!previewOpen)),
-                Map.entry("Открыть изображение, HTML или Markdown…", this::chooseArtifact), Map.entry("Действия Codex…", this::showActivity))) {
+                Map.entry("Активировать / деактивировать", this::toggleActive), Map.entry("Требует внимания · переключить",()->toggleAttention(selected)), Map.entry("Удалить сессию…",()->trashSession(selected)), Map.entry("Результаты агента", () -> {if(previewOpen)closePreview();else showPreview(true);}),
+                Map.entry("Открыть изображение, HTML или Markdown…", this::chooseArtifact), Map.entry("Закрепить файл справа…",()->choosePinnedFile(false)), Map.entry("Периодическая задача…",this::configureSchedule), Map.entry("Действия агента…", this::showActivity))) {
             var item = new JMenuItem(entry.getKey()); item.addActionListener(e -> entry.getValue().run()); menu.add(item);
         }
         if(selected!=null){String id=selected;var a=sessions.get(id).path("autonomy");var autonomous=new JCheckBoxMenuItem("Работать автономно до завершения цели",Set.of("active","waiting").contains(a.path("state").asText()));autonomous.addActionListener(e->{if(!autonomous.isSelected()){action(()->host.post("/sessions/"+id+"/autonomy",Json.object("action","disable")));return;}String goal=a.path("goal").asText();if(goal.isBlank()||a.path("state").asText().equals("complete")){goal="";for(var m:conversation.path("messages"))if(m.path("role").asText().equals("user"))goal=m.path("text").asText();}var editor=new JTextArea(goal,6,52);editor.setLineWrap(true);editor.setWrapStyleWord(true);if(JOptionPane.showConfirmDialog(this,new JScrollPane(editor),"Цель автономной работы",JOptionPane.OK_CANCEL_OPTION,JOptionPane.PLAIN_MESSAGE)==JOptionPane.OK_OPTION&&!editor.getText().isBlank())action(()->host.post("/sessions/"+id+"/autonomy",Json.object("action","start","goal",editor.getText(),"resumeQueue",true)));});menu.add(autonomous);}
@@ -294,29 +382,77 @@ public final class WorkspaceFrame extends JFrame {
                 action(() -> { host.post("/shutdown", Json.object()); SwingUtilities.invokeLater(this::closeWindow); });
         }); if(!host.remote())menu.add(quit);else{var reconnect=new JMenuItem("Подключить другой ноутбук…");reconnect.addActionListener(e->{saveDraft();RemoteMain.restartPairing(this);});menu.add(reconnect);} menu.show(heading, Math.max(0, heading.getWidth() - 100), heading.getHeight());
     }
+    private void workspaceSettings(){
+        var menu=new JPopupMenu();var cpu=new JMenuItem("CPU: общий лимит и приоритет…");cpu.addActionListener(e->configureCpu("global","","Все исполнения"));menu.add(cpu);var trash=new JMenuItem("Корзина сессий…");trash.addActionListener(e->TrashDialog.open(this,host,()->poller.execute(this::poll)));menu.add(trash);menu.show(active,0,0);
+    }
+    private void configureCpu(String scope,String id,String title){
+        action(()->{var state=host.get("/resources");var row=scope.equals("global")?state.path("global"):state.path(scope+"s").path(id);SwingUtilities.invokeLater(()->{var settings=CpuSettingsDialog.show(this,scope,title,state,row);if(settings!=null)action(()->host.post("/resources",Json.object("scope",scope,"target",id,"settings",settings)));});});
+    }
+    private void configureSchedule(){
+        if(selected==null)return;String id=selected;var session=sessions.get(id);if(session==null)return;
+        var command=ScheduleDialog.show(this,session.path("schedule"));if(command!=null)action(()->host.post("/sessions/"+id+"/schedule",command));
+    }
+    private void trashSession(String id){
+        var session=sessions.get(id);if(session==null)return;
+        if(JOptionPane.showConfirmDialog(this,"Удалить «"+session.path("title").asText()+"» из списка?\nИстория сохранится в настройках → корзина. Текущая работа продолжится.","Удаление сессии",JOptionPane.YES_NO_OPTION)!=JOptionPane.YES_OPTION)return;
+        action(()->host.post("/sessions/"+id+"/trash",Json.object("confirmed",true)));
+    }
+    private void choosePinnedFile(boolean projectFile){
+        if(selectedProject==null||!projectFile&&selected==null)return;String pid=selectedProject,id=selected;String path;
+        if(host.remote())path=JOptionPane.showInputDialog(this,"Путь к файлу на ноутбуке, относительно каталога проекта","");
+        else{var picker=new JFileChooser(projects.get(pid).path("root").asText());picker.setDialogTitle(projectFile?"Закрепить файл в проекте":"Файл, открываемый справа у сессии");picker.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Markdown, HTML, изображения","md","markdown","html","htm","svg","png","jpg","jpeg","gif","webp"));if(picker.showOpenDialog(this)!=JFileChooser.APPROVE_OPTION)return;path=picker.getSelectedFile().getAbsolutePath();}
+        if(path==null||path.isBlank())return;String file=path;
+        action(()->{if(projectFile){var doc=host.post("/projects/"+pid+"/files",Json.object("path",file));SwingUtilities.invokeLater(()->{documents.put(doc.path("id").asText(),doc);selectDocument(doc.path("id").asText());});}else host.post("/sessions/"+id+"/pinned-file",Json.object("path",file));});
+    }
+    private void togglePinnedPreview(){
+        if(selected==null||!(artifacts.getSelectedItem() instanceof Artifact a))return;String id=selected;boolean pinned=a.path.toString().equals(sessions.get(id).path("pinnedFile").asText());if(pinned&&!confirmUnpin())return;action(()->host.post("/sessions/"+id+"/pinned-file",Json.object("path",pinned?"":a.path.toString())));
+    }
+    private void updatePinButton(){
+        boolean pinned=selected!=null&&sessions.containsKey(selected)&&artifacts.getSelectedItem() instanceof Artifact a&&a.path.toString().equals(sessions.get(selected).path("pinnedFile").asText());
+        pinPreview.setSelected(pinned);pinPreview.setEnabled(selected!=null&&artifacts.getSelectedItem()!=null);pinPreview.setForeground(pinned?Theme.ACCENT:Theme.MUTED);pinPreview.setToolTipText(pinned?"Открепить файл от сессии":"Всегда открывать этот файл справа у сессии");
+    }
+    public void selectDocument(String id){
+        if(!documents.containsKey(id))return;saveDraft();rememberPreview();exitFullScreen();selected=null;selectedFile=id;restoreViewFor=null;documentSignature="";input.setEnabled(false);sessionViews.put("$document",Json.MAPPER.getNodeFactory().textNode(id));persistViews();renderDocument();selectTreeEntry(id);treeSignature="";poller.execute(this::poll);
+    }
+    private void renderDocument(){
+        var document=documents.get(selectedFile);if(document==null)return;selectedProject=document.path("projectId").asText();
+        heading.setText(document.path("title").asText());status.setText(document.path("path").asText());status.setToolTipText(status.getText());setTitle(projects.get(selectedProject).path("title").asText()+": "+heading.getText());
+        model.setVisible(false);results.setVisible(false);pinPreview.setVisible(false);closePreview.setVisible(true);content.setLeftComponent(null);
+        String signature=document.toString();if(!signature.equals(documentSignature)){documentSignature=signature;applying=true;artifacts.removeAllItems();artifacts.addItem(new Artifact(document.path("title").asText(),Path.of(document.path("path").asText())));applying=false;previewOpen=false;showPreview(true);}content.setDividerSize(0);content.setDividerLocation(0);
+    }
     public void selectSession(String id) {
         if (Objects.equals(selected, id)) return;
         var session = sessions.get(id); if(session==null)return;
-        saveDraft();rememberPreview();switchingView=true; selected = id;restoreViewFor=id;
+        saveDraft();rememberPreview();exitFullScreen();switchingView=true;selectedFile=null;initialDocument=null;sessionViews.remove("$document");persistViews();content.setLeftComponent(chat);model.setVisible(true);results.setVisible(true);pinPreview.setVisible(true);closePreview.setVisible(true);selected = id;restoreViewFor=id;pinnedSignature="";
         selectedProject = session.path("projectId").asText(); chatSignature = ""; requestSignature = ""; artifactSignature = ""; conversation = Json.object();
-        scrollToLatest = true; chatRender++; chatNavigation.reset();
+        scrollToLatest = true; chatRender++; chatNavigation.reset();pagedHistory.reset(id);
         applying = true;
         input.setText(drafts.getOrDefault(id, session.path("preferences").path("draft").asText()));
         draftImages.computeIfAbsent(id,key->strings(session.path("preferences").path("draftImages"))); refreshImages();
         var preferences = settingsDrafts.getOrDefault(id, session.path("preferences"));
-        model.selection(preferences.path("model").asText(null), preferences.path("reasoningEffort").asText(null));
+        model.selection(preferences.path("provider").asText(null), preferences.path("model").asText(null), preferences.path("reasoningEffort").asText(null));
         model.loading(); catalogSession = null; catalogAttempt = 0;
         applying = false; renderHeader(session); requests.removeAll(); transcript.setText(page("<p class='muted'>Загружаем историю…</p>"));
         showPreview(false); viewer.clear(); applying = true; artifacts.removeAllItems(); applying = false;switchingView=false;
         runStatus.update(session, conversation);
-        input.requestFocusInWindow(); poller.execute(this::poll);
+        selectTreeEntry(id);treeSignature="";input.requestFocusInWindow(); poller.execute(this::poll);
+    }
+    private void selectTreeEntry(String id){
+        boolean previous=changingTree;changingTree=true;
+        try{for(var tree:List.of(active,inactive)){var nodes=((DefaultMutableTreeNode)tree.getModel().getRoot()).depthFirstEnumeration();while(nodes.hasMoreElements()){var node=nodes.nextElement();if(node instanceof DefaultMutableTreeNode value&&value.getUserObject() instanceof Node n&&n.id.equals(id)){tree.setSelectionPath(new TreePath(value.getPath()));return;}}}}finally{changingTree=previous;}
+    }
+    private String executorTitle(JsonNode session) {
+        var draft = settingsDrafts.get(session.path("id").asText());
+        String provider = (draft != null ? draft : session.path("preferences")).path("provider").asText("");
+        return provider.equalsIgnoreCase("CLAUDE") ? "Claude" : "Codex";
     }
     private void renderHeader(JsonNode session) {
         boolean enabled = session.path("active").asBoolean(); boolean busy = session.path("running").asBoolean();
+        String executor = executorTitle(session); input.putClientProperty("JTextArea.placeholderText", "Сообщение " + executor + "…");
         heading.setText(session.path("title").asText()); heading.setToolTipText(session.path("directory").asText());
         var project = projects.get(session.path("projectId").asText());
         setTitle((project == null ? "Tethium" : project.path("title").asText("Tethium")) + ": " + session.path("title").asText());
-        status.setText(busy ? session.path("phase").asText("Работает") : !enabled ? "Неактивна" : session.path("status").asText().equals("FAILED") ? "Ошибка" : "Codex");
+        status.setText(busy ? session.path("phase").asText("Работает") : !enabled ? "Неактивна" : session.path("status").asText().equals("FAILED") ? "Ошибка" : executor);
         int queued = session.path("queued").asInt(); if (queued > 0) status.setText(status.getText() + " · очередь " + queued);
         status.setToolTipText(status.getText());
         boolean paused = session.path("queuePaused").asBoolean();
@@ -324,14 +460,19 @@ public final class WorkspaceFrame extends JFrame {
         else if(session.path("quotaWait").path("waiting").asBoolean()){status.setText(session.path("quotaWait").path("autoResume").asBoolean()?"Ждём квоту · продолжим автоматически":"Нет квоты · автопродолжение выключено");status.setForeground(Theme.AMBER);}else status.setForeground(Theme.MUTED);
         var autonomy=session.path("autonomy");String autonomyState=autonomy.path("state").asText();
         if(autonomyState.equals("active")){status.setText(status.getText()+" · автономно");status.setToolTipText(autonomy.path("goal").asText());}else if(!busy&&autonomyState.equals("waiting")){status.setText("Автономно · ждём результат подсессии");}else if(!busy&&autonomyState.equals("blocked")){status.setText("Автономная работа ждёт вашего участия");status.setForeground(Theme.AMBER);status.setToolTipText(autonomy.path("reason").asText());}
+        var timer=session.path("schedule");
+        if(timer.path("state").asText().equals("active")){
+            if(!busy&&!paused&&!session.path("quotaWait").path("waiting").asBoolean())status.setText("По расписанию · "+ScheduleDialog.nextTime(timer));
+            status.setToolTipText("Следующий запуск: "+ScheduleDialog.nextTime(timer)+" · "+timer.path("prompt").asText());
+        }else if(!busy&&timer.path("state").asText().equals("paused"))status.setText("Расписание на паузе");
         boolean taking = pendingTake != null && session.path("id").asText().equals(pendingTake.path("sessionId").asText()) || pendingInterrupt!=null && session.path("id").asText().equals(pendingInterrupt.path("sessionId").asText());
         input.setEnabled(enabled); input.setEditable(!taking); model.sessionEnabled(true); access.setEnabled(true); send.setEnabled(enabled && !taking); sendOptions.setEnabled(enabled && !taking);
         boolean writing=writingImages.getOrDefault(selected,0)>0;
         if(writing) {send.setEnabled(false);sendOptions.setEnabled(false);}
         boolean relatedWork=relatedWork(session.path("id").asText());
         interrupt.setVisible(relatedWork || queued>0 || paused);
-        interrupt.setEnabled(interruptAvailable&&enabled&&!taking&&!writing&&(!input.getText().isBlank()||!draftImages.getOrDefault(selected,List.of()).isEmpty()));
-        stop.setEnabled(relatedWork && !session.path("stopping").asBoolean());
+        interrupt.setEnabled(interruptAvailable&&enabled&&!taking&&!writing&&(!input.getText().isBlank()||!draftImages.getOrDefault(selected,List.of()).isEmpty()||queued>0));
+        stop.setEnabled((relatedWork||timer.path("state").asText().equals("active")) && !session.path("stopping").asBoolean());
         send.setText(queued > 0 ? "Дополнить" : busy || paused ? "В очередь" : "Отправить");
         send.setToolTipText(queued > 0 ? "Enter — добавить часть после разделителя --- в последнее сообщение очереди" : "Enter — отправить; если есть очередь — дополнить последнее сообщение");
     }
@@ -344,21 +485,33 @@ public final class WorkspaceFrame extends JFrame {
     private void poll() {
         if (disposed) return;
         String target = selected;
-        try { var state = host.get("/state" + (target == null ? "" : "?session=" + target)); SwingUtilities.invokeLater(() -> apply(state, target)); }
+        try { var state = host.get("/state" + (target == null ? "" : "?session=" + target+"&history=window")); SwingUtilities.invokeLater(() -> apply(state, target)); }
         catch (Exception e) { SwingUtilities.invokeLater(() -> { if (!disposed) { status.setText("Нет связи с ядром"); status.setToolTipText(e.getMessage()); } }); }
     }
     private void apply(JsonNode state, String target) {
         if (disposed) return;
         quota.update(state.path("quota"));
+        quota.machineUsage(state.path("machineUsage"));
+        if(!machineUsage.equals(state.path("machineUsage"))){machineUsage=state.path("machineUsage");active.repaint();inactive.repaint();}
+        if(!resourceControl.equals(state.path("resources"))){resourceControl=state.path("resources");active.repaint();inactive.repaint();}
         if(!resourceUsage.equals(state.path("resourceUsage"))){resourceUsage=state.path("resourceUsage");active.repaint();inactive.repaint();}
         queueEditingAvailable = state.path("queueEditing").asBoolean();
         groupingAvailable=state.path("queueGrouping").asBoolean();imagesAvailable=state.path("imageAttachments").asBoolean();interruptAvailable=state.path("priorityInterrupt").asBoolean();
         runStatus.setGroupingAvailable(groupingAvailable);runStatus.setQueueEditing(queueEditingAvailable, pendingTake != null || grouping);
         projects.clear(); for (var p : state.path("projects")) projects.put(p.path("id").asText(), p);
+        projectWidgets.update(projects.values());active.repaint();inactive.repaint();
         sessions.clear(); for (var s : state.path("sessions")) sessions.put(s.path("id").asText(), s);
-        String signature = state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("sessions").findValues("active") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
+        documents.clear();for(var d:state.path("files"))documents.put(d.path("id").asText(),d);
+        String signature = state.path("files").toString()+state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("sessions").findValues("active") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
+        signature+=state.path("sessions").findValues("queuePaused").toString()+state.path("sessions").findValues("queued");
         if (!signature.equals(treeSignature)) { rebuildTrees(state); treeSignature = signature; }
         if (selectedProject == null && !projects.isEmpty()) selectedProject = projects.keySet().iterator().next();
+        if(initialDocument!=null){String id=initialDocument;initialDocument=null;if(documents.containsKey(id))selectDocument(id);}
+        if(selectedFile!=null){
+            if(documents.containsKey(selectedFile)){renderDocument();lastAppliedState=System.currentTimeMillis();finishHandoff();retryQueueTake();retryInterrupt();return;}
+            selectedFile=null;documentSignature="";sessionViews.remove("$document");persistViews();content.setLeftComponent(chat);model.setVisible(true);results.setVisible(true);pinPreview.setVisible(true);closePreview.setVisible(true);showPreview(false);viewer.clear();
+        }
+        if(selected!=null&&!sessions.containsKey(selected)){pagedHistory.legacy();chatNavigation.reset();input.setEnabled(false);send.setEnabled(false);sendOptions.setEnabled(false);stop.setEnabled(false);interrupt.setEnabled(false);selected=null;restoreViewFor=null;chatSignature="";input.setText("");showPreview(false);viewer.clear();transcript.setText(page("<p>Сессия убрана из списка. Восстановить её можно в настройках → корзина.</p>"));}
         if (selected == null && !sessions.isEmpty()) {
             String first = initialSelection != null && sessions.containsKey(initialSelection) ? initialSelection : state.path("sessions").get(0).path("id").asText();
             initialSelection = null; selectSession(first); treeSignature = ""; return;
@@ -367,31 +520,35 @@ public final class WorkspaceFrame extends JFrame {
         if (!Objects.equals(target, selected)) return;
         conversation = state.path("conversation");
         if (selected != null && sessions.containsKey(selected)) runStatus.update(sessions.get(selected), conversation);
-        renderChat(); renderRequests(); renderArtifacts();restorePreview();
+        String pin=selected==null?"":sessions.get(selected).path("pinnedFile").asText("");if(!pin.equals(pinnedSignature)){pinnedSignature=pin;if(!pin.isBlank())restoreViewFor=selected;}
+        renderChat(); renderRequests(); renderArtifacts();restorePreview();updatePinButton();
         SwingUtilities.invokeLater(this::acknowledgeVisibleResult);
-        if (sessions.isEmpty()) transcript.setText(page("<h2>Начнём с проекта</h2><p>Добавьте каталог кнопкой <b>+ Проект</b>, затем создайте сессию.</p><p class='muted'>Codex работает на этом компьютере. История сохраняется автоматически.</p>"));
+        if (sessions.isEmpty()) transcript.setText(page("<h2>Начнём с проекта</h2><p>Добавьте каталог кнопкой <b>+ Проект</b>, затем создайте сессию.</p><p class='muted'>Codex и Claude работают на этом компьютере. История сохраняется автоматически.</p>"));
         lastAppliedState = System.currentTimeMillis();
         loadModelCatalog();
         boolean updating = externalUpdate || state.path("updating").asBoolean(); runStatus.setUpdating(updating);
         if (updating) { status.setText("Обновление ядра · текущая работа продолжается"); status.setToolTipText("Очередь продолжится после проверки новой версии ядра"); }
+        finishHandoff();
+        retryQueueTake();retryInterrupt();
+    }
+    private void finishHandoff(){
         if (pendingHandoff != null) {
             var saved = pendingHandoff; pendingHandoff = null;
             saved.path("drafts").fields().forEachRemaining(e -> drafts.put(e.getKey(), e.getValue().asText()));
             saved.path("draftImages").fields().forEachRemaining(e->draftImages.put(e.getKey(),strings(e.getValue())));refreshImages();
             applying = true; input.setText(drafts.getOrDefault(selected, input.getText()));
-            model.selection(saved.path("model").asText(model.model()), saved.path("reasoningEffort").asText(model.effort())); applying = false;
+            model.selection(saved.path("provider").asText(model.provider()), saved.path("model").asText(model.model()), saved.path("reasoningEffort").asText(model.effort())); applying = false;
             if (saved.path("queueTake").isObject()) { pendingTake = saved.path("queueTake"); takeRetryAt = 0; }
             if(saved.path("priorityInterrupt").isObject()) { pendingInterrupt=saved.path("priorityInterrupt");interruptRetryAt=0; }
             if (saved.path("inactiveOpen").asBoolean() != inactiveOpen) toggleInactive();
             if (saved.path("previewOpen").asBoolean() && artifacts.getItemCount() > 0) {
                 showPreview(true);
                 for (int i = 0; i < artifacts.getItemCount(); i++) if (artifacts.getItemAt(i).path.toString().equals(saved.path("artifact").asText())) artifacts.setSelectedIndex(i);
-                content.setDividerLocation(saved.path("previewDivider").asInt(content.getDividerLocation()));
+                content.setDividerLocation(selectedFile==null?saved.path("previewDivider").asInt(content.getDividerLocation()):0);
             }
             runStatus.restoreQueueExpanded(saved.path("queueExpanded").asBoolean());
-            SwingUtilities.invokeLater(() -> chatNavigation.restorePosition(saved.has("chatPosition") ? saved.path("chatPosition") : saved));
+            SwingUtilities.invokeLater(() -> {var position=saved.has("chatPosition")?saved.path("chatPosition"):saved;if(pagedHistory.enabled())pagedHistory.restorePosition(position);else chatNavigation.restorePosition(position);});
         }
-        retryQueueTake();retryInterrupt();
     }
     private void loadModelCatalog() {
         if (selected == null || catalogLoading || Objects.equals(catalogSession, selected) && System.currentTimeMillis() - catalogAttempt < 30_000) return;
@@ -415,41 +572,46 @@ public final class WorkspaceFrame extends JFrame {
         try {
             for (boolean archived : new boolean[]{false, true}) {
                 JTree tree = archived ? inactive : active;
-                var collapsed = new HashSet<String>(); var old = (DefaultMutableTreeNode) tree.getModel().getRoot();
-                for (int i = 0; i < old.getChildCount(); i++) { var node = (DefaultMutableTreeNode) old.getChildAt(i); if (!tree.isExpanded(new TreePath(node.getPath()))) collapsed.add(((Node) node.getUserObject()).id); }
                 var root = new DefaultMutableTreeNode("root"); TreePath selection = null;
                 for (var project : projects.values()) {
                     String pid = project.path("id").asText();
-                    var matching = new ArrayList<JsonNode>(); for (var s : state.path("sessions")) if (s.path("projectId").asText().equals(pid) && s.path("active").asBoolean() != archived) matching.add(s);
-                    if (archived && matching.isEmpty()) continue;
-                    var projectNode = new DefaultMutableTreeNode(new Node(pid, project.path("title").asText() + "  " + matching.size(), true, false, "", project.path("root").asText(),"")); root.add(projectNode);
+                    var matching = new ArrayList<JsonNode>(); for (var s : state.path("sessions")) if (s.path("projectId").asText().equals(pid) && (s.path("active").asBoolean()&&project.path("active").asBoolean(true)) != archived) matching.add(s);
+                    boolean projectArchived=!project.path("active").asBoolean(true);if(!archived&&projectArchived||archived&&matching.isEmpty()&&!projectArchived)continue;
+                    boolean running=matching.stream().anyMatch(s->s.path("running").asBoolean());
+                    String attention=matching.stream().anyMatch(s->s.path("attention").path("kind").asText().equals("question"))?"question":matching.stream().anyMatch(s->s.path("attention").path("manual").asBoolean())?"manual":matching.stream().anyMatch(s->!s.path("attention").path("kind").asText().isEmpty())?"finished":"";
+                    int pausedQueued=matching.stream().filter(s->s.path("queuePaused").asBoolean()).mapToInt(s->Math.max(0,s.path("queued").asInt())).sum();
+                    var projectNode = new DefaultMutableTreeNode(new Node(pid, project.path("title").asText(), true, running, "", project.path("root").asText(),attention,false,pausedQueued)); root.add(projectNode);
+                    if(archived==projectArchived)for(var document:documents.values())if(document.path("projectId").asText().equals(pid)){var node=new DefaultMutableTreeNode(new Node(document.path("id").asText(),document.path("title").asText(),false,false,"",document.path("path").asText(),"",true));projectNode.add(node);if(document.path("id").asText().equals(selectedFile))selection=new TreePath(node.getPath());}
                     var nodes = new LinkedHashMap<String, DefaultMutableTreeNode>();
                     for (var s : matching) nodes.put(s.path("id").asText(), new DefaultMutableTreeNode(new Node(s.path("id").asText(), s.path("title").asText(), false, s.path("running").asBoolean(), s.path("status").asText(), s.path("directory").asText(),s.path("attention").path("kind").asText())));
                     for (var s : matching) { var n = nodes.get(s.path("id").asText()); var parent = nodes.get(s.path("parentId").asText()); (parent == null ? projectNode : parent).add(n); }
                     for (var entry : nodes.entrySet()) if (entry.getKey().equals(selected)) selection = new TreePath(entry.getValue().getPath());
                 }
                 tree.setModel(new DefaultTreeModel(root));
-                for (int i = 0; i < tree.getRowCount(); i++) { var path = tree.getPathForRow(i); var n = (DefaultMutableTreeNode) path.getLastPathComponent(); if (n.getUserObject() instanceof Node node && !collapsed.contains(node.id)) tree.expandPath(path); }
+                for (int i = 0; i < tree.getRowCount(); i++) { var path = tree.getPathForRow(i); var n = (DefaultMutableTreeNode) path.getLastPathComponent(); if (n.getUserObject() instanceof Node node && (!node.project||!collapsedProjects.contains(expansionKey(tree,node.id)))) tree.expandPath(path); }
                 if (selection != null) tree.setSelectionPath(selection);
             }
-            long count = sessions.values().stream().filter(s -> !s.path("active").asBoolean()).count(); archiveToggle.setText((inactiveOpen ? "⌄ " : "› ") + "Неактивные  " + count);
+            long count = sessions.values().stream().filter(s -> !s.path("active").asBoolean()||!projects.get(s.path("projectId").asText()).path("active").asBoolean(true)).count(); archiveToggle.setText((inactiveOpen ? "⌄ " : "› ") + "Неактивные  " + count);
         } finally { changingTree = false; }
     }
     private void renderChat() {
+        if(conversation.path("windowed").asBoolean()&&selected!=null){pagedHistory.update(selected,conversation.path("historyVersion").asText(),scrollToLatest);scrollToLatest=false;return;}
+        if(!conversation.path("messages").isArray())return;
+        pagedHistory.legacy();
         String key = conversation.path("messages").toString() + conversation.path("live").asText();
         if (key.equals(chatSignature)) return;
         if (transcript.isFocusOwner() && transcript.getSelectedText() != null) return;
         chatSignature = key; var html = new StringBuilder();
         var tasks = ChatNavigation.tasks(conversation.path("messages")); int taskIndex = 0;
         for (var message : conversation.path("messages")) {
-            String role = message.path("role").asText(); String who = role.equals("user") ? "ВЫ" : role.equals("assistant") ? "CODEX" : role.equals("session") ? "ДРУГАЯ СЕССИЯ" : "TETHIUM";
+            String role = message.path("role").asText(); String who = role.equals("user") ? "ВЫ" : role.equals("assistant") ? ChatTheme.executorLabel(message.path("provider").asText()) : role.equals("session") ? "ДРУГАЯ СЕССИЯ" : "TETHIUM";
             if (message.path("provider").asText().equals("IMPORTED")) who += " · ИМПОРТ";
             html.append("<div class='").append(role.equals("user") ? "user" : "message").append("'");
             if (role.equals("user")) html.append(" id='").append(tasks.get(taskIndex++).anchor()).append("'");
-            html.append("><p class='label'>").append(who).append("</p>").append(markdown(message.path("text").asText())).append("</div>");
+            html.append("><p class='label'>").append(who).append(ChatTime.label(message.path("timestamp").asLong())).append("</p>").append(markdown(message.path("text").asText())).append("</div>");
         }
-        String live = conversation.path("live").asText(); if (!live.isEmpty()) html.append("<div class='message'><p class='label'><span class='live'>CODEX · РАБОТАЕТ</span></p>").append(markdown(live)).append("</div>");
-        if (html.isEmpty()) html.append("<h2>Новая сессия</h2><p class='muted'>Опишите задачу. Codex увидит файлы проекта и соседние сессии.</p>");
+        String live = conversation.path("live").asText(); if (!live.isEmpty()) html.append("<div class='message'><p class='label'><span class='live'>"+ChatTheme.executorLabel(sessions.getOrDefault(selected,Json.object()).path("preferences").path("provider").asText())+" · РАБОТАЕТ</span>"+ChatTime.label(conversation.path("liveTimestamp").asLong())+"</p>").append(markdown(live)).append("</div>");
+        if (html.isEmpty()) html.append("<h2>Новая сессия</h2><p class='muted'>Опишите задачу. Агент увидит файлы проекта и соседние сессии.</p>");
         var position = chatNavigation.beforeChange(scrollToLatest);
         scrollToLatest = false; long render = ++chatRender;
         transcript.setText(page(html.toString()));
@@ -475,9 +637,9 @@ public final class WorkspaceFrame extends JFrame {
         String signature = conversation.path("requests").toString(); if (signature.equals(requestSignature)) return; requestSignature = signature;
         requests.removeAll();
         for (var r : conversation.path("requests")) {
-            var panel = new JPanel(new BorderLayout(Theme.GAP, Theme.GAP)); panel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, Theme.BORDER), new EmptyBorder(Theme.GAP, Theme.GUTTER, Theme.GAP, Theme.GUTTER)));
+            var panel = new JPanel(new BorderLayout(Theme.GAP, Theme.GAP)); panel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, Theme.BORDER), new EmptyBorder(Theme.UNIT, Theme.GUTTER, Theme.UNIT, Theme.GUTTER)));
             String method = r.path("method").asText(); var params = r.path("params");
-            String details = params.path("command").asText(params.path("reason").asText(params.path("message").asText("Codex ждёт вашего ответа")));
+            String details = params.path("command").asText(params.path("reason").asText(params.path("message").asText("Агент ждёт вашего ответа")));
             if (method.equals("item/permissions/requestApproval")) details += "\n" + params.path("permissions").toPrettyString();
             var description = new JTextArea(details);
             description.setEditable(false); description.setLineWrap(true); description.setWrapStyleWord(true); description.setRows(Math.min(3, description.getLineCount() + 1)); panel.add(description);
@@ -487,9 +649,9 @@ public final class WorkspaceFrame extends JFrame {
                 actions.add(Theme.button("Отклонить", "Не предоставлять дополнительные права", () -> answer(r, Json.object("permissions", Json.object(), "scope", "turn"))));
             } else if (method.endsWith("requestApproval")) {
                 actions.add(Theme.button("Разрешить", "Разрешить это действие", () -> answer(r, Json.object("decision", "accept"))));
-                actions.add(Theme.button("Для сессии", "Разрешить в рамках сессии Codex", () -> answer(r, Json.object("decision", "acceptForSession"))));
+                actions.add(Theme.button("Для сессии", "Разрешить в рамках этой сессии", () -> answer(r, Json.object("decision", "acceptForSession"))));
                 actions.add(Theme.button("Отклонить", "Отказать в действии", () -> answer(r, Json.object("decision", "decline"))));
-            } else actions.add(Theme.button("Ответить…", "Открыть вопросы Codex", () -> answerQuestions(r)));
+            } else actions.add(Theme.button("Ответить…", "Открыть вопросы агента", () -> answerQuestions(r)));
             panel.add(actions, BorderLayout.SOUTH); requests.add(panel);
         }
         requests.revalidate(); requests.repaint();
@@ -504,7 +666,7 @@ public final class WorkspaceFrame extends JFrame {
                 if (!options.isEmpty()) { var hint = new JTextArea(options.toString()); hint.setEditable(false); hint.setLineWrap(true); hint.setWrapStyleWord(true); panel.add(hint); }
                 var text = new JTextArea(2, 35); text.setLineWrap(true); fields.put(q.path("id").asText(), text); panel.add(new JScrollPane(text));
             }
-            if (JOptionPane.showConfirmDialog(this, panel, "Вопросы Codex", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION) {
+            if (JOptionPane.showConfirmDialog(this, panel, "Вопросы агента", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE) == JOptionPane.OK_OPTION) {
                 var answers = Json.object(); fields.forEach((id, text) -> answers.set(id, Json.object("answers", List.of(text.getText())))); answer(request, Json.object("answers", answers));
             }
         } else {
@@ -548,7 +710,7 @@ public final class WorkspaceFrame extends JFrame {
     private void toggleActive() { if (selected != null) { String id = selected; boolean value = !sessions.get(id).path("active").asBoolean(); action(() -> host.post("/sessions/" + id + "/active", Json.object("active", value))); } }
     private void saveSettings() {
         if (applying || selected == null) return; String id = selected;
-        var value = Json.object("model", model.model(), "reasoningEffort", model.effort(), "access", accessValue()); settingsDrafts.put(id, value);
+        var value = Json.object("provider", model.provider(), "model", model.model(), "reasoningEffort", model.effort(), "access", accessValue()); settingsDrafts.put(id, value);
         action(() -> host.post("/sessions/" + id + "/settings", value));
     }
     private String accessValue() { return "danger-full-access"; }
@@ -563,11 +725,11 @@ public final class WorkspaceFrame extends JFrame {
     public void send() { send(false); }
     private void send(boolean separate) {
         if (selected == null || input.getText().isBlank() && draftImages.getOrDefault(selected,List.of()).isEmpty() || !send.isEnabled()) return;
-        String id = selected, prompt = input.getText(), modelName = model.model(), effort = model.effort(), mode = accessValue();
+        String id = selected, prompt = input.getText(), modelName = model.model(), effort = model.effort(), mode = accessValue(), executor = model.provider();
         var images=draftImages.getOrDefault(id,List.of());draftImages.put(id,List.of());refreshImages();
         draftTimer.stop(); applying = true; input.setText(""); drafts.put(id, ""); applying = false;
         action(() -> {
-            try { host.post("/sessions/" + id + "/settings", Json.object("model", modelName, "reasoningEffort", effort, "access", mode)); var result=host.post("/sessions/" + id + "/run", Json.object("prompt", prompt, "images",images,"separate", separate));
+            try { host.post("/sessions/" + id + "/settings", Json.object("provider", executor, "model", modelName, "reasoningEffort", effort, "access", mode)); var result=host.post("/sessions/" + id + "/run", Json.object("prompt", prompt, "images",images,"separate", separate));
                 SwingUtilities.invokeLater(() -> { if (Objects.equals(selected,id)) runStatus.focusJob(result.path("jobId").asText()); }); }
             catch (Exception e) { SwingUtilities.invokeLater(() -> { String current=drafts.getOrDefault(id,"");String restored=prompt+(current.isEmpty()?"":"\n\n"+current); drafts.put(id,restored);var restoredImages=new ArrayList<>(images);restoredImages.addAll(draftImages.getOrDefault(id,List.of()));draftImages.put(id,restoredImages);if (Objects.equals(selected, id)) {input.setText(restored);refreshImages();} }); throw e; }
         }); input.requestFocusInWindow();
@@ -584,21 +746,23 @@ public final class WorkspaceFrame extends JFrame {
         var first=selectedJobs.get(0);var body=merge?Json.object("selected",selectedJobs,"requestId",UUID.randomUUID().toString()):Json.object("jobId",first.path("id").asText(),"expectedPrompt",first.path("prompt").asText(),"requestId",UUID.randomUUID().toString());
         action(()->{try{host.post("/sessions/"+id+(merge?"/queue-merge":"/queue-split"),body);}finally{SwingUtilities.invokeLater(()->{grouping=false;refreshTakeControls();});}});
     }
+    private void toggleAttention(String id){if(id!=null&&sessions.containsKey(id)){boolean mark=!sessions.get(id).path("attention").path("manual").asBoolean();action(()->host.post("/sessions/"+id+"/attention",Json.object("marked",mark)));}}
     private void interrupt() {
         if(selected==null||!interrupt.isEnabled()||pendingInterrupt!=null)return;
-        draftTimer.stop();saveDraft();pendingInterrupt=Json.object("sessionId",selected,"model",model.model(),"effort",model.effort(),"body",Json.object("prompt",input.getText(),"images",draftImages.getOrDefault(selected,List.of()),"requestId",UUID.randomUUID().toString()));
+        draftTimer.stop();saveDraft();pendingInterrupt=Json.object("sessionId",selected,"provider",model.provider(),"model",model.model(),"effort",model.effort(),"body",Json.object("prompt",input.getText(),"images",draftImages.getOrDefault(selected,List.of()),"requestId",UUID.randomUUID().toString(),"queueHead",input.getText().isBlank()&&draftImages.getOrDefault(selected,List.of()).isEmpty()));
         interruptRetryAt=0;refreshTakeControls();retryInterrupt();
     }
     private void retryInterrupt() {
         if(pendingInterrupt==null||interruptInFlight||disposed||System.currentTimeMillis()<interruptRetryAt||!interruptAvailable)return;
         var operation=pendingInterrupt;String id=operation.path("sessionId").asText();interruptInFlight=true;
         io.submit(()->{try {
-            host.post("/sessions/"+id+"/settings",Json.object("model",operation.path("model"),"reasoningEffort",operation.path("effort"),"access",accessValue()));
+            host.post("/sessions/"+id+"/settings",Json.object("provider",operation.path("provider").asText(model.provider()),"model",operation.path("model"),"reasoningEffort",operation.path("effort"),"access",accessValue()));
             host.post("/sessions/"+id+"/interrupt",operation.path("body"));
             SwingUtilities.invokeLater(()->{interruptInFlight=false;pendingInterrupt=null;drafts.put(id,"");draftImages.put(id,List.of());if(Objects.equals(selected,id)){applying=true;input.setText("");applying=false;refreshImages();}refreshTakeControls();if(!disposed)poller.execute(this::poll);});
         }catch(HostClient.ApiException rejected){SwingUtilities.invokeLater(()->{interruptInFlight=false;pendingInterrupt=null;refreshTakeControls();error(rejected);});}
         catch(Exception lost){SwingUtilities.invokeLater(()->{interruptInFlight=false;interruptRetryAt=System.currentTimeMillis()+2000;refreshTakeControls();});}});
     }
+    private void pauseQueue() { if (selected != null) { String id = selected; action(() -> host.post("/sessions/" + id + "/queue-pause", Json.object())); } }
     private void resumeQueue() { if (selected != null) { String id = selected; action(() -> host.post("/sessions/" + id + "/queue-resume", Json.object())); } }
     private void removeQueued(String jobId) {
         if (selected == null) return; String id = selected;
@@ -683,6 +847,11 @@ public final class WorkspaceFrame extends JFrame {
         String quote=text.strip().lines().map(line->"> "+line).collect(java.util.stream.Collectors.joining("\n"));
         input.replaceSelection((input.getCaretPosition()>0?"\n\n":"")+quote+"\n\n"); input.requestFocusInWindow();
     }
+    private void copyChatImage(String source){
+        String id=selected;Path directory=id!=null&&sessions.containsKey(id)?Path.of(sessions.get(id).path("directory").asText()):Path.of(".");
+        boolean localDraft=id!=null&&draftImages.getOrDefault(id,List.of()).stream().anyMatch(p->Path.of(p).toUri().toString().equals(source));
+        ClipboardImages.copy(this,()->host instanceof dev.tethium.remote.RemoteClient remote&&!localDraft&&!source.matches("^(https?://|data:).*" )?remote.readImage(ClipboardImages.localPath(source,directory),id):ClipboardImages.read(source,directory));
+    }
     private void openLink(String link) {
         if (link == null || link.isBlank() || link.startsWith("#")) return;
         try {
@@ -710,29 +879,40 @@ public final class WorkspaceFrame extends JFrame {
         }
         else try { Desktop.getDesktop().open(path.toFile()); } catch (Exception e) { error(e); }
     }
+    private boolean viewingPinnedFile(){return selectedFile!=null||(selected!=null&&sessions.containsKey(selected)&&artifacts.getSelectedItem() instanceof Artifact a&&a.path.toString().equals(sessions.get(selected).path("pinnedFile").asText()));}
+    private boolean confirmUnpin(){return JOptionPane.showConfirmDialog(this,"Закрыть и открепить файл? Сам файл останется на диске.","Закреплённый файл",JOptionPane.YES_NO_OPTION,JOptionPane.QUESTION_MESSAGE)==JOptionPane.YES_OPTION;}
+    private void unpinDocument(String id){if(confirmUnpin())action(()->host.post("/files/"+id+"/remove",Json.object()));}
+    private void closePreview(){
+        if(selectedFile!=null){unpinDocument(selectedFile);return;}
+        if(selected!=null&&sessions.containsKey(selected)&&artifacts.getSelectedItem() instanceof Artifact a&&a.path.toString().equals(sessions.get(selected).path("pinnedFile").asText())){
+            if(!confirmUnpin())return;String id=selected;action(()->{host.post("/sessions/"+id+"/pinned-file",Json.object("path",""));SwingUtilities.invokeLater(()->{if(id.equals(selected))showPreview(false);});});
+        }else showPreview(false);
+    }
     private void showPreview(boolean show) {
+        if(selectedFile!=null)show=true;
         var position = chatNavigation.beforeChange(false);
         if (!show) {
             exitFullScreen();
             if (previewOpen) previewDivider = content.getDividerLocation();
-            content.setRightComponent(null); content.setDividerSize(0);
+            content.setRightComponent(null); content.setDividerSize(0);viewer.suspendBrowser();
         } else if (!previewOpen) {
             content.setRightComponent(preview); content.setDividerSize(4);
             int desired = previewDivider < 0 ? (int) (content.getWidth() * .62) : previewDivider;
             content.setDividerLocation(Math.max(340, Math.min(desired, content.getWidth() - 274)));
         }
-        previewOpen = show; results.setSelected(show);
+        previewOpen = show; results.setSelected(show);if(selectedFile!=null)content.setDividerLocation(0);
         if (show) loadArtifact();
         rememberPreview();
         content.revalidate(); content.repaint();
         SwingUtilities.invokeLater(() -> { if (!disposed) { validate(); history.getViewport().doLayout(); chatNavigation.afterChange(position); } });
     }
     private void loadArtifact() {
-        rememberPreview();
+        rememberPreview();updatePinButton();
         if (artifacts.getSelectedItem() instanceof Artifact a) {
             artifacts.setToolTipText(a.title + " — " + a.path);
             String filename=a.path.getFileName().toString().toLowerCase(Locale.ROOT);boolean runnable=filename.matches(".*\\.(jar|exe|zip)$");runBuild.setVisible(host.remote()&&runnable);getBuild.setVisible(host.remote());
             if(runnable&&host.remote())viewer.showNotice("Опубликованная сборка · "+a.path.getFileName()+"\nПолучите её или запустите на этом компьютере.");
+            else if(host instanceof dev.tethium.remote.RemoteClient remote&&selectedFile!=null){String id=selectedFile;action(()->{var url=remote.previewDocument(id);SwingUtilities.invokeLater(()->{if(Objects.equals(selectedFile,id))viewer.openRemote(url);});});}
             else if(host instanceof dev.tethium.remote.RemoteClient remote&&!draftImages.getOrDefault(selected,List.of()).contains(a.path.toString())){action(()->{var url=remote.preview(a.path);SwingUtilities.invokeLater(()->{if(artifacts.getSelectedItem()==a)viewer.openRemote(url);});});}
             else viewer.open(a.path); expandPreview.setEnabled(!runnable);
             boolean image = !a.path.getFileName().toString().toLowerCase(Locale.ROOT).matches(".*\\.(html?|md|markdown|svg)$");
@@ -759,7 +939,7 @@ public final class WorkspaceFrame extends JFrame {
         dialog.addWindowListener(new WindowAdapter() { @Override public void windowClosing(WindowEvent e) { exitFullScreen(); } });
         content.setRightComponent(null); content.setDividerSize(0);
         dialog.setContentPane(preview); viewer.setFullScreen(true);
-        expandPreview.setText("Вернуться · Esc"); expandPreview.setToolTipText("Вернуться к чату");
+        expandPreview.setText(viewingPinnedFile()?"":"Вернуться · Esc"); expandPreview.setToolTipText(viewingPinnedFile()?"Вернуться в окно · Esc":"Вернуться к чату");expandPreview.setIcon(Theme.previewIcon(false));
         dialog.getRootPane().registerKeyboardAction(e -> exitFullScreen(), KeyStroke.getKeyStroke(KeyEvent.VK_ESCAPE, 0), JComponent.WHEN_IN_FOCUSED_WINDOW);
         dialog.setBounds(getGraphicsConfiguration().getBounds());
         loadArtifact(); dialog.setVisible(true); expandPreview.requestFocusInWindow();
@@ -768,8 +948,8 @@ public final class WorkspaceFrame extends JFrame {
         if (fullScreenPreview == null) return;
         var dialog = fullScreenPreview; fullScreenPreview = null;
         dialog.setContentPane(new JPanel());
-        content.setRightComponent(preview); content.setDividerSize(4); content.setDividerLocation(previewDivider);
-        viewer.setFullScreen(false); expandPreview.setText(""); expandPreview.setToolTipText("На весь экран");
+        content.setRightComponent(preview); content.setDividerSize(selectedFile==null?4:0); content.setDividerLocation(selectedFile==null?previewDivider:0);
+        viewer.setFullScreen(false);expandPreview.setIcon(Theme.previewIcon(true)); expandPreview.setText(""); expandPreview.setToolTipText("На весь экран");
         fitPreview.setIcon(Theme.icon("preview-fit")); actualPreview.setIcon(Theme.icon("preview-actual-size")); fitPreview.setVisible(false); actualPreview.setVisible(false);
         dialog.dispose(); content.revalidate(); content.repaint();
         if (previewFocus != null && previewFocus.isShowing()) previewFocus.requestFocusInWindow();
@@ -782,7 +962,7 @@ public final class WorkspaceFrame extends JFrame {
             text.append(event.path("method").asText()).append('\n').append(item.isMissingNode() ? event.path("params").toPrettyString() : item.toPrettyString()).append("\n\n");
         }
         var area = new JTextArea(text.isEmpty() ? "Пока нет действий" : text.toString(), 24, 80); area.setEditable(false); area.setFont(new Font("Consolas", Font.PLAIN, 12));
-        JOptionPane.showMessageDialog(this, new JScrollPane(area), "Действия Codex", JOptionPane.PLAIN_MESSAGE);
+        JOptionPane.showMessageDialog(this, new JScrollPane(area), "Действия агента", JOptionPane.PLAIN_MESSAGE);
     }
     @FunctionalInterface private interface Work { void run() throws Exception; }
     private void action(Work work) { if (!disposed) io.submit(() -> { try { work.run(); poller.execute(this::poll); } catch (Exception e) { SwingUtilities.invokeLater(() -> error(e)); } }); }
@@ -798,7 +978,7 @@ public final class WorkspaceFrame extends JFrame {
         var result = new CompletableFuture<JsonNode>();
         io.submit(() -> SwingUtilities.invokeLater(() -> {
             var scroll = history.getVerticalScrollBar(); var bounds = getBounds();
-            result.complete(Json.object("sessionId", selected, "drafts", drafts, "draftImages",draftImages,"priorityInterrupt",pendingInterrupt,"model", model.model(), "reasoningEffort", model.effort(), "queueTake", pendingTake, "chatPosition", chatNavigation.savePosition(),
+            result.complete(Json.object("fileId",selectedFile,"sessionId", selected, "drafts", drafts, "draftImages",draftImages,"priorityInterrupt",pendingInterrupt,"provider", model.provider(), "model", model.model(), "reasoningEffort", model.effort(), "queueTake", pendingTake, "chatPosition", chatNavigation.savePosition(),
                     "x", bounds.x, "y", bounds.y, "width", bounds.width, "height", bounds.height, "extendedState", getExtendedState(),
                     "sessionViews",sessionViews,"inactiveOpen", inactiveOpen, "previewOpen", previewOpen, "previewDivider", content.getDividerLocation(),
                     "artifact", artifacts.getSelectedItem() instanceof Artifact a ? a.path.toString() : "", "queueExpanded", runStatus.queueExpanded(),
@@ -808,16 +988,17 @@ public final class WorkspaceFrame extends JFrame {
     }
     public void adoptHandoff(JsonNode saved) {
         saved.path("sessionViews").properties().forEach(e->sessionViews.put(e.getKey(),e.getValue()));
-        String id = saved.path("sessionId").asText(null);
-        if (id != null && !Objects.equals(id, selected)) selectSession(id);
+        restoreProjectExpansion();persistViews();treeSignature="";
+        initialDocument=saved.path("fileId").asText(null);String id = saved.path("sessionId").asText(null);
+        if (initialDocument==null&&id != null && !Objects.equals(id, selected)) selectSession(id);
         if (saved.has("width")) { setBounds(saved.path("x").asInt(), saved.path("y").asInt(), Math.max(920, saved.path("width").asInt()), Math.max(600, saved.path("height").asInt())); setExtendedState(saved.path("extendedState").asInt()); }
         pendingHandoff = saved; lastAppliedState = 0; poller.execute(this::poll);
     }
-    public void activateAfterHandoff() { setEnabled(true); setVisible(true); toFront(); input.requestFocusInWindow(); }
+    public void activateAfterHandoff() { setEnabled(true); setVisible(true); toFront(); if(selectedFile==null)input.requestFocusInWindow(); }
     public void setUpdating(boolean value) { externalUpdate = value; poller.execute(this::poll); }
     public void closeWindow() {closeWindow(true);}
     private void closeWindow(boolean notify) {
-        if (disposed) return; saveDraft();rememberPreview(); disposed = true; exitFullScreen(); draftTimer.stop(); poller.shutdownNow(); viewer.close(); io.shutdown(); dispose();
+        if (disposed) return; saveDraft();rememberPreview(); disposed = true; exitFullScreen(); draftTimer.stop(); poller.shutdownNow();pagedHistory.close(); viewer.close(); io.shutdown(); dispose();
         Thread.ofVirtual().start(() -> { try { io.awaitTermination(20, TimeUnit.SECONDS); } catch (InterruptedException ignored) {} host.close(); if(notify)onClose.run(); });
     }
 }

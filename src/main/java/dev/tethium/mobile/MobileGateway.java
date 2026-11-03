@@ -21,6 +21,7 @@ import java.util.concurrent.*;
 
 /** A narrow, paired LAN API. The desktop's administrative bearer never leaves loopback. */
 public final class MobileGateway implements AutoCloseable {
+    private final AppCatalog appCatalog = new AppCatalog();
     private final Path data;
     private final HostClient host;
     private final HttpsServer api;
@@ -85,6 +86,16 @@ public final class MobileGateway implements AutoCloseable {
             if(path.equals("/pair")&&method.equals("POST")){json(e,200,pair(body(e)));return;}
             String auth=e.getRequestHeaders().getFirst("Authorization");
             if(auth==null||!auth.startsWith("Bearer ")||!devices.containsKey(sha(auth.substring(7).getBytes(StandardCharsets.UTF_8))))throw new SecurityException("Подключите телефон по QR на ноутбуке");
+            if(path.equals("/apps")&&method.equals("GET")){
+                var catalog=appCatalog.read(host.get("/state").path("projects"));
+                try(var in=MobileGateway.class.getResourceAsStream("/mobile/release.json")){
+                    var own=Json.MAPPER.readTree(in); ((com.fasterxml.jackson.databind.node.ArrayNode)catalog.path("apps")).insert(0,Json.object("packageName","dev.tethium.mobile","title","Tethium","project","Tethium","versionCode",own.path("versionCode").asLong(),"versionName",own.path("versionName").asText(),"sha256",own.path("sha256").asText(),"path","/apk"));
+                }
+                json(e,200,catalog);return;
+            }
+            if(path.matches("/apps/[a-f0-9]{64}\\.apk")&&method.equals("GET")){
+                Path apk=appCatalog.file(path.substring(6,70));e.getResponseHeaders().set("Content-Type","application/vnd.android.package-archive");e.sendResponseHeaders(200,Files.size(apk));Files.copy(apk,e.getResponseBody());return;
+            }
             if(path.equals("/update")&&method.equals("GET")){resource(e,"/mobile/release.json","application/json");return;}
             if(path.equals("/apk")&&method.equals("GET")){resource(e,"/mobile/tethium.apk","application/vnd.android.package-archive");return;}
             if(path.equals("/attachment")&&method.equals("POST")){json(e,200,upload(body(e,17_000_000)));return;}
@@ -101,7 +112,12 @@ public final class MobileGateway implements AutoCloseable {
                 var b=body(e); var snapshot=host.get("/state?session="+URLEncoder.encode(b.path("session").asText(),StandardCharsets.UTF_8));
                 JsonNode artifact=null;for(var a:snapshot.path("conversation").path("artifacts"))if(a.path("id").asText().equals(b.path("artifact").asText()))artifact=a;
                 Path file;
-                if(artifact!=null)file=Path.of(artifact.path("path").asText()).toRealPath();
+                if(b.hasNonNull("fileId")){
+                    JsonNode document=null;for(var candidate:snapshot.path("files"))if(candidate.path("id").asText().equals(b.path("fileId").asText()))document=candidate;
+                    if(document==null)throw new IllegalArgumentException("Закреплённый файл не найден");file=Path.of(document.path("path").asText()).toRealPath();
+                    Path root=null;for(var project:snapshot.path("projects"))if(project.path("id").asText().equals(document.path("projectId").asText()))root=Path.of(project.path("root").asText()).toRealPath();
+                    if(root==null||!file.startsWith(root)||!Files.isRegularFile(file))throw new IllegalArgumentException("Файл недоступен в проекте");
+                }else if(artifact!=null)file=Path.of(artifact.path("path").asText()).toRealPath();
                 else {
                     JsonNode session=null;for(var value:snapshot.path("sessions"))if(value.path("id").asText().equals(b.path("session").asText()))session=value;
                     if(session==null)throw new IllegalArgumentException("Сессия не найдена");
@@ -119,7 +135,7 @@ public final class MobileGateway implements AutoCloseable {
                 json(e,200,Json.object("path","/preview/"+key+"/"+new URI(null,null,file.getFileName().toString(),null).toASCIIString()));return;
             }
             String raw=e.getRequestURI().getRawQuery();String target=path+(raw==null?"":"?"+raw);
-            if(method.equals("GET")&&(path.equals("/state")||path.equals("/models")||path.equals("/usage"))){json(e,200,host.get(target));return;}
+            if(method.equals("GET")&&(path.equals("/state")||path.equals("/models")||path.equals("/resources")||path.equals("/usage")||path.equals("/history/index")||path.equals("/history/page")||path.equals("/trash"))){json(e,200,host.get(target));return;}
             if(method.equals("POST")&&allowed(path)){
                 var b=(com.fasterxml.jackson.databind.node.ObjectNode)body(e);
                 // A phone can control sessions, not supply paths to arbitrary laptop files.
@@ -140,7 +156,7 @@ public final class MobileGateway implements AutoCloseable {
         }catch(SecurityException denied){json(e,401,Json.object("error",denied.getMessage()));}
         catch(Exception error){json(e,400,Json.object("error",Objects.toString(error.getMessage(),"Ошибка подключения")));}}
     }
-    private static boolean allowed(String path){return path.equals("/quota/refresh")||path.equals("/quota/reset")||path.equals("/sessions")||path.equals("/answer")||path.matches("/sessions/[a-zA-Z0-9-]+/(run|interrupt|stop|queue-resume|queue-remove|queue-move|queue-take|queue-merge|queue-split|active|rename|settings|seen|quota-auto|autonomy)");}
+    private static boolean allowed(String path){return path.equals("/resources")||path.equals("/quota/refresh")||path.equals("/quota/reset")||path.equals("/sessions")||path.equals("/answer")||path.matches("/projects/[a-zA-Z0-9-]+/(files|active)")||path.matches("/files/[a-zA-Z0-9-]+/(rename|remove)")||path.matches("/sessions/[a-zA-Z0-9-]+/(run|interrupt|stop|queue-pause|queue-resume|queue-remove|queue-move|queue-take|queue-merge|queue-split|active|rename|settings|seen|attention|quota-auto|autonomy|schedule|pinned-file|trash|restore|purge)");}
     private JsonNode upload(JsonNode body)throws Exception{
         byte[] bytes=Base64.getDecoder().decode(body.path("data").asText());
         if(bytes.length==0||bytes.length>12_000_000)throw new IllegalArgumentException("Изображение должно быть меньше 12 МБ");

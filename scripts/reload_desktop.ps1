@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory=$true)][string]$AppPath,
     [Parameter(Mandatory=$true)][string]$PreviousAppPath,
     [string]$SessionId='',
@@ -6,6 +6,8 @@ param(
     [string]$StatusPath='',
     [switch]$DesktopOnly,
     [switch]$ForceCore,
+    [switch]$RestartWorkloads,
+    [string]$RestartId='',
     [switch]$WaitForLock
 )
 $ErrorActionPreference='Stop'
@@ -16,21 +18,36 @@ $DataPath=[IO.Path]::GetFullPath($DataPath); $StatusPath=[IO.Path]::GetFullPath(
 $updateId=[Guid]::NewGuid().ToString()
 $updateRoot=Join-Path $DataPath ('updates/' + $updateId)
 New-Item -ItemType Directory -Force -Path $updateRoot,(Split-Path $StatusPath) | Out-Null
+$coldPlan=$null
 $newClient=$null; $oldClient=$null; $oldHost=$null; $probeHost=$null; $lock=$null
 $draining=$false; $oldHostClosed=$false; $activated=$false; $legacy=$false; $handoff=$false
 $previousCorePath=$PreviousAppPath
 $candidateProcess=$null
 $ledger=Join-Path $updateRoot 'legacy-queues.json'
+function SaveStatusFile([string]$file,[string]$json) {
+    $temporary=$file+'.'+[Guid]::NewGuid().ToString()+'.tmp'
+    try {
+        [IO.File]::WriteAllText($temporary,$json,[Text.UTF8Encoding]::new($false))
+        for ($attempt=0; $attempt -lt 100; $attempt++) {
+            try {
+                if ([IO.File]::Exists($file)) { [IO.File]::Replace($temporary,$file,[NullString]::Value) }
+                else { [IO.File]::Move($temporary,$file) }
+                return
+            } catch { if ($attempt -eq 99) { throw }; Start-Sleep -Milliseconds 20 }
+        }
+    } finally { if ([IO.File]::Exists($temporary)) { Remove-Item -LiteralPath $temporary -Force } }
+}
 function Status($phase,$message) {
     $value=@{phase=$phase;message=$message;time=[DateTime]::Now.ToString('o');updateId=$updateId;appPath=$AppPath;workerPid=$PID} | ConvertTo-Json
-    $value | Set-Content -LiteralPath (Join-Path $updateRoot 'status.json') -Encoding UTF8
+    SaveStatusFile (Join-Path $updateRoot 'status.json') $value
     # A rejected concurrent attempt must not overwrite the active update's status.
-    if ($null -ne $lock) { $value | Set-Content -LiteralPath $StatusPath -Encoding UTF8 }
+    if ($null -ne $lock) { SaveStatusFile $StatusPath $value }
 }
 function Api($endpoint,$path,$body=$null) {
     $parameters=@{Uri=('http://127.0.0.1:' + $endpoint.port + $path);Headers=@{Authorization=('Bearer '+$endpoint.token)};TimeoutSec=20}
     if ($null -ne $body) { $parameters.Method='Post'; $parameters.ContentType='application/json; charset=utf-8'; $parameters.Body=[Text.Encoding]::UTF8.GetBytes(($body | ConvertTo-Json -Depth 100 -Compress)) }
-    Invoke-RestMethod @parameters
+    try { Invoke-RestMethod @parameters }
+    catch { throw ('Local API '+$path+' failed: '+$_.Exception.Message) }
 }
 function Launch($executable,$arguments,$label) {
     $quoted=($arguments | ForEach-Object { '"' + $_.Replace('"','\"') + '"' }) -join ' '
@@ -42,7 +59,7 @@ function Bridge($mode,$database,$destination) {
     $output | ConvertFrom-Json
 }
 function Desktop($app,$arguments,$label) {
-    $base=@('--enable-native-access=ALL-UNNAMED',('-Dtethium.data='+$DataPath),'-cp',(Join-Path (Split-Path $app) 'app/*'),'dev.tethium.desktop.DesktopMain',('--app-path='+$app))
+    $base=@('--enable-native-access=ALL-UNNAMED','--add-exports=java.desktop/sun.awt=ALL-UNNAMED','--add-exports=java.desktop/sun.java2d=ALL-UNNAMED',('-Dtethium.data='+$DataPath),'-cp',(Join-Path (Split-Path $app) 'app/*'),'dev.tethium.desktop.DesktopMain',('--app-path='+$app))
     Launch (Join-Path (Split-Path $app) 'runtime/bin/javaw.exe') ($base+$arguments) $label
 }
 function Host($app,$data,$label,$probe=$false) {
@@ -92,6 +109,33 @@ function WaitForRuns($timeoutSeconds=5400) {
         Start-Sleep -Seconds 2
     }
 }
+function StopRestartProcesses($rows) {
+    # Include children born after the checkpoint; verify each parent-child birth order.
+    $targets=@{};foreach($row in @($rows)){ $targets[[long]$row.pid]=$row }
+    $live=@(Get-CimInstance Win32_Process | Where-Object {$null -ne $_.CreationDate})
+    do {
+        $added=$false
+        foreach($entry in $live){
+            if($targets.ContainsKey([long]$entry.ProcessId) -or -not $targets.ContainsKey([long]$entry.ParentProcessId)){continue}
+            $parent=$live|Where-Object ProcessId -eq $entry.ParentProcessId|Select-Object -First 1
+            $owner=$targets[[long]$entry.ParentProcessId]
+            if($null -eq $parent -or ([DateTimeOffset]$parent.CreationDate).ToUnixTimeMilliseconds() -ne [long]$owner.started){continue}
+            $birth=([DateTimeOffset]$entry.CreationDate).ToUnixTimeMilliseconds()
+            if($birth -lt [long]$owner.started){continue}
+            $targets[[long]$entry.ProcessId]=@{pid=[long]$entry.ProcessId;started=$birth};$added=$true
+        }
+    } while($added)
+    $rows=@($targets.Values)|Sort-Object started -Descending
+    foreach ($row in @($rows)) {
+        if ([long]$row.pid -in @([long]$PID,[long]$oldHost.pid,[long]$newClient.pid)) { continue }
+        $process=Get-Process -Id $row.pid -ErrorAction SilentlyContinue
+        if ($null -eq $process) { continue }
+        try {
+            if (([DateTimeOffset]$process.StartTime).ToUnixTimeMilliseconds() -ne [long]$row.started) { continue }
+            Stop-Process -Id $process.Id -Force -ErrorAction Stop
+        } catch { if (Get-Process -Id $row.pid -ErrorAction SilentlyContinue) { throw } }
+    }
+}
 try {
     while ($null -eq $lock) {
         try { $lock=[IO.File]::Open((Join-Path $DataPath 'update.lock'),'OpenOrCreate','ReadWrite','None') }
@@ -114,6 +158,7 @@ try {
     $probeHost=Host $AppPath $probeData 'probe-host' $true
     $candidateHealth=Api $probeHost '/health'
     if ($candidateHealth.protocol -ne 1 -or -not $candidateHealth.draining -or $candidateHealth.running -ne 0) { throw 'Candidate core is incompatible or started work during preflight' }
+    if ($RestartWorkloads -and ($oldHealth.restartProtocol -ne 1 -or $candidateHealth.restartProtocol -ne 1)) { throw 'Install a restart-capable core with an ordinary hot update first' }
     $null=Api $probeHost '/state'
     $null=Api $probeHost '/updates/shutdown' @{}; WaitExit $probeHost.pid; $probeHost=$null
     $clientId=[Guid]::NewGuid().ToString(); $clientFile=Join-Path $DataPath ('clients/'+$clientId+'.json')
@@ -156,13 +201,28 @@ try {
         $newClient=ClientReady $clientFile; $null=Api $newClient '/activate' @{}; $newClient=ClientReady $clientFile $true; $activated=$true
     }
     @{appPath=$AppPath;instanceId=$clientId;pid=$newClient.pid} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $DataPath 'desktop-active.json') -Encoding UTF8
-    if ($DesktopOnly -or (-not $ForceCore -and $oldHealth.hostBuild -eq $candidateHealth.hostBuild)) { Status 'complete' 'Desktop replaced; the host PID and active runs were retained.'; exit 0 }
+    if ($DesktopOnly -or (-not $ForceCore -and -not $RestartWorkloads -and $oldHealth.hostBuild -eq $candidateHealth.hostBuild)) { Status 'complete' 'Desktop replaced; the host PID and active runs were retained.'; exit 0 }
     $null=Api $newClient '/updating' @{value=$true}
     $legacy=$null -eq $oldHealth.protocol
     $draining=$true
     if ($legacy) { $null=Bridge 'pause' (Join-Path $DataPath 'tethium.db') $ledger }
     else { $null=Api $oldHost '/updates/drain' @{} }
     $handoff=$oldHealth.workerProtocol -eq 1 -and $candidateHealth.workerProtocol -eq 1 -and (Api $oldHost '/health').handoffReady
+    if ($RestartWorkloads) {
+        if (-not $RestartId) { $RestartId=$updateId }
+        Status 'checkpointing' 'Saving sessions, queues, manual pauses and process identities before an explicitly requested cold restart.'
+        $coldPlan=Api $oldHost '/updates/restart/prepare' @{id=$RestartId;confirmed=$true}
+        if (-not $coldPlan.completed) {
+            $null=Api $oldHost '/updates/restart/stop' @{id=$RestartId;confirmed=$true}
+            Status 'stopping-workloads' 'Stopping checkpointed workers and background helpers for CPU migration.'
+            Start-Sleep -Milliseconds 750
+            StopRestartProcesses $coldPlan.processes
+            $deadline=[DateTime]::UtcNow.AddSeconds(25)
+            do { $health=Api $oldHost '/health'; if ($health.running -eq 0) { break }; Start-Sleep -Milliseconds 300 } while ([DateTime]::UtcNow -lt $deadline)
+            if ($health.running -ne 0) { throw 'Stopped workers did not settle before cold restart' }
+            $handoff=$false
+        }
+    }
     if ($handoff) {
         Status 'handoff' 'Replacing the core while independent workers retain active turns, tool calls, and user questions.'
     } else {
@@ -178,6 +238,7 @@ try {
     $null=Bridge 'backup' (Join-Path $DataPath 'tethium.db') (Join-Path $updateRoot 'before-core.db')
     $shutdown=if ($handoff) { '/updates/handoff' } elseif ($legacy) { '/shutdown' } else { '/updates/shutdown' }
     $null=Api $oldHost $shutdown @{}; $oldHostClosed=$true; WaitExit $oldHost.pid
+    if ($null -ne $coldPlan -and -not $coldPlan.completed) { StopRestartProcesses $coldPlan.keepers }
     $replacement=Host $AppPath $DataPath 'replacement-host'
     $health=Api $replacement '/health'
     if (-not $health.draining -or $health.hostBuild -ne $candidateHealth.hostBuild) { throw 'Replacement core readiness check failed' }
@@ -186,11 +247,14 @@ try {
     do { $view=Api $newClient '/state'; if ($view.ready -and $view.hostPid -eq $replacement.pid) { break }; Start-Sleep -Milliseconds 300 } while ([DateTime]::Now -lt $deadline)
     if ($view.hostPid -ne $replacement.pid -or -not $view.ready) { throw 'Window did not reconnect to the replacement core' }
     if ($legacy) { $null=Bridge 'restore' (Join-Path $DataPath 'tethium.db') $ledger }
+    if ($null -ne $coldPlan -and -not $coldPlan.completed) { $null=Api $replacement '/updates/restart/restore' @{id=$RestartId} }
     $null=Api $replacement '/updates/resume' @{}; $draining=$false
     $null=Api $newClient '/updating' @{value=$false}
-    Status 'complete' 'Desktop and core updated; active workers reattached, saved queues resumed, user-paused queues retained.'
+    if ($null -ne $coldPlan) { Status 'complete' 'Cold migration completed; continuation messages queued, original user pauses retained.' }
+    else { Status 'complete' 'Desktop and core updated; active workers reattached, saved queues resumed, user-paused queues retained.' }
 } catch {
     $failure=$_.Exception.Message
+    [IO.File]::WriteAllText((Join-Path $updateRoot 'failure.log'),($failure+"`n"+$_.ScriptStackTrace),[Text.UTF8Encoding]::new($false))
     if ($null -ne $probeHost) { try { $null=Api $probeHost '/updates/shutdown' @{}; WaitExit $probeHost.pid } catch {} }
     try {
         if ($oldHostClosed) {
@@ -205,7 +269,7 @@ try {
             if ($legacy) {
                 $restored=Bridge 'restore' (Join-Path $DataPath 'tethium.db') $ledger
                 foreach ($id in $restored.resumed) { $null=Api $oldHost ('/sessions/'+$id+'/queue-resume') @{} }
-            } else { $null=Api $oldHost '/updates/resume' @{} }
+            } else { if ($null -ne $coldPlan -and -not $coldPlan.completed) { $null=Api $oldHost '/updates/restart/restore' @{id=$RestartId} }; $null=Api $oldHost '/updates/resume' @{} }
         }
         if ($null -ne $newClient -and $activated) { $null=Api $newClient '/updating' @{value=$false} }
         elseif ($null -ne $newClient) { try { $null=Api $newClient '/close' @{} } catch {} }

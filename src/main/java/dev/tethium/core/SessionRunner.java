@@ -20,8 +20,8 @@ public final class SessionRunner {
         long through=store.appendInput(sessionId,prompt);
         String context=context(sessionId,binding.lastSequence(),through-1,provider,new Cancellation());
         var project=store.projects().stream().filter(p->p.id().equals(session.projectId())).findFirst().orElseThrow();
-        context+=ProjectPolicy.context(Path.of(project.root()))+Autonomy.context(store.autonomy(sessionId));
-        var request=new AgentAdapter.Request(session.directory(),context+(store.autonomousInput(sessionId,prompt)?"\nTethium autonomous continuation:\n":"\nCurrent user request:\n")+prompt,binding.conversationId(),
+        context+=ProjectPolicy.context(Path.of(project.root()))+automationContext(sessionId);
+        var request=new AgentAdapter.Request(session.directory(),context+inputHeading(sessionId,prompt)+prompt,binding.conversationId(),
                 model==null?System.getenv("TETHIUM_"+provider.name()+"_MODEL"):model,null,null,Duration.ofHours(24),access,null,effort,ImageAttachments.paths(prompt));
         return new Prepared(runId,request,through);
     }
@@ -45,8 +45,8 @@ public final class SessionRunner {
             long deliveredThrough = store.appendInput(sessionId, prompt);
             String context = context(sessionId, binding.lastSequence(), deliveredThrough - 1, adapter.provider(), cancellation);
             var project=store.projects().stream().filter(p->p.id().equals(session.projectId())).findFirst().orElseThrow();
-            context += ProjectPolicy.context(Path.of(project.root()))+Autonomy.context(store.autonomy(sessionId));
-            var request = new AgentAdapter.Request(session.directory(), context + (store.autonomousInput(sessionId,prompt)?"\nTethium autonomous continuation:\n":"\nCurrent user request:\n") + prompt,
+            context += ProjectPolicy.context(Path.of(project.root()))+automationContext(sessionId);
+            var request = new AgentAdapter.Request(session.directory(), context + inputHeading(sessionId,prompt) + prompt,
                     binding.conversationId(), model == null ? System.getenv("TETHIUM_" + adapter.provider().name() + "_MODEL") : model, toolsUrl, toolsToken,
                     handler == null ? Duration.ofSeconds(180) : Duration.ofHours(24), access, handler, reasoningEffort, ImageAttachments.paths(prompt));
             var result = adapter.run(request, event -> {
@@ -63,6 +63,14 @@ public final class SessionRunner {
         }
     }
 
+    private String automationContext(String id)throws Exception{
+        var timer=store.periodicSchedule(id);
+        return timer.path("state").asText().equals("active")?SessionSchedule.context(timer):Autonomy.context(store.autonomy(id));
+    }
+    private String inputHeading(String id,String prompt)throws Exception{
+        if(store.scheduledInput(id,prompt))return "\nTethium scheduled task:\n";
+        return store.autonomousInput(id,prompt)?"\nTethium autonomous continuation:\n":"\nCurrent user request:\n";
+    }
     String context(String sessionId, long after, long through) throws Exception {
         return context(sessionId, after, through, null, new Cancellation());
     }

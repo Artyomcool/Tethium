@@ -18,20 +18,25 @@ final class ChatNavigation extends JPanel {
         @Override public String toString() { return number + " · " + title; }
     }
     record Position(boolean tail, int absolute, long sequence, int offset, long navigation) {}
+    private final ChatLayoutTrace trace;
+    ChatLayoutTrace trace(){return trace;}
     private final ChatTranscript transcript;
     private final JScrollPane history;
     private final JComboBox<Task> picker = new JComboBox<>();
     private final JButton previous, next, end;
     private final RequestMap requestMap = new RequestMap();
+    private java.util.function.LongToIntFunction virtualPosition;
+    void virtualPositions(java.util.function.LongToIntFunction positions){virtualPosition=positions;}
     private List<Task> tasks = List.of();
     private int[] positions = new int[0];
     private boolean changing, restoring, rendering, followTail = true;
     private long navigation;
+    private int lastMaximum,lastExtent;
     private Long requestedTask;
     private Position renderingPosition;
 
     ChatNavigation(ChatTranscript transcript, JScrollPane history) {
-        super(new BorderLayout(Theme.GAP, 0)); this.transcript = transcript; this.history = history;
+        super(new BorderLayout(Theme.GAP, 0)); this.transcript = transcript; this.history = history;trace=new ChatLayoutTrace(transcript,history);
         setName("chat.navigation"); setBorder(new EmptyBorder(Theme.UNIT, Theme.GUTTER, Theme.UNIT, Theme.GUTTER));
         previous = Theme.button("", "Предыдущий запрос · Alt+PageUp", () -> relative(-1)); previous.setIcon(arrow(-1));
         next = Theme.button("", "Следующий запрос · Alt+PageDown", () -> relative(1)); next.setIcon(arrow(1));
@@ -40,12 +45,14 @@ final class ChatNavigation extends JPanel {
         for (var button : List.of(previous, next, end)) { Theme.toolbar(button); button.getAccessibleContext().setAccessibleName(button.getToolTipText()); }
         var arrows = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0)); arrows.add(previous); arrows.add(next); add(arrows, BorderLayout.WEST);
         picker.setName("chat.tasks"); picker.setMaximumRowCount(8); picker.setEditable(false);
-        picker.getAccessibleContext().setAccessibleName("Текущий запрос · выбрать другой"); picker.setPreferredSize(new Dimension(100, 44)); picker.setMinimumSize(new Dimension(40, 44));
+        picker.getAccessibleContext().setAccessibleName("Текущий запрос · выбрать другой"); picker.setPreferredSize(new Dimension(100, 36)); picker.setMinimumSize(new Dimension(40, 36));
         picker.setRenderer(new RequestRenderer());
         picker.addActionListener(e -> { if (!changing && picker.getSelectedItem() instanceof Task task) jump(task.sequence); });
         add(picker); add(end, BorderLayout.EAST);
         history.getVerticalScrollBar().addAdjustmentListener(e -> {
+            var bar=history.getVerticalScrollBar();boolean resized=lastMaximum!=bar.getMaximum()||lastExtent!=bar.getVisibleAmount();lastMaximum=bar.getMaximum();lastExtent=bar.getVisibleAmount();
             if (restoring) return;
+            if(virtualPosition!=null&&resized&&followTail&&!rendering){restoring=true;try{setBottom();}finally{restoring=false;}updateSelection();return;}
             if (!rendering) { followTail = atEnd(); requestedTask = null; navigation++; updateSelection(); }
         });
         bind(history, KeyEvent.VK_PAGE_UP, InputEvent.ALT_DOWN_MASK, "previousTask", () -> previous.doClick());
@@ -60,7 +67,7 @@ final class ChatNavigation extends JPanel {
         });
         updateSelection();
     }
-    void reset() { navigation++; requestedTask = null; renderingPosition = null; rendering = false; followTail = true; setTasks(List.of()); positions = new int[0]; updateSelection(); }
+    void reset() { trace.operation("navigation.reset");navigation++; requestedTask = null; renderingPosition = null; rendering = false; followTail = true; setTasks(List.of()); positions = new int[0]; updateSelection(); }
     static List<Task> tasks(JsonNode messages) {
         var result = new ArrayList<Task>();
         for (var message : messages) if (message.path("role").asText().equals("user")) {
@@ -78,6 +85,7 @@ final class ChatNavigation extends JPanel {
         finally { changing = false; }
     }
     private void indexPositions() {
+        if(virtualPosition!=null){positions=new int[tasks.size()];for(int i=0;i<tasks.size();i++)positions[i]=Math.max(0,virtualPosition.applyAsInt(tasks.get(i).sequence));return;}
         boolean wasRestoring = restoring; restoring = true;
         try {
         var viewport = history.getViewport(); int width = viewport.getExtentSize().width;
@@ -97,11 +105,13 @@ final class ChatNavigation extends JPanel {
         } finally { restoring = wasRestoring; }
     }
     Position beforeChange(boolean forceTail) {
+        trace.operation("navigation.before","forceTail",forceTail,"followTail",followTail,"rendering",rendering,"navigation",navigation,"stack",ChatLayoutTrace.stack());
         if (forceTail) { followTail = true; requestedTask = null; navigation++; }
         if (!rendering || renderingPosition == null || forceTail) renderingPosition = position();
         rendering = true; return renderingPosition;
     }
     void afterChange(Position saved) {
+        trace.operation("navigation.after","savedY",saved.absolute,"savedTask",saved.sequence,"savedOffset",saved.offset,"savedTail",saved.tail,"savedNavigation",saved.navigation,"navigation",navigation,"followTail",followTail);
         indexPositions(); restoring = true;
         try {
             if (followTail && (saved.tail || saved.navigation != navigation)) setBottom();
@@ -122,6 +132,7 @@ final class ChatNavigation extends JPanel {
         return Json.object("tail", followTail, "scroll", p.absolute, "task", p.sequence, "offset", p.offset);
     }
     void restorePosition(JsonNode saved) {
+        trace.operation("navigation.restore","savedY",saved.path("scroll").asInt(),"savedTask",saved.path("task").asLong(-1),"savedOffset",saved.path("offset").asInt(),"savedTail",saved.path("tail").asBoolean());
         indexPositions(); navigation++; requestedTask = null; followTail = saved.path("tail").asBoolean(); restoring = true;
         try {
             if (followTail) setBottom();
@@ -130,16 +141,19 @@ final class ChatNavigation extends JPanel {
         updateSelection();
     }
     void toEnd() {
+        trace.operation("navigation.toEnd");
         transcript.select(transcript.getDocument().getLength(), transcript.getDocument().getLength());
         followTail = true; requestedTask = null; navigation++; restoring = true;
         try { setBottom(); } finally { restoring = false; }
         updateSelection();
     }
-    private void setBottom() { var bar = history.getVerticalScrollBar(); bar.setValue(bar.getMaximum()); history.getViewport().doLayout(); bar.setValue(bar.getMaximum()); }
+    private void setBottom() { trace.operation("navigation.setBottom","stack",ChatLayoutTrace.stack());var bar = history.getVerticalScrollBar(); bar.setValue(bar.getMaximum()); history.getViewport().doLayout(); bar.setValue(bar.getMaximum()); }
     private void relative(int delta) {
         int index = picker.getSelectedIndex(); if (index + delta >= 0 && index + delta < tasks.size()) jump(tasks.get(index + delta).sequence);
     }
     private void jump(long sequence) {
+        trace.operation("navigation.jump","task",sequence);
+
         transcript.select(0, 0);
         followTail = false; requestedTask = sequence; navigation++;
         if (!rendering) { indexPositions(); restoring = true; try { setTaskPosition(sequence, 0); } finally { restoring = false; } }
@@ -188,7 +202,7 @@ final class ChatNavigation extends JPanel {
             int width = pinned ? Math.max(40, picker.getWidth() - 30) : Math.max(320, Math.min(520, picker.getWidth()));
             int textWidth = Math.max(20, width - number.getPreferredSize().width - Theme.GAP * 3);
             preview.setText(shortPreview(task == null ? "Нет запросов" : task.title, textWidth, pinned ? 2 : 3, preview.getFontMetrics(preview.getFont()))); preview.setCaretPosition(0);
-            setPreferredSize(new Dimension(width, pinned ? 38 : 58));
+            setPreferredSize(new Dimension(width, pinned ? 32 : 50));
             return this;
         }
     }

@@ -1,0 +1,194 @@
+[
+  {
+    "id": "session-logic",
+    "source": "identity-associations-v3",
+    "row": 1,
+    "column": 3,
+    "region": [
+      319,
+      0,
+      481,
+      198
+    ],
+    "bounds": [
+      13,
+      57,
+      154,
+      186
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "session-verification",
+    "source": "identity-associations-v3",
+    "row": 2,
+    "column": 5,
+    "region": [
+      631,
+      198,
+      760,
+      367
+    ],
+    "bounds": [
+      13,
+      8,
+      125,
+      159
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "session-graphics",
+    "source": "identity-associations-v3",
+    "row": 3,
+    "column": 1,
+    "region": [
+      0,
+      367,
+      174,
+      526
+    ],
+    "bounds": [
+      36,
+      10,
+      173,
+      153
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "session-tasks",
+    "source": "identity-associations-v3",
+    "row": 4,
+    "column": 8,
+    "region": [
+      1070,
+      526,
+      1254,
+      678
+    ],
+    "bounds": [
+      10,
+      14,
+      151,
+      134
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "session-progress",
+    "source": "identity-associations-v3",
+    "row": 5,
+    "column": 7,
+    "region": [
+      922,
+      678,
+      1073,
+      825
+    ],
+    "bounds": [
+      7,
+      14,
+      142,
+      133
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "project-phoenix",
+    "source": "identity-associations-v3",
+    "row": 6,
+    "column": 5,
+    "region": [
+      614,
+      825,
+      779,
+      969
+    ],
+    "bounds": [
+      10,
+      4,
+      162,
+      142
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "project-stars",
+    "source": "identity-associations-v3",
+    "row": 8,
+    "column": 7,
+    "region": [
+      916,
+      1113,
+      1063,
+      1254
+    ],
+    "bounds": [
+      15,
+      6,
+      142,
+      126
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "project-sbg",
+    "source": "sbg-d20-v1",
+    "row": 4,
+    "column": 2,
+    "region": [
+      318,
+      950,
+      626,
+      1254
+    ],
+    "bounds": [
+      33,
+      16,
+      276,
+      286
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+]

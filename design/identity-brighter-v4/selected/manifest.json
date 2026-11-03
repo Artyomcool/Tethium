@@ -1,0 +1,194 @@
+[
+  {
+    "id": "session-logic",
+    "source": "identity-brighter-v4",
+    "row": 8,
+    "column": 1,
+    "region": [
+      0,
+      1093,
+      175,
+      1246
+    ],
+    "bounds": [
+      26,
+      18,
+      154,
+      138
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "session-verification",
+    "source": "identity-brighter-v4",
+    "row": 8,
+    "column": 2,
+    "region": [
+      175,
+      1093,
+      316,
+      1246
+    ],
+    "bounds": [
+      21,
+      5,
+      123,
+      144
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "session-graphics",
+    "source": "identity-brighter-v4",
+    "row": 8,
+    "column": 3,
+    "region": [
+      316,
+      1093,
+      470,
+      1246
+    ],
+    "bounds": [
+      19,
+      8,
+      142,
+      141
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "session-tasks",
+    "source": "identity-brighter-v4",
+    "row": 8,
+    "column": 4,
+    "region": [
+      470,
+      1093,
+      631,
+      1246
+    ],
+    "bounds": [
+      12,
+      18,
+      145,
+      135
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "session-progress",
+    "source": "identity-brighter-v4",
+    "row": 8,
+    "column": 5,
+    "region": [
+      631,
+      1093,
+      789,
+      1246
+    ],
+    "bounds": [
+      16,
+      16,
+      145,
+      130
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "project-phoenix",
+    "source": "identity-brighter-v4",
+    "row": 8,
+    "column": 6,
+    "region": [
+      789,
+      1093,
+      950,
+      1246
+    ],
+    "bounds": [
+      13,
+      13,
+      147,
+      138
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "project-stars",
+    "source": "identity-brighter-v4",
+    "row": 8,
+    "column": 7,
+    "region": [
+      950,
+      1093,
+      1098,
+      1246
+    ],
+    "bounds": [
+      14,
+      18,
+      132,
+      131
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "project-sbg",
+    "source": "identity-brighter-v4",
+    "row": 8,
+    "column": 8,
+    "region": [
+      1098,
+      1093,
+      1263,
+      1246
+    ],
+    "bounds": [
+      17,
+      6,
+      141,
+      143
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+]

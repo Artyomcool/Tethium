@@ -5,14 +5,23 @@ if (signingFile.exists()) signingFile.withInputStream { signing.load(it) }
 android {
     namespace 'dev.tethium.mobile'
     compileSdk 36
-    defaultConfig { applicationId 'dev.tethium.mobile'; minSdk 26; targetSdk 36; versionCode 5; versionName '0.3.1' }
+    defaultConfig { applicationId 'dev.tethium.mobile'; minSdk 26; targetSdk 36; versionCode 12; versionName '0.4.4' }
     signingConfigs { release { if (signingFile.exists()) { storeFile file(signing.storeFile); storePassword signing.password; keyAlias 'tethium'; keyPassword signing.password } } }
     buildTypes { release { signingConfig signingConfigs.release; minifyEnabled false } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
 }
+def identityAssets = layout.buildDirectory.dir('generated/identityAssets')
+tasks.register('syncDesktopIdentities', Sync) {
+    from('../../src/main/resources/dev/tethium/desktop/identity/v3') { include 'names.properties', '*-88.png'; into 'identity' }
+    into identityAssets
+}
+android.sourceSets.main.assets.srcDir(identityAssets.get().asFile)
+tasks.named('preBuild') { dependsOn 'syncDesktopIdentities' }
 dependencies {
     implementation 'io.noties.markwon:core:4.6.2'
     implementation 'io.noties.markwon:ext-tables:4.6.2'
     implementation 'io.noties.markwon:ext-strikethrough:4.6.2'
     implementation 'io.noties.markwon:ext-tasklist:4.6.2'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.json:json:20240303'
 }

@@ -15,6 +15,7 @@ dependencies {
     implementation 'org.xerial:sqlite-jdbc:3.50.3.0'
     implementation 'me.friwi:jcefmaven:152.0.6'
     implementation 'com.formdev:flatlaf:3.6.2'
+    implementation 'com.github.weisj:jsvg:2.2.0'
     implementation 'org.commonmark:commonmark:0.26.0'
     implementation 'org.commonmark:commonmark-ext-gfm-tables:0.26.0'
     implementation 'org.bouncycastle:bcpkix-jdk18on:1.80'
@@ -27,7 +28,7 @@ dependencies {
 
 application {
     mainClass = 'dev.tethium.desktop.DesktopMain'
-    applicationDefaultJvmArgs = ['--enable-native-access=ALL-UNNAMED']
+    applicationDefaultJvmArgs = ['--enable-native-access=ALL-UNNAMED', '--add-exports=java.desktop/sun.awt=ALL-UNNAMED', '--add-exports=java.desktop/sun.java2d=ALL-UNNAMED']
 }
 
 def buildMetadata = layout.buildDirectory.dir('generated/buildInfo')
@@ -112,6 +113,7 @@ tasks.register('packageDesktop', Exec) {
                 '--icon', file('src/main/resources/dev/tethium/desktop/branding/tethium.ico'),
                 '--jlink-options', '--strip-debug --no-man-pages --no-header-files',
                 '--java-options', '--enable-native-access=ALL-UNNAMED',
+                '--java-options', '--add-exports=java.desktop/sun.awt=ALL-UNNAMED', '--java-options', '--add-exports=java.desktop/sun.java2d=ALL-UNNAMED',
                 '--add-modules', 'java.base,java.desktop,java.sql,java.net.http,jdk.httpserver,java.management,java.naming,java.logging,jdk.crypto.ec,jdk.unsupported,jdk.management,java.security.jgss'
     }
 }
@@ -147,13 +149,13 @@ tasks.register('packageRemote', Exec) {
                 '--input',layout.buildDirectory.dir('remote-libs').get().asFile,'--main-jar',tasks.named('remoteJar').get().archiveFileName.get(),
                 '--main-class','dev.tethium.desktop.RemoteMain','--app-version','0.3.0','--vendor','Tethium',
                 '--icon',file('src/main/resources/dev/tethium/desktop/branding/client/tethium.ico'),
-                '--java-options','--enable-native-access=ALL-UNNAMED','--jlink-options','--strip-debug --no-man-pages --no-header-files',
+                '--java-options','--enable-native-access=ALL-UNNAMED','--java-options','--add-exports=java.desktop/sun.awt=ALL-UNNAMED','--java-options','--add-exports=java.desktop/sun.java2d=ALL-UNNAMED','--jlink-options','--strip-debug --no-man-pages --no-header-files',
                 '--add-modules','java.base,java.desktop,java.sql,java.scripting,java.instrument,java.net.http,jdk.httpserver,jdk.zipfs,java.management,java.naming,java.logging,jdk.crypto.ec,jdk.unsupported,jdk.management,java.security.jgss'
     }
 }
 tasks.withType(JavaExec).configureEach {
     javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(25) }
-    jvmArgs '--enable-native-access=ALL-UNNAMED'
+    jvmArgs '--enable-native-access=ALL-UNNAMED', '--add-exports=java.desktop/sun.awt=ALL-UNNAMED', '--add-exports=java.desktop/sun.java2d=ALL-UNNAMED'
 }
 test {
     useJUnitPlatform()
@@ -169,3 +171,33 @@ tasks.register('previewProbe', JavaExec) {
             '--add-exports=java.desktop/sun.java2d=ALL-UNNAMED'
 }
 
+
+tasks.register('focusProbe', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.probe.FocusProbe'
+    jvmArgs '--add-exports=java.desktop/sun.awt=ALL-UNNAMED', '--add-exports=java.desktop/sun.java2d=ALL-UNNAMED'
+}
+
+tasks.register('gradleCpuProbe', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.host.GradleCpuProbe'
+}
+
+tasks.register('historyProbe', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.probe.HistoryProbe'
+}
+
+tasks.register('previewLifecycleProbe', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.probe.PreviewLifecycleProbe'
+}
+
+ tasks.register('cpuControlProbe', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.probe.CpuControlProbe'
+}
+tasks.register('sessionDaemonProbe', JavaExec) {
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'dev.tethium.probe.SessionDaemonProbe'
+}

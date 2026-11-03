@@ -8,6 +8,7 @@ import org.cef.browser.*;
 import org.cef.handler.CefRequestHandlerAdapter;
 import org.cef.handler.CefKeyboardHandlerAdapter;
 import org.cef.handler.CefFocusHandlerAdapter;
+import org.cef.handler.CefLifeSpanHandlerAdapter;
 import org.cef.network.CefRequest;
 import javax.imageio.ImageIO;
 import javax.swing.*;
@@ -26,11 +27,18 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
     private CefBrowser browser;
     private ArtifactServer server;
     private Path current;
+    private final java.util.Set<CefBrowser> createdBrowsers=new java.util.HashSet<>();
+    private final java.util.Set<CefBrowser> closingBrowsers=new java.util.HashSet<>();
+    private int rendererRecoveries;
+    private Runnable pendingBrowserOpen;
+    private ArtifactServer pendingResources;
+    private void cancelPending(){pendingBrowserOpen=null;if(pendingResources!=null){pendingResources.close();pendingResources=null;}}
+    public int browserResourceCount(){return closingBrowsers.size()+(browser==null?0:1);}
+    public void suspendBrowser(){if(browser!=null||pendingBrowserOpen!=null){current=null;remoteUrl=null;generation.incrementAndGet();cancelPending();disposeBrowser();message("Просмотр приостановлен");}}
     private Runnable expand = () -> {}, escape = () -> {};
     private volatile boolean fullScreen;
     private ImagePanel imagePanel;
     private volatile boolean closed;
-    private volatile boolean browserFocused;
     private final java.beans.PropertyChangeListener focusListener = event -> {
         if (event.getNewValue() instanceof Component component && !SwingUtilities.isDescendingFrom(component, this)) releaseFocus();
     };
@@ -39,11 +47,8 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
         KeyboardFocusManager.getCurrentKeyboardFocusManager().addPropertyChangeListener("permanentFocusOwner", focusListener);
     }
     public void releaseFocus() {
-        if (browser == null || !browserFocused) return;
-        browserFocused=false; browser.setFocus(false);
-        var manager=KeyboardFocusManager.getCurrentKeyboardFocusManager(); var target=manager.getFocusOwner();
-        manager.clearGlobalFocusOwner();
-        if(target!=null&&!SwingUtilities.isDescendingFrom(target,this)) SwingUtilities.invokeLater(target::requestFocus);
+        // Swing owns the keyboard; never clear its focus owner while returning from Chromium.
+        if(browser!=null)browser.setFocus(false);
     }
     public void onExpand(Runnable action) { expand = action; }
     public void onEscape(Runnable action) { escape = action; }
@@ -60,15 +65,15 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
     }
     private void load(Path path) {
         if (closed) return;
-        remoteUrl=null; current = path; imagePanel = null; long expected = generation.incrementAndGet();
+        remoteUrl=null;cancelPending(); current = path; imagePanel = null; rendererRecoveries=0; long expected = generation.incrementAndGet();
         disposeBrowser();
         message("Открываем " + path.getFileName() + "…");
         loader.submit(() -> {
             try {
                 String name = path.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
-                if (name.endsWith(".html") || name.endsWith(".htm") || name.endsWith(".svg") || dev.tethium.artifact.MarkdownPreview.supports(path)) {
+                if (dev.tethium.artifact.MarkdownPreview.supports(path)||name.endsWith(".html") || name.endsWith(".htm") || name.endsWith(".svg")) {
                     var resources=new ArtifactServer(path.getParent());
-                    showBrowser(resources.uri(path.getFileName().toString()),resources.baseUri().toString(),expected,resources);
+                    try{showBrowser(resources.uri(path.getFileName().toString()),resources.baseUri().toString(),expected,resources);}catch(Exception error){resources.close();throw error;}
                 } else {
                     var image = ImageIO.read(path.toFile());
                     if (image == null) throw new IllegalArgumentException("Этот формат пока не поддерживается");
@@ -81,33 +86,54 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
         });
     }
     private java.net.URI remoteUrl;
-    public void openRemote(java.net.URI url){if(closed||url.equals(remoteUrl))return;current=null;remoteUrl=url;imagePanel=null;long expected=generation.incrementAndGet();disposeBrowser();message("Открываем результат с ноутбука…");loader.submit(()->{try{showBrowser(url,url.resolve(".").toString(),expected,null);}catch(Exception e){SwingUtilities.invokeLater(()->{if(generation.get()==expected)message("Не удалось открыть: "+e.getMessage());});}});}
+    public void openRemote(java.net.URI url){if(closed||url.equals(remoteUrl))return;current=null;remoteUrl=url;imagePanel=null;rendererRecoveries=0;cancelPending();long expected=generation.incrementAndGet();disposeBrowser();message("Открываем результат с ноутбука…");loader.submit(()->{try{showBrowser(url,url.resolve(".").toString(),expected,null);}catch(Exception e){SwingUtilities.invokeLater(()->{if(generation.get()==expected)message("Не удалось открыть: "+e.getMessage());});}});}
     private void showBrowser(java.net.URI url,String allowedBase,long expected,ArtifactServer resources)throws Exception{
                     if (app == null) {
                         var builder = new CefAppBuilder();
                         Path cache = Path.of(".local", "preview", "jcef").toAbsolutePath();
                         if (!Files.isDirectory(cache)) cache = AppPaths.data().resolve("jcef");
-                        builder.setInstallDir(cache.toFile()); builder.getCefSettings().windowless_rendering_enabled = false;
+                        builder.setInstallDir(cache.toFile()); builder.getCefSettings().windowless_rendering_enabled = true;
                         // Chromium's process singleton must not redirect a new GUI/probe into the old GUI during reload.
                         builder.getCefSettings().root_cache_path = Files.createDirectories(AppPaths.data().resolve("browser-profiles").resolve(Long.toString(ProcessHandle.current().pid()))).toString();
                         builder.getCefSettings().log_file = AppPaths.data().resolve("browser.log").toString();
                         builder.setProgressHandler((state, percent) -> {});
-                        app = builder.build();
+                        app = builder.build();if(closed){if(resources!=null)resources.close();app.dispose();return;}
                     }
                     if (closed || generation.get() != expected) {if(resources!=null)resources.close();return;}
                     SwingUtilities.invokeLater(() -> {
                         if (closed || generation.get() != expected) { if(resources!=null)resources.close(); return; }
-                        disposeBrowser(); server = resources;
-                        client = app.createClient();
+                        disposeBrowser();
+                        Runnable install=()->{
+                        pendingResources=null;
+                        if(closed||generation.get()!=expected){if(resources!=null)resources.close();return;}
+                        server = resources;
+                        client = app.createClient();final CefClient ownedClient=client;
+                        client.addContextMenuHandler(new org.cef.handler.CefContextMenuHandlerAdapter(){
+                            private static final int COPY_IMAGE=org.cef.callback.CefMenuModel.MenuId.MENU_ID_USER_FIRST+1;
+                            @Override public void onBeforeContextMenu(CefBrowser b,CefFrame f,org.cef.callback.CefContextMenuParams params,org.cef.callback.CefMenuModel menu){
+                                if(params.hasImageContents()){menu.insertItemAt(0,COPY_IMAGE,"Копировать изображение");menu.insertSeparatorAt(1);}
+                            }
+                            @Override public boolean onContextMenuCommand(CefBrowser b,CefFrame f,org.cef.callback.CefContextMenuParams params,int command,int flags){
+                                if(command!=COPY_IMAGE)return false;String source=params.getSourceUrl();
+                                SwingUtilities.invokeLater(()->ClipboardImages.copy(ArtifactView.this,()->copyBrowserImage(b,source)));return true;
+                            }
+                        });
+                        client.addLifeSpanHandler(new CefLifeSpanHandlerAdapter(){
+                            @Override public void onAfterCreated(CefBrowser b){SwingUtilities.invokeLater(()->{
+                                createdBrowsers.add(b);
+                                if(closed||generation.get()!=expected||browser!=b)b.close(true);
+                            });}
+                            @Override public void onBeforeClose(CefBrowser b){SwingUtilities.invokeLater(()->{
+                                if(b.getUIComponent() instanceof com.jogamp.opengl.awt.GLCanvas canvas)try{canvas.destroy();}catch(RuntimeException error){System.err.println("Browser surface cleanup: "+error.getMessage());}
+                                createdBrowsers.remove(b);closingBrowsers.remove(b);ownedClient.dispose();
+                                if(closed){if(closingBrowsers.isEmpty()&&app!=null)app.dispose();}
+                                else if(closingBrowsers.isEmpty()&&pendingBrowserOpen!=null){var next=pendingBrowserOpen;pendingBrowserOpen=null;next.run();}
+                            });}
+                        });
                         client.addFocusHandler(new CefFocusHandlerAdapter() {
                             @Override public boolean onSetFocus(CefBrowser b, FocusSource source) {
-                                // Loading/autofocusing a page must not take the user's typing away from Swing.
-                                return source == FocusSource.FOCUS_SOURCE_NAVIGATION;
-                            }
-                            @Override public void onGotFocus(CefBrowser b) {
-                                if(browserFocused)return; browserFocused=true;
-                                // JCEF's Windows peer does not synchronize native focus with AWT's owner.
-                                SwingUtilities.invokeLater(() -> { if(browser==b&&browserFocused)KeyboardFocusManager.getCurrentKeyboardFocusManager().clearGlobalFocusOwner(); });
+                                var owner=KeyboardFocusManager.getCurrentKeyboardFocusManager().getFocusOwner();
+                                return source==FocusSource.FOCUS_SOURCE_NAVIGATION||owner==null||!SwingUtilities.isDescendingFrom(owner,ArtifactView.this);
                             }
                             @Override public void onTakeFocus(CefBrowser b, boolean next) {
                                 SwingUtilities.invokeLater(() -> { b.setFocus(false); if (next) b.getUIComponent().transferFocus(); else b.getUIComponent().transferFocusBackward(); });
@@ -117,6 +143,20 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
                         client.addRequestHandler(new CefRequestHandlerAdapter() {
                             @Override public boolean onBeforeBrowse(CefBrowser b, CefFrame f, CefRequest r, boolean gesture, boolean redirect) {
                                 return !r.getURL().startsWith(base) && !r.getURL().equals("about:blank");
+                            }
+                            @Override public void onRenderProcessTerminated(CefBrowser b,TerminationStatus status,int code,String detail){
+                                SwingUtilities.invokeLater(()->{
+                                    if(closed||generation.get()!=expected||browser!=b)return;
+                                    System.err.println("Preview renderer terminated: "+status+" ("+code+") "+detail);
+                                    if(rendererRecoveries++==0){
+                                        // A killed renderer leaves a live browser with a blank surface. One retry;
+                                        // repeated failure must not turn memory pressure into a restart loop.
+                                        var retry=new javax.swing.Timer(250,event->{if(!closed&&generation.get()==expected&&browser==b)b.reload();});
+                                        retry.setRepeats(false);retry.start();
+                                    }else{
+                                        disposeBrowser();message("Процесс просмотра остановился. Нажмите «Обновить», чтобы открыть файл снова.");
+                                    }
+                                });
                             }
                         });
                         client.addKeyboardHandler(new CefKeyboardHandlerAdapter() {
@@ -129,23 +169,39 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
                                 return false;
                             }
                         });
-                        browser = client.createBrowser(url.toString(), false, false);
-                        removeAll(); add(browser.getUIComponent(), BorderLayout.CENTER); revalidate(); repaint();
+                        browser = client.createBrowser(url.toString(), true, false);
+                        browser.getUIComponent().addMouseListener(new MouseAdapter(){@Override public void mousePressed(MouseEvent e){e.getComponent().requestFocusInWindow();}});
+                        removeAll(); add(browser.getUIComponent(), BorderLayout.CENTER); revalidate(); repaint();browser.createImmediately();
+                        };
+                        if(closingBrowsers.isEmpty())install.run();else{cancelPending();pendingResources=resources;pendingBrowserOpen=install;}
                     });
     }
     public void reload() { if(remoteUrl!=null){var uri=remoteUrl;remoteUrl=null;openRemote(uri);}else if (current != null) load(current); }
+    static Image copyBrowserImage(CefBrowser browser,String source)throws Exception{
+        // Decode the original first (not a screenshot or a scaled preview).
+        try{var image=ClipboardImages.read(source,Path.of("."));if(image!=null)return image;}catch(Exception ignored){}
+        // Chromium can rasterize SVG/WebP/blob images that ImageIO cannot decode.
+        String expression="(()=>{const src="+dev.tethium.json.Json.MAPPER.writeValueAsString(source)+";const img=[...document.images].find(i=>i.currentSrc===src||i.src===src);if(!img||!img.complete||!img.naturalWidth)throw Error('Изображение ещё не загружено');const canvas=document.createElement('canvas');canvas.width=img.naturalWidth;canvas.height=img.naturalHeight;canvas.getContext('2d').drawImage(img,0,0);return canvas.toDataURL('image/png');})()";
+        var result=dev.tethium.json.Json.parse(browser.getDevToolsClient().executeDevToolsMethod("Runtime.evaluate",dev.tethium.json.Json.object("expression",expression,"returnByValue",true).toString()).get(10,TimeUnit.SECONDS));
+        String data=result.path("result").path("value").asText();if(data.isEmpty())throw new java.io.IOException("Браузер не смог прочитать пиксели изображения");return ClipboardImages.read(data,Path.of("."));
+    }
     public void fitImage() { if (imagePanel != null) imagePanel.fit(); }
     public void actualImageSize() { if (imagePanel != null) imagePanel.actualSize(); }
     public void clear() {
-        current = null; remoteUrl=null; imagePanel = null; generation.incrementAndGet(); disposeBrowser(); message("Изображения и HTML от агента");
+        current = null; remoteUrl=null; imagePanel = null;cancelPending(); generation.incrementAndGet(); disposeBrowser(); message("Изображения и HTML от агента");
     }
     private void disposeBrowser() {
-        browserFocused=false;
-        if (browser != null) { browser.close(true); browser = null; }
-        if (client != null) { client.dispose(); client = null; }
+        if (browser != null) {
+            var old=browser;browser=null;closingBrowsers.add(old);
+            // JCEF marks close(true) as final even when its native browser does not exist yet.
+            // Closing before onAfterCreated then loses onBeforeClose and blocks every next preview.
+            // Keep the close pending until the native creation callback can actually close it.
+            if(createdBrowsers.contains(old))old.close(true);
+        }
+        client=null;
         if (server != null) { server.close(); server = null; }
     }
-    @Override public void close() { closed = true; KeyboardFocusManager.getCurrentKeyboardFocusManager().removePropertyChangeListener("permanentFocusOwner", focusListener); generation.incrementAndGet(); disposeBrowser(); loader.shutdownNow(); if (app != null) app.dispose(); }
+    @Override public void close() { closed = true; KeyboardFocusManager.getCurrentKeyboardFocusManager().removePropertyChangeListener("permanentFocusOwner", focusListener); generation.incrementAndGet();cancelPending(); disposeBrowser(); loader.shutdownNow(); if (app != null&&closingBrowsers.isEmpty()) app.dispose(); }
     private final class ImagePanel extends JPanel {
         private final BufferedImage image;
         private double zoom = 1, panX, panY;
@@ -181,6 +237,9 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
             };
             addMouseListener(mouse); addMouseMotionListener(mouse); addMouseWheelListener(mouse);
             var menu = new JPopupMenu();
+            var copy=new AbstractAction("Копировать изображение"){public void actionPerformed(ActionEvent e){ClipboardImages.copy(ImagePanel.this,()->image);}};
+            menu.add(copy);menu.addSeparator();
+            getInputMap(WHEN_FOCUSED).put(KeyStroke.getKeyStroke(KeyEvent.VK_C,InputEvent.CTRL_DOWN_MASK),"copyImage");getActionMap().put("copyImage",copy);
             menu.add(new AbstractAction("По размеру окна") { public void actionPerformed(ActionEvent e) { fit(); } });
             menu.add(new AbstractAction("Исходный размер · 100%") { public void actionPerformed(ActionEvent e) { actualSize(); } });
             setComponentPopupMenu(menu);

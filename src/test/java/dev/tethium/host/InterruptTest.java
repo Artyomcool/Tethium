@@ -14,7 +14,7 @@ import static org.junit.jupiter.api.Assertions.*;
 @Timeout(25)
 class InterruptTest {
     @TempDir Path root;
-    @Test void correctionWaitsForChildrenCancelsOnlySubtreeAndKeepsQueuesPaused() throws Exception {
+    @Test void correctionWaitsForChildrenThenResumesPreviouslyRunningQueues() throws Exception {
         String parent,child,other;
         try(var store=new SessionStore(root.resolve("tethium.db"))) {
             String p=store.project(root); parent=store.create(p,null,"parent",root).id();
@@ -24,7 +24,7 @@ class InterruptTest {
         var adapter=new AgentAdapter(){
             public Provider provider(){return Provider.CODEX;}
             public Result run(Request request,Consumer<Event> events,Cancellation cancel) throws Exception {
-                String label=request.prompt().endsWith("child-work")?"child":request.prompt().endsWith("parent-work")?"parent":request.prompt().endsWith("fix-now")?"fix":"other";
+                String label=request.prompt().endsWith("child-work")?"child":request.prompt().endsWith("parent-work")?"parent":request.prompt().endsWith("fix-now")?"fix":request.prompt().endsWith("old-parent")?"queued-parent":request.prompt().endsWith("old-child")?"queued-child":"other";
                 starts.add(label);
                 if(label.equals("fix")){assertTrue(correctionDone.await(10,TimeUnit.SECONDS));return new Result("thread",Status.COMPLETED,"fixed");}
                 while(!cancel.isCancelled())Thread.sleep(10);
@@ -43,12 +43,12 @@ class InterruptTest {
             allowChildExit.countDown();assertEquals("fix",starts.poll(5,TimeUnit.SECONDS));
             assertEquals(receipt,c.post("/sessions/"+parent+"/interrupt",command));
             assertTrue(session(c,other).path("running").asBoolean());assertFalse(session(c,other).path("queuePaused").asBoolean());
-            assertTrue(session(c,parent).path("queuePaused").asBoolean());assertTrue(session(c,child).path("queuePaused").asBoolean());
-            correctionDone.countDown(); await(()->!session(c,parent).path("running").asBoolean());
-            assertTrue(session(c,parent).path("attention").path("unread").asBoolean());
-            assertEquals("old-parent",c.get("/state?session="+parent).path("conversation").path("queued").get(0).path("prompt").asText());
-            assertEquals("old-child",c.get("/state?session="+child).path("conversation").path("queued").get(0).path("prompt").asText());
-            assertNull(starts.poll(150,TimeUnit.MILLISECONDS));c.post("/sessions/"+other+"/stop",Json.object());await(()->!session(c,other).path("running").asBoolean());
+            assertFalse(session(c,parent).path("queuePaused").asBoolean());assertFalse(session(c,child).path("queuePaused").asBoolean());
+            assertNull(starts.poll(150,TimeUnit.MILLISECONDS),"Subtree queue must wait for priority correction");
+            correctionDone.countDown();
+            assertEquals(java.util.Set.of("queued-parent","queued-child"),java.util.Set.of(starts.poll(5,TimeUnit.SECONDS),starts.poll(5,TimeUnit.SECONDS)));
+            c.post("/sessions/"+parent+"/stop",Json.object());await(()->!session(c,parent).path("running").asBoolean()&&!session(c,child).path("running").asBoolean());
+            c.post("/sessions/"+other+"/stop",Json.object());await(()->!session(c,other).path("running").asBoolean());
         }
         try(var host=new HostService(root,adapter);var c=new HostClient(host.descriptor())){
             assertTrue(session(c,parent).path("queuePaused").asBoolean());assertFalse(session(c,parent).path("running").asBoolean());

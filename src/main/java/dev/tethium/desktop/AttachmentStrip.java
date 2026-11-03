@@ -22,6 +22,7 @@ final class AttachmentStrip extends JPanel {
             if(icon.getIconWidth()>0) { double scale=Math.min(50.0/icon.getIconWidth(),42.0/icon.getIconHeight());button.setIcon(new ImageIcon(icon.getImage().getScaledInstance(Math.max(1,(int)(icon.getIconWidth()*scale)),Math.max(1,(int)(icon.getIconHeight()*scale)),Image.SCALE_SMOOTH))); }
             else button.setText("PNG");
             button.setPreferredSize(new Dimension(58,48));button.setToolTipText(path.getFileName()+" · открыть");button.getAccessibleContext().setAccessibleName("Открыть скриншот");button.addActionListener(e->open.accept(path));card.add(button);
+            var menu=new JPopupMenu();menu.add(new AbstractAction("Копировать изображение"){public void actionPerformed(java.awt.event.ActionEvent e){ClipboardImages.copy(button,()->javax.imageio.ImageIO.read(path.toFile()));}});button.setComponentPopupMenu(menu);
             var close=Theme.iconButton("close","Убрать вложение из сообщения",()->remove.accept(path));close.setName("composer.removeImage");card.add(close,BorderLayout.EAST);row.add(card);
         }
         if(processing>0)row.add(new JLabel("Сохраняем изображение…"));

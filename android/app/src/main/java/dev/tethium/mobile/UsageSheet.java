@@ -15,7 +15,7 @@ final class UsageSheet {
     private final Activity activity;private final Ui ui;private final Connection connection;private final JSONObject state;
     private final ExecutorService io=Executors.newSingleThreadExecutor();private final Handler main=new Handler(Looper.getMainLooper());
     private final Spinner periods,projects,sessions;private final TextView summary;private final LinearLayout rows;private final Chart chart;private Dialog dialog;
-    private final ArrayList<String> periodIds=new ArrayList<>(),projectIds=new ArrayList<>(),sessionIds=new ArrayList<>();private boolean filling=true;private long generation;
+    private final ArrayList<String> periodIds=new ArrayList<>(),projectIds=new ArrayList<>(),sessionIds=new ArrayList<>();private boolean filling=true,loading;private long generation;
     static void show(Activity a,Ui ui,Connection c,JSONObject state){new UsageSheet(a,ui,c,state);}
     private UsageSheet(Activity a,Ui u,Connection c,JSONObject snapshot){activity=a;ui=u;connection=c;state=snapshot;
         var content=ui.col();ui.pad(content,16,12);periods=new Spinner(a);projects=new Spinner(a);sessions=new Spinner(a);for(var spinner:new Spinner[]{periods,projects,sessions}){spinner.setMinimumHeight(ui.dp(48));content.addView(spinner,new LinearLayout.LayoutParams(-1,ui.dp(48)));}
@@ -27,7 +27,12 @@ final class UsageSheet {
     private void adapter(Spinner spinner,List<String> values){spinner.setAdapter(new ArrayAdapter<>(activity,android.R.layout.simple_spinner_dropdown_item,values));}
     private void fillSessions(){sessionIds.clear();sessionIds.add("");var names=new ArrayList<String>();names.add("Все сессии");String pid=projectIds.get(Math.max(0,projects.getSelectedItemPosition()));var ss=state.optJSONArray("sessions");if(ss!=null)for(int i=0;i<ss.length();i++){var s=ss.optJSONObject(i);if(pid.isEmpty()||pid.equals(s.optString("projectId"))){sessionIds.add(s.optString("id"));names.add(s.optString("title"));}}adapter(sessions,names);}
     private String choice(List<String> ids,Spinner spinner){int n=spinner.getSelectedItemPosition();return n<0||n>=ids.size()?"":ids.get(n);}
-    private void load(){if(!dialog.isShowing()||io.isShutdown())return;long version=++generation;String period=choice(periodIds,periods),pid=choice(projectIds,projects),sid=choice(sessionIds,sessions);io.execute(()->{try{var data=connection.request("/usage?period="+enc(period)+"&project="+enc(pid)+"&session="+enc(sid),null);main.post(()->{if(version!=generation||!dialog.isShowing())return;render(data,pid,sid);});}catch(Exception e){main.post(()->summary.setText("Не удалось получить статистику: "+e.getMessage()));}});}
+    private void load(){
+        if(!dialog.isShowing()||io.isShutdown()||loading)return;loading=true;setLoading(true);long version=++generation;
+        String period=choice(periodIds,periods),pid=choice(projectIds,projects),sid=choice(sessionIds,sessions);
+        io.execute(()->{try{var data=connection.request("/usage?period="+enc(period)+"&project="+enc(pid)+"&session="+enc(sid),null);main.post(()->{if(version!=generation||!dialog.isShowing())return;loading=false;setLoading(false);render(data,pid,sid);});}catch(Exception e){main.post(()->{if(version!=generation||!dialog.isShowing())return;loading=false;setLoading(false);summary.setText("Не удалось получить статистику: "+e.getMessage());});}});
+    }
+    private void setLoading(boolean busy){periods.setEnabled(!busy);projects.setEnabled(!busy);sessions.setEnabled(!busy);if(busy)summary.setText("Получаем статистику…");}
     private void render(JSONObject data,String pid,String sid){
         String chosen=data.optString("period");var list=data.optJSONArray("periods");var nextIds=new ArrayList<String>();var names=new ArrayList<String>();nextIds.add("all");names.add("Всё время");if(list!=null)for(int i=0;i<list.length();i++){var p=list.optJSONObject(i);nextIds.add(p.optString("id"));names.add(p.optString("label")+" · "+date(p.optLong("start"))+" — "+date(p.optLong("end")));}
         if(!nextIds.equals(periodIds)){filling=true;periodIds.clear();periodIds.addAll(nextIds);adapter(periods,names);periods.setSelection(Math.max(0,periodIds.indexOf(chosen)));filling=false;}

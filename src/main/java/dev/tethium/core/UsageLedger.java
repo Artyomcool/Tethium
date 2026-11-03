@@ -79,13 +79,13 @@ public final class UsageLedger implements AutoCloseable {
     }
     /** Persist a cumulative baseline and its measured delta atomically, so a new host cannot count it twice. */
     public synchronized void cpuSample(String key,long pid,long started,String session,String project,long counter,long at,String kind,boolean fresh)throws Exception{
-        db.setAutoCommit(false);try{
+        exec("BEGIN IMMEDIATE");try{
             Long previous=null;String owner=null;try(var q=db.prepareStatement("SELECT counter,session_id FROM cpu_processes WHERE process_key=?")){q.setString(1,key);try(var r=q.executeQuery()){if(r.next()){previous=r.getLong(1);owner=r.getString(2);}}}
             long delta=previous==null?(fresh?counter:0):Math.max(0,counter-previous);
             if(previous!=null&&!Objects.equals(owner,session))delta=0; // A shared daemon changed owners between observations; do not guess the boundary.
             if(session!=null&&project!=null&&delta>0)exec("INSERT OR IGNORE INTO cpu_samples VALUES(?,?,?,?,?,?)",key,counter,session,project,at,delta);
-            exec("INSERT INTO cpu_processes VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(process_key) DO UPDATE SET session_id=excluded.session_id,project_id=excluded.project_id,counter=excluded.counter,at=excluded.at,kind=excluded.kind",key,pid,started,session,project,counter,at,kind);db.commit();
-        }catch(Exception e){db.rollback();throw e;}finally{db.setAutoCommit(true);}
+            exec("INSERT INTO cpu_processes VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(process_key) DO UPDATE SET session_id=excluded.session_id,project_id=excluded.project_id,counter=excluded.counter,at=excluded.at,kind=excluded.kind",key,pid,started,session,project,counter,at,kind);exec("COMMIT");
+        }catch(Exception e){exec("ROLLBACK");throw e;}
     }
     public synchronized JsonNode waitState(String session)throws SQLException{
         try(var q=db.prepareStatement("SELECT * FROM quota_wait WHERE session_id=?")){q.setString(1,session);try(var r=q.executeQuery()){return r.next()?Json.object("autoResume",r.getBoolean("auto_resume"),"waiting",r.getBoolean("waiting"),"blockedAt",r.getLong("blocked_at")):Json.object("autoResume",false,"waiting",false,"blockedAt",0);}}

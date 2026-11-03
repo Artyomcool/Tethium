@@ -80,6 +80,27 @@ class WorkerHandoffTest {
         client.post("/updates/resume",Json.object());
         for(var s:client.get("/state").path("sessions"))if(s.path("id").asText().equals(target)){assertTrue(s.path("queuePaused").asBoolean());assertFalse(s.path("running").asBoolean());}
     }
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans={false,true})
+    void queuedWorkContinuesAfterRestartWithoutResumingUserPause(boolean crash)throws Exception{
+        String id=session("queued restart"),paused=session("user paused");
+        client.post("/sessions/"+paused+"/stop",Json.object());
+        client.post("/sessions/"+paused+"/run",Json.object("prompt","must stay queued"));
+        client.post("/sessions/"+id+"/run",Json.object("prompt","first"));
+        until(id,s->s.path("conversation").path("live").asText().equals("before "));
+        client.post("/sessions/"+id+"/run",Json.object("prompt","next","separate",true));
+        if(crash){process.destroyForcibly().waitFor();client.close();client=null;}else detach();
+        start(true);
+        var held=client.get("/state?session="+id);
+        assertEquals(1,held.path("conversation").path("queued").size());
+        for(var s:held.path("sessions"))assertEquals(s.path("id").asText().equals(paused),s.path("queuePaused").asBoolean());
+        client.post("/updates/resume",Json.object());signal("gap");signal("finish");
+        var done=until(id,s->s.path("conversation").path("messages").size()==4&&s.path("conversation").path("queued").isEmpty()
+                &&java.util.stream.StreamSupport.stream(s.path("sessions").spliterator(),false).noneMatch(v->v.path("running").asBoolean()));
+        assertEquals(2,Files.readAllLines(fixture.resolve("submissions")).size());
+        for(var s:done.path("sessions"))assertEquals(s.path("id").asText().equals(paused),s.path("queuePaused").asBoolean());
+        assertEquals(1,client.get("/state?session="+paused).path("conversation").path("queued").size());
+    }
     @Test void abruptHostDeathKeepsWorkerAndStopWorksAfterReconnect()throws Exception{
         String id=session("crash");client.post("/sessions/"+id+"/run",Json.object("prompt","first"));
         until(id,s->s.path("conversation").path("live").asText().equals("before "));long pid=workerPid();
