@@ -86,8 +86,9 @@ public final class SessionRunner {
                 if (message.sequence() > through) break history;
                 cursor = message.sequence();
                 if (currentProvider != null && message.role().equals("assistant") && message.provider().equals(currentProvider.name())) continue;
+                String text = ActionLines.strip(message.text()); if (text.isBlank()) continue;
                 transcript.append("\n[").append(message.sequence()).append(' ').append(message.role()).append(" / ")
-                        .append(message.provider()).append("]\n").append(message.text()).append('\n');
+                        .append(message.provider()).append("]\n").append(text).append('\n');
             }
         }
         if (cancellation.isCancelled()) throw new CancellationException("Context preparation cancelled");

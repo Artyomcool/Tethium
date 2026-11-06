@@ -45,26 +45,10 @@ final class RunActivity {
         detail = pending.isEmpty() ? recent.getLast() : pending.values().iterator().next();
         return "Работает";
     }
-    /** One human line per tool call, shared by the status panel and the live answer; empty for reasoning and unknown items. */
-    static String label(JsonNode item) {
-        String type = item.path("type").asText();
-        String label = switch (type) {
-            case "commandExecution" -> "Команда: " + item.path("command").asText("выполнение");
-            case "fileChange" -> "Файлы: " + paths(item.path("changes"));
-            case "mcpToolCall", "dynamicToolCall" -> "Инструмент: " + item.path("tool").asText(item.path("name").asText("вызов"));
-            case "webSearch" -> "Поиск: " + item.path("query").asText("в интернете");
-            case "imageGeneration", "imageGenerationCall" -> "Генерация изображения";
-            default -> "";
-        };
-        label = label.replaceAll("\\s+", " ").strip();
-        return label.length() > 200 ? label.substring(0, 197) + "…" : label;
-    }
+    /** One human line per tool call, shared by the status panel and the dialog. */
+    static String label(JsonNode item) { return dev.tethium.core.ActionLines.label(item); }
     synchronized JsonNode snapshot() {
         return Json.object("startedAt", startedAt, "updatedAt", updatedAt, "detail", detail,
                 "completedActions", completed.size(), "pendingActions", pending.size(), "recent", List.copyOf(recent));
-    }
-    private static String paths(JsonNode changes) {
-        var paths = new ArrayList<String>(); for (var change : changes) paths.add(change.path("path").asText());
-        return paths.isEmpty() ? "изменение" : String.join(", ", paths);
     }
 }

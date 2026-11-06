@@ -406,7 +406,8 @@ public final class SessionStore implements AutoCloseable {
         boolean owner=connection.getAutoCommit();
         if(owner)connection.setAutoCommit(false);
         try {
-            if (!result.text().isEmpty()) {append(sessionId, "assistant", provider.name(), result.text());linkRunMessage(runId,sessionId);}
+            String shown=ActionLines.merge(output(runId),result.text());openActions.remove(runId);
+            if (!shown.isEmpty()) {append(sessionId, "assistant", provider.name(), shown);linkRunMessage(runId,sessionId);}
             else saveInterruptedOutput(runId, sessionId, provider);
             if (result.conversationId() != null && result.status() == AgentAdapter.Status.COMPLETED)
                 bind(sessionId, provider, result.conversationId(), deliveredThrough);
@@ -462,17 +463,25 @@ public final class SessionStore implements AutoCloseable {
             q.setString(1,jobId);try(var r=q.executeQuery()){if(!r.next())throw new IllegalArgumentException("Unknown job");return new Job(jobId,r.getString(1),r.getString(2),r.getString(3),promptParts(r.getString(3),r.getString(4)).size(),r.getBoolean(5));}
         }
     }
+    private final Set<String> openActions=new HashSet<>();
+    private void appendOutput(String runId,String sessionId,String piece)throws SQLException{
+        execute("INSERT INTO run_progress(run_id,session_id,output) VALUES(?,?,?) ON CONFLICT(run_id) DO UPDATE SET output=run_progress.output || excluded.output",runId,sessionId,piece);
+    }
+    private String output(String runId)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT output FROM run_progress WHERE run_id=?")){q.setString(1,runId);try(var r=q.executeQuery()){return r.next()?r.getString(1):"";}}
+    }
     public synchronized void recordEvent(String runId, String sessionId, AgentAdapter.Event event) throws SQLException {
         var compaction=event.raw().path("params").path("item");
         if((event.type().equals("item/started")||event.type().equals("item/completed"))&&compaction.path("type").asText().equals("contextCompaction")&&!compaction.path("id").asText().isBlank()){
             recordCompaction(runId,sessionId,event);return;
         }
         if (event.type().equals("text")) {
-            execute("INSERT INTO run_progress(run_id,session_id,output) VALUES(?,?,?) ON CONFLICT(run_id) DO UPDATE SET output=run_progress.output || excluded.output", runId, sessionId, event.text());
+            appendOutput(runId, sessionId, (openActions.remove(runId) ? "\n\n" : "") + event.text());
         } else if (event.type().equals("conversation")) {
             execute("INSERT INTO bindings(session_id,provider,conversation_id,last_sequence) SELECT ?,provider,?,0 FROM runs WHERE id=? ON CONFLICT(session_id,provider) DO UPDATE SET conversation_id=excluded.conversation_id", sessionId, event.text(), runId);
         } else if (event.type().equals("item/started") || event.type().equals("item/completed") || event.type().equals("error") || event.type().equals("request")) {
             execute("INSERT INTO events(session_id,run_id,type,payload) VALUES(?,?,?,?)", sessionId, runId, event.type(), event.raw().toString());
+            if(event.type().equals("item/started")){String label=ActionLines.label(event.raw().path("params").path("item"));if(!label.isEmpty())appendOutput(runId,sessionId,ActionLines.piece(!openActions.add(runId),label));}
             var item=event.raw().path("params").path("item");
             if(event.type().equals("item/completed")&&Set.of("imageView","imageGeneration").contains(item.path("type").asText())&&(!item.has("status")||item.path("status").asText().equals("completed"))){
                 long eventId;try(var q=connection.createStatement();var r=q.executeQuery("SELECT last_insert_rowid()")){r.next();eventId=r.getLong(1);}
@@ -529,8 +538,9 @@ public final class SessionStore implements AutoCloseable {
     public synchronized void saveInterruptedOutput(String runId, String sessionId, Provider provider) throws SQLException {
         try (var q = connection.prepareStatement("SELECT output FROM run_progress WHERE run_id=?")) {
             q.setString(1, runId);
-            try (var row = q.executeQuery()) { if (row.next() && !row.getString(1).isEmpty()) {append(sessionId, "assistant", provider.name(), row.getString(1));linkRunMessage(runId,sessionId);} }
+            try (var row = q.executeQuery()) { if (row.next() && !row.getString(1).isEmpty()) {append(sessionId, "assistant", provider.name(), row.getString(1).strip());linkRunMessage(runId,sessionId);} }
         }
+        openActions.remove(runId);
         execute("DELETE FROM run_progress WHERE run_id=?", runId);
     }
     public synchronized List<Project> projects() throws SQLException {

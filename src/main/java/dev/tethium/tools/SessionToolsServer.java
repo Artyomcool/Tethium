@@ -121,7 +121,7 @@ public final class SessionToolsServer implements AutoCloseable {
                 try {
                     if (!store.get(target).projectId().equals(projectId)) return content("Session not found in this project", true);
                 } catch (IllegalArgumentException e) { return content("Session not found in this project", true); }
-                result = store.messages(target, Math.max(0, args.path("after_sequence").asLong()), 100);
+                result = store.messages(target, Math.max(0, args.path("after_sequence").asLong()), 100).stream().map(m -> new SessionStore.Message(m.sequence(), m.role(), m.provider(), dev.tethium.core.ActionLines.strip(m.text()), m.timestamp())).toList();
             }
             case "probe_echo" -> result = Json.object("value", args.path("value").asText(), "session_id", sessionId);
             default -> {

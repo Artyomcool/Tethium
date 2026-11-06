@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** The live answer narrates tool calls and shows a capped start of each thought; the stored message keeps only the text. */
 class LiveNarrationTest {
     @TempDir Path root;
-    @Test void liveTextCarriesActionsAndCappedThoughtsButTheMessageDoesNot() throws Exception {
+    @Test void liveTextCarriesActionsAndCappedThoughtsAndTheMessageKeepsOnlyTheActions() throws Exception {
         var adapter = new AgentAdapter() {
             public Provider provider() { return Provider.CODEX; }
             public Result run(Request r, Consumer<Event> events, Cancellation cancel) throws Exception {
@@ -43,14 +43,15 @@ class LiveNarrationTest {
             assertTrue(live.startsWith("\n\n```thought\nСначала посмотрю тесты. "), live);
             assertTrue(live.contains("x".repeat(100) + "…\n```\n\n"), "thought is capped: " + live.length());
             assertFalse(live.contains("x".repeat(1600)), "thought is capped");
-            assertTrue(live.contains("\n\n— Команда: Запускает тесты шлюза  \n— Файлы: C:/x/A.java\n\nТесты прошли."), "actions share one paragraph: " + live);
+            assertTrue(live.contains("\n\n" + dev.tethium.core.ActionLines.MARK + "Команда: Запускает тесты шлюза  \n" + dev.tethium.core.ActionLines.MARK + "Файлы: C:/x/A.java\n\nТесты прошли."), "actions share one paragraph: " + live);
             assertEquals(1, live.split("```thought").length - 1, "an empty thought leaves no block: " + live);
             assertTrue(live.endsWith("Тесты прошли."), live);
             client.post("/sessions/" + s + "/stop", Json.object());
             for (int i = 0; i < 100 && client.get("/state?session=" + s).path("sessions").get(0).path("running").asBoolean(); i++) Thread.sleep(50);
             var messages = client.get("/state?session=" + s).path("conversation").path("messages");
             String last = messages.get(messages.size() - 1).path("text").asText();
-            assertFalse(last.contains("thought") || last.contains("— Команда"), last);
+            assertFalse(last.contains("thought") || last.contains("x".repeat(50)), "thoughts are not kept: " + last);
+            assertEquals(dev.tethium.core.ActionLines.MARK + "Команда: Запускает тесты шлюза  \n" + dev.tethium.core.ActionLines.MARK + "Файлы: C:/x/A.java\n\nТесты прошли.", last, "reports stay after Stop");
         }
     }
 }

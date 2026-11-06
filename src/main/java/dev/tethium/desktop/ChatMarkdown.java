@@ -22,7 +22,7 @@ final class ChatMarkdown {
     String render(String text) {
         String html = renderer.render(parser.parse(text)).replaceAll("<img[^>]*>", "<em>[изображение — откройте в результатах]</em>");
         // A run of actions arrives as one paragraph with hard breaks; each becomes its own muted line without a marker.
-        html = html.replaceAll("(?s)<p>— (.*?)</p>", "<p class='action'>$1</p>").replaceAll("<br />\\s*— ", "</p>\n<p class='action'>");
+        html = html.replaceAll("(?s)<p>—\u2063 (.*?)</p>", "<p class='action'>$1</p>").replaceAll("<br />\\s*—\u2063 ", "</p>\n<p class='action'>");
         var thought = java.util.regex.Pattern.compile("(?s)<pre><code class=\"language-thought\">(.*?)</code></pre>").matcher(html);
         var out = new StringBuilder();
         while (thought.find()) { String body = thought.group(1).strip(); thought.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(showThoughts && !body.isEmpty() ? "<div class='thought'>" + body.replace("\n", "<br>") + "</div>" : "")); }

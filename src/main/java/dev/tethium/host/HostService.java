@@ -522,7 +522,7 @@ public final class HostService implements AutoCloseable {
     private static final int THOUGHT_CAP = 1500;
     /**
      * The live answer narrates what the agent does: consecutive tool calls form one compact block of "▸" lines, and for Claude the
-     * start of each thought is shown muted (opened only when thought text actually arrives). The stored message keeps only the text.
+     * start of each thought is shown muted (opened only when thought text actually arrives). The stored message keeps the text and these lines, not the thoughts.
      */
     private static void narrate(Running run, AgentAdapter.Event event) {
         synchronized (run.text) {
@@ -540,8 +540,7 @@ public final class HostService implements AutoCloseable {
                     if (item.path("type").asText().equals("reasoning")) { closeThought(run); run.thoughtPending = true; return; }
                     String label = RunActivity.label(item); if (label.isEmpty()) return;
                     closeThought(run);
-                    // Hard line breaks keep a run of actions inside one paragraph instead of a gap per action.
-                    run.text.append(run.actionsOpen ? "  \n— " : "\n\n— ").append(label); run.actionsOpen = true;
+                    run.text.append(dev.tethium.core.ActionLines.piece(run.actionsOpen, label)); run.actionsOpen = true;
                 }
                 case "item/completed" -> { if (event.raw().path("params").path("item").path("type").asText().equals("reasoning")) { closeThought(run); run.thoughtPending = false; } }
                 default -> { }

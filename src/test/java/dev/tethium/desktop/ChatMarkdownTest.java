@@ -22,13 +22,18 @@ class ChatMarkdownTest {
             Потом сборка…
             ```
 
-            — Команда: Запускает тесты\s\s
-            — Файлы: A.java
+            —⁣ Команда: Запускает тесты\s\s
+            —⁣ Файлы: A.java
 
             Готово.""";
         ChatMarkdown.showThoughts=true;String shown=markdown.render(live);
         assertTrue(shown.contains("<div class='thought'>Сначала тесты.<br>Потом сборка…</div>"),shown);assertTrue(shown.contains("<p class='action'>Команда: Запускает тесты</p>\n<p class='action'>Файлы: A.java</p>"),shown);assertFalse(shown.contains("—"),shown);assertFalse(shown.contains("language-thought"),shown);
         ChatMarkdown.showThoughts=false;String hidden=markdown.render(live);
         assertFalse(hidden.contains("Сначала тесты"),hidden);assertTrue(hidden.contains("class='action'"),hidden);ChatMarkdown.showThoughts=true;
+    }
+    @Test void aDashOfTheAgentsOwnIsPlainText() {
+        var html = new ChatMarkdown().render("— Обычная реплика агента");
+        assertFalse(html.contains("action"), html);
+        assertTrue(html.contains("— Обычная реплика агента"), html);
     }
 }
