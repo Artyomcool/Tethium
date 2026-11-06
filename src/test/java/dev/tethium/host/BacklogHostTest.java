@@ -20,6 +20,7 @@ class BacklogHostTest {
         public Result run(Request r, Consumer<Event> events, Cancellation cancel) { prompts.add(r.prompt()); return new Result("c", Status.COMPLETED, "готово"); }
     };
     private void until(java.util.concurrent.Callable<Boolean> test, String what) throws Exception { for (int i = 0; i < 200; i++) { if (test.call()) return; Thread.sleep(50); } fail("Timed out: " + what); }
+    private static JsonNode session(HostClient c, String id) throws Exception { for (var x : c.get("/state").path("sessions")) if (x.path("id").asText().equals(id)) return x; throw new AssertionError(id); }
     private static JsonNode project(HostClient c) throws Exception { return c.get("/state").path("projects").get(0); }
     @Test void aTaskStartsRunsAndLeavesTheList() throws Exception {
         try (var h = new HostService(root, adapter); var c = new HostClient(h.descriptor())) {
@@ -29,6 +30,12 @@ class BacklogHostTest {
             String waiting = c.post("/backlog", Json.object("projectId", p, "title", "Ждёт", "prompt", "Позже", "target", "session", "sessionId", s, "minQuota", 80, "minFreeCpu", 0)).path("id").asText();
             String free = c.post("/backlog", Json.object("projectId", p, "title", "Свободная", "prompt", "Сделай это", "target", "named", "sessionTitle", "Мелкие задачи", "minQuota", 0, "minFreeCpu", 0)).path("id").asText();
             assertEquals(2, project(c).path("backlog").asInt(), "the counter on the project");
+            String shared0 = c.post("/sessions", Json.object("projectId", p, "title", "Мелкие задачи")).path("id").asText();
+            c.post("/backlog", Json.object("projectId", p, "title", "Своя", "prompt", "x", "target", "new", "minQuota", 99));
+            assertEquals(1, session(c, s).path("backlog").asInt(), "named directly");
+            assertEquals(1, session(c, shared0).path("backlog").asInt(), "shared under its title");
+            assertEquals(3, project(c).path("backlog").asInt(), "a task for a new session counts only on the project");
+            for (var t : c.get("/backlog").path("tasks")) if (t.path("title").asText().equals("Своя")) c.post("/backlog/" + t.path("id").asText() + "/remove", Json.object());
             h.observeBacklog();
             until(() -> prompts.stream().anyMatch(t -> t.contains("Сделай это")), "the free task ran");
             assertTrue(prompts.stream().noneMatch(t -> t.contains("Позже")), "no quota data: this one waits");

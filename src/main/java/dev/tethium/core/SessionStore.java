@@ -125,6 +125,12 @@ public final class SessionStore implements AutoCloseable {
         try(var q=connection.createStatement();var r=q.executeQuery("SELECT project_id,COUNT(*) FROM backlog_tasks WHERE state<>'running' GROUP BY 1")){while(r.next())counts.put(r.getString(1),r.getInt(2));}
         return counts;
     }
+    /** Tasks that will run in this session: named directly, or shared under its title. */
+    public synchronized int backlogWaiting(Session session)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT COUNT(*) FROM backlog_tasks WHERE state<>'running' AND project_id=? AND ((target='session' AND session_id=?) OR (target='named' AND session_title=?))")){
+            q.setString(1,session.projectId());q.setString(2,session.id());q.setString(3,session.title());try(var r=q.executeQuery()){return r.next()?r.getInt(1):0;}
+        }
+    }
     public synchronized JsonNode backlogSettings()throws SQLException{
         try(var q=connection.createStatement();var r=q.executeQuery("SELECT * FROM backlog_settings WHERE id=1")){
             if(r.next())return Json.object("maxRunning",r.getInt("max_running"),"minQuota",r.getInt("min_quota"),"minFreeCpu",r.getInt("min_free_cpu"),"paused",r.getBoolean("paused"));

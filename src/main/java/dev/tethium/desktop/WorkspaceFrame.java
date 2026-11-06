@@ -310,7 +310,7 @@ public final class WorkspaceFrame extends JFrame {
             tree.addMouseListener(new MouseAdapter() {
                 @Override public void mouseClicked(MouseEvent e) {
                     if(!SwingUtilities.isLeftMouseButton(e))return;int row=tree.getClosestRowForLocation(e.getX(),e.getY());var bounds=tree.getRowBounds(row);if(bounds==null)return;
-                    if(((DefaultMutableTreeNode)tree.getPathForRow(row).getLastPathComponent()).getUserObject() instanceof Node n&&n.backlog>0&&backlogBounds(tree,n,bounds).contains(e.getPoint()))openBacklog(n.id,sessionIn(n.id));
+                    if(((DefaultMutableTreeNode)tree.getPathForRow(row).getLastPathComponent()).getUserObject() instanceof Node n&&n.backlog>0&&backlogBounds(tree,n,bounds).contains(e.getPoint())){if(n.project)openBacklog(n.id,sessionIn(n.id));else openBacklog(sessions.get(n.id).path("projectId").asText(),n.id);}
                 }
                 @Override public void mousePressed(MouseEvent e) { popup(e, tree); }
                 @Override public void mouseReleased(MouseEvent e) { popup(e, tree); }
@@ -581,7 +581,7 @@ public final class WorkspaceFrame extends JFrame {
         projectWidgets.update(projects.values());active.repaint();inactive.repaint();
         sessions.clear(); for (var s : state.path("sessions")) sessions.put(s.path("id").asText(), s);
         documents.clear();for(var d:state.path("files"))documents.put(d.path("id").asText(),d);
-        String signature = state.path("files").toString()+state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("projects").findValues("backlog") + state.path("sessions").findValues("active") + state.path("sessions").findValues("technical") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
+        String signature = state.path("files").toString()+state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("projects").findValues("backlog") + state.path("sessions").findValues("backlog") + state.path("sessions").findValues("active") + state.path("sessions").findValues("technical") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
         signature+=state.path("sessions").findValues("queuePaused").toString()+state.path("sessions").findValues("queued");
         if (!signature.equals(treeSignature)) { rebuildTrees(state); treeSignature = signature; }
         if (selectedProject == null && !projects.isEmpty()) selectedProject = projects.keySet().iterator().next();
@@ -663,7 +663,7 @@ public final class WorkspaceFrame extends JFrame {
                     var projectNode = new DefaultMutableTreeNode(new Node(pid, project.path("title").asText(), true, running, "", project.path("root").asText(),attention,false,pausedQueued,project.path("backlog").asInt())); root.add(projectNode);
                     if(archived==projectArchived)for(var document:documents.values())if(document.path("projectId").asText().equals(pid)){var node=new DefaultMutableTreeNode(new Node(document.path("id").asText(),document.path("title").asText(),false,false,"",document.path("path").asText(),"",true));projectNode.add(node);if(document.path("id").asText().equals(selectedFile))selection=new TreePath(node.getPath());}
                     var nodes = new LinkedHashMap<String, DefaultMutableTreeNode>();
-                    for (var s : matching) nodes.put(s.path("id").asText(), new DefaultMutableTreeNode(new Node(s.path("id").asText(), s.path("title").asText(), false, s.path("running").asBoolean()&&!s.path("technical").asBoolean(), s.path("technical").asBoolean()?"":s.path("status").asText(), s.path("directory").asText(),s.path("attention").path("kind").asText())));
+                    for (var s : matching) nodes.put(s.path("id").asText(), new DefaultMutableTreeNode(new Node(s.path("id").asText(), s.path("title").asText(), false, s.path("running").asBoolean()&&!s.path("technical").asBoolean(), s.path("technical").asBoolean()?"":s.path("status").asText(), s.path("directory").asText(),s.path("attention").path("kind").asText(),false,0,s.path("technical").asBoolean()?0:s.path("backlog").asInt())));
                     for (var s : matching) { var n = nodes.get(s.path("id").asText()); var parent = nodes.get(s.path("parentId").asText()); (parent == null ? projectNode : parent).add(n); }
                     for (var entry : nodes.entrySet()) if (entry.getKey().equals(selected)) selection = new TreePath(entry.getValue().getPath());
                 }

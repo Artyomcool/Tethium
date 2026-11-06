@@ -395,7 +395,7 @@ public final class HostService implements AutoCloseable {
         ((com.fasterxml.jackson.databind.node.ObjectNode)attention).put("kind",question?"question":attention.path("manual").asBoolean()?"manual":attention.path("unread").asBoolean()?"finished":"");
         boolean technical=store.technical(s.id());
         if(technical){var quiet=(com.fasterxml.jackson.databind.node.ObjectNode)attention;quiet.put("kind","");quiet.put("manual",false);quiet.put("unread",false);}
-        return Json.object("id", s.id(), "projectId", s.projectId(), "parentId", s.parentId(), "title", s.title(), "active", s.active(), "technical", technical, "directory", s.directory().toString(),
+        return Json.object("id", s.id(), "projectId", s.projectId(), "parentId", s.parentId(), "title", s.title(), "backlog", store.backlogWaiting(s), "active", s.active(), "technical", technical, "directory", s.directory().toString(),
                 "running", run != null, "phase", run == null ? "" : run.phase, "stopping", run != null && run.stopping,
                 "progress", run == null ? null : run.activity.snapshot(), "queuePaused", store.queuePaused(s.id()),
                 "pinnedFile",store.pinnedFile(s.id()),"autonomy",store.autonomy(s.id()),"schedule",store.periodicSchedule(s.id()),"quotaWait",usage.waitState(s.id()),"status", store.lastStatus(s.id()), "queued", queue.size(), "preferences", store.preferences(s.id()),"attention",attention,"hold",hold);
