@@ -238,8 +238,11 @@ public final class SessionStore implements AutoCloseable {
                 if(goal==null||goal.isBlank()||goal.length()>16000)throw new IllegalArgumentException("Укажите цель автономной работы (до 16000 символов)");
                 discardAutonomousQueue(id);execute("INSERT INTO session_autonomy VALUES(?,?,?,'active','',?) ON CONFLICT(session_id) DO UPDATE SET goal_id=excluded.goal_id,goal=excluded.goal,state='active',reason='',updated_at=excluded.updated_at",id,UUID.randomUUID().toString(),goal.strip(),System.currentTimeMillis());
             }else{
-                if(previous.path("state").asText().equals("off"))return previous;
-                if(!Set.of("pause","disable").contains(action)&&!Objects.equals(goalId,previous.path("goalId").asText()))throw new IllegalArgumentException("Цель уже изменилась; перечитайте её состояние");
+                String was=previous.path("state").asText();
+                if(was.equals("off"))return previous;
+                // A goal that ended stays ended: Stop and a correction pause only what is going on, and only a pause can be resumed.
+                if(action.equals("pause")&&!Set.of("active","waiting").contains(was)||action.equals("resume")&&!was.equals("paused"))return previous;
+                if(!Set.of("pause","disable").contains(action)&&!Objects.equals(goalId,previous.path("goalId").asText()))throw new IllegalArgumentException("Цель уже изменилась, её текущий goalId: "+previous.path("goalId").asText());
                 state=switch(action){case "complete"->"complete";case "blocked"->"blocked";case "pause"->"paused";case "disable"->"off";case "wait"->"waiting";case "resume"->"active";default->throw new IllegalArgumentException("Неизвестное действие автономии");};
                 if(Set.of("complete","blocked","waiting").contains(state)&&(reason==null||reason.isBlank()))throw new IllegalArgumentException("Укажите результат или причину");
                 if(state.equals("waiting")){try(var q=connection.prepareStatement("SELECT 1 FROM jobs WHERE source_id=? AND status IN ('QUEUED','RUNNING') LIMIT 1")){q.setString(1,id);try(var r=q.executeQuery()){if(!r.next())state="active";}}}
