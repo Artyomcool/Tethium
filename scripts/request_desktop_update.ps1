@@ -5,7 +5,9 @@
     [string]$StatusPath='',
     [switch]$Apply,
     [switch]$RestartWorkloads,
-    [switch]$QueueOnly
+    [switch]$QueueOnly,
+    [switch]$PruneOnly,
+    [string]$PruneSince='2026-11-06T15:13:28Z'
 )
 $ErrorActionPreference='Stop'
 $DataPath=[IO.Path]::GetFullPath($DataPath)
@@ -54,6 +56,44 @@ function LaunchHidden($script,$arguments,$log) {
     $values=@('-NoProfile','-ExecutionPolicy','Bypass','-File',$script)+$arguments
     $quoted=($values | ForEach-Object { '"'+$_.ToString().Replace('"','\"')+'"' }) -join ' '
     Start-Process powershell.exe -ArgumentList $quoted -WindowStyle Hidden -PassThru -RedirectStandardOutput ($log+'.out.log') -RedirectStandardError ($log+'.err.log')
+}
+# Every installation leaves two database copies, a browser profile and a candidate build. Keep what a rollback or a
+# running process can need and drop the rest. Update copies and profiles older than $PruneSince are left for a manual decision.
+function PruneAfterInstall([string]$installed,[string[]]$alsoKeep) {
+    $since=[DateTime]::Parse($PruneSince).ToUniversalTime()
+    $updates=Join-Path $DataPath 'updates'
+    if (Test-Path -LiteralPath $updates) {
+        $done=@(Get-ChildItem -LiteralPath $updates -Directory | Where-Object { $_.Name -ne 'requests' } | Sort-Object CreationTimeUtc -Descending | Select-Object -Skip 3)
+        foreach ($old in $done) {
+            if ($old.CreationTimeUtc -lt $since) { continue }
+            foreach ($copy in @('before-core.db','probe')) {
+                $target=Join-Path $old.FullName $copy
+                if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force -ErrorAction SilentlyContinue }
+            }
+        }
+    }
+    $profiles=Join-Path $DataPath 'browser-profiles'
+    if (Test-Path -LiteralPath $profiles) {
+        foreach ($profile in @(Get-ChildItem -LiteralPath $profiles -Directory | Where-Object { $_.Name -match '^\d+$' -and $_.CreationTimeUtc -ge $since })) {
+            if (-not (Get-Process -Id ([int]$profile.Name) -ErrorAction SilentlyContinue)) { Remove-Item -LiteralPath $profile.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+        }
+    }
+    # build\desktop-x\Tethium\Tethium.exe; anything else (probes, fixtures) has no build directory to tidy.
+    $root=Split-Path (Split-Path (Split-Path $installed))
+    if ((Split-Path $root -Leaf) -ne 'build') { return }
+    $used=(Get-CimInstance Win32_Process | ForEach-Object { [string]$_.CommandLine+' '+[string]$_.ExecutablePath }) -join "`n"
+    $keep=@(@($installed)+@($alsoKeep | Where-Object { $_ }) | ForEach-Object { Split-Path (Split-Path ([IO.Path]::GetFullPath($_))) })
+    $recent=[DateTime]::UtcNow.AddHours(-2)
+    foreach ($build in @(Get-ChildItem -LiteralPath $root -Directory -Filter 'desktop-*' | Sort-Object LastWriteTimeUtc -Descending | Select-Object -Skip 5)) {
+        if ($keep -contains $build.FullName -or $build.LastWriteTimeUtc -gt $recent) { continue }
+        if ($used.IndexOf($build.FullName+'\',[StringComparison]::OrdinalIgnoreCase) -ge 0) { continue }
+        Remove-Item -LiteralPath $build.FullName -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+if ($PruneOnly) {
+    $active=Get-Content -LiteralPath (Join-Path $DataPath 'desktop-active.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    PruneAfterInstall ([IO.Path]::GetFullPath($(if ($AppPath) { $AppPath } else { $active.appPath }))) @($active.appPath)
+    exit 0
 }
 if (-not $Apply) {
     $AppPath=[IO.Path]::GetFullPath($AppPath)
@@ -135,5 +175,7 @@ try {
             $latest=ReadRequest
             if ($latest.id -eq $request.id) { $latest.phase=$outcome;SaveRequest $latest }
         } finally { $guard.Dispose() }
+        # Tidying must never turn a finished installation into a failure.
+        if ($outcome -eq 'complete') { try { PruneAfterInstall $request.appPath @($active.appPath,$latest.appPath) } catch { } }
     }
 } finally { if ($null -ne $dispatcher) { $dispatcher.Dispose() } }
