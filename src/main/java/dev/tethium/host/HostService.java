@@ -42,6 +42,7 @@ public final class HostService implements AutoCloseable {
     private final Path data;
     private dev.tethium.mobile.MobileGateway mobile;
     private final AtomicLong revision = new AtomicLong();
+    private final java.util.concurrent.CopyOnWriteArrayList<Runnable> changeListeners = new java.util.concurrent.CopyOnWriteArrayList<>();
     private volatile boolean closed;
     private volatile boolean draining;
     private volatile boolean handoff;
@@ -53,6 +54,9 @@ public final class HostService implements AutoCloseable {
         Running(){this(System.currentTimeMillis());}
         Running(long startedAt){activity=new RunActivity(startedAt);}
         volatile boolean stopping, quotaBlocked;
+        /** Characters of the open thought already shown in the live text; -1 when no thought is open. */
+        int thoughtChars = -1;
+        boolean thoughtPending, actionsOpen;
         volatile boolean inProcessStarted;
         volatile AgentAdapter.Provider provider;
         volatile SessionStore.WorkerRun workerRun;
@@ -109,32 +113,70 @@ public final class HostService implements AutoCloseable {
             var auth = exchange.getRequestHeaders().getFirst("Authorization");
             if (auth == null || !MessageDigest.isEqual(("Bearer " + token).getBytes(StandardCharsets.UTF_8), auth.getBytes(StandardCharsets.UTF_8))) { send(exchange, 401, Json.object("error", "Unauthorized")); return; }
             if (exchange.getRequestHeaders().containsKey("Origin")) { send(exchange, 403, Json.object("error", "Browser origins are not allowed")); return; }
-            String path = exchange.getRequestURI().getPath();
-            try {
-                Object result;
-                if (exchange.getRequestMethod().equals("GET")) {
-                    result = switch (path) {
-                        case "/health" -> health();
-                        case "/resources" -> resources.snapshot();
-                        case "/state" -> snapshot(query(exchange.getRequestURI(), "session"),"window".equals(query(exchange.getRequestURI(),"history")));
-                        case "/history/index" -> historyIndex(query(exchange.getRequestURI(),"session"),"true".equals(query(exchange.getRequestURI(),"gallery")));
-                        case "/history/page" -> historyPage(query(exchange.getRequestURI(),"session"),Integer.parseInt(query(exchange.getRequestURI(),"first")),Integer.parseInt(query(exchange.getRequestURI(),"count")),"true".equals(query(exchange.getRequestURI(),"gallery")));
-                        case "/trash" -> trashList();
-                        case "/project" -> GitHubProjects.status(Path.of(store.projects().stream().filter(p->p.id().equals(query(exchange.getRequestURI(),"project"))).findFirst().orElseThrow().root()));
-                        case "/usage" -> usage.report(query(exchange.getRequestURI(),"period"),query(exchange.getRequestURI(),"project"),query(exchange.getRequestURI(),"session"));
-                        case "/models" -> modelCatalog(query(exchange.getRequestURI(), "session"));
-                        default -> throw new IllegalArgumentException("Unknown endpoint");
-                    };
-                } else if (exchange.getRequestMethod().equals("POST")) {
-                    byte[] bytes = exchange.getRequestBody().readNBytes(2_000_001);
-                    if (bytes.length > 2_000_000) { send(exchange, 413, Json.object("error", "Message is too large")); return; }
-                    var body = bytes.length == 0 ? Json.object() : Json.MAPPER.readTree(bytes);
-                    result = command(path, body);
-                    revision.incrementAndGet();
-                } else { send(exchange, 405, Json.object("error", "Method not allowed")); return; }
-                send(exchange, 200, result);
-            } catch (Exception e) { send(exchange, 400, Json.object("error", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage())); }
+            String method = exchange.getRequestMethod();
+            if (!method.equals("GET") && !method.equals("POST")) { send(exchange, 405, Json.object("error", "Method not allowed")); return; }
+            JsonNode body = null;
+            if (method.equals("POST")) {
+                byte[] bytes = exchange.getRequestBody().readNBytes(2_000_001);
+                if (bytes.length > 2_000_000) { send(exchange, 413, Json.object("error", "Message is too large")); return; }
+                body = bytes.length == 0 ? Json.object() : Json.MAPPER.readTree(bytes);
+            }
+            try { send(exchange, 200, dispatch(method, exchange.getRequestURI(), body)); }
+            catch (Exception e) { send(exchange, 400, Json.object("error", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage())); }
         }
+    }
+    /** One entry point for loopback HTTP and the in-process mobile gateway; callers are already authenticated. */
+    Object dispatch(String method, URI uri, JsonNode body) throws Exception {
+        String path = uri.getPath();
+        if (method.equals("GET")) return switch (path) {
+            case "/health" -> health();
+            case "/resources" -> resources.snapshot();
+            case "/state" -> snapshot(query(uri, "session"),"window".equals(query(uri,"history")));
+            case "/history/index" -> historyIndex(query(uri,"session"),"true".equals(query(uri,"gallery")));
+            case "/history/page" -> historyPage(query(uri,"session"),Integer.parseInt(query(uri,"first")),Integer.parseInt(query(uri,"count")),"true".equals(query(uri,"gallery")));
+            case "/messages" -> messagesBefore(query(uri,"session"),query(uri,"before")==null?Long.MAX_VALUE:Long.parseLong(query(uri,"before")),query(uri,"count")==null?100:Integer.parseInt(query(uri,"count")));
+            case "/trash" -> trashList();
+            case "/project-icon" -> ProjectIcons.read(Path.of(store.projects().stream().filter(p->p.id().equals(query(uri,"project"))).findFirst().orElseThrow().root()));
+            case "/project" -> GitHubProjects.status(Path.of(store.projects().stream().filter(p->p.id().equals(query(uri,"project"))).findFirst().orElseThrow().root()));
+            case "/usage" -> usage.report(query(uri,"period"),query(uri,"project"),query(uri,"session"));
+            case "/models" -> modelCatalog(query(uri, "session"));
+            default -> throw new IllegalArgumentException("Unknown endpoint");
+        };
+        var result = command(path, body == null ? Json.object() : body);
+        bump();
+        return result;
+    }
+    private void bump() { revision.incrementAndGet(); for (var listener : changeListeners) { try { listener.run(); } catch (RuntimeException ignored) { } } }
+    private JsonNode messagesBefore(String id, long before, int count) throws Exception {
+        if (count < 1 || count > 1000) throw new IllegalArgumentException("History limit must be 1..1000");
+        store.get(id); var page = store.messagesBefore(id, before, count + 1);
+        boolean more = page.size() > count; if (more) page = page.subList(1, page.size());
+        return Json.object("messages", page, "hasMore", more);
+    }
+    /** Push feed for the LAN gateway: change signal, catalog, conversation tails and live text, all in-process. */
+    public dev.tethium.mobile.MobileGateway.Feed feed() {
+        return new dev.tethium.mobile.MobileGateway.Feed() {
+            public long revision() { return revision.get(); }
+            public void addListener(Runnable listener) { changeListeners.add(listener); }
+            public void removeListener(Runnable listener) { changeListeners.remove(listener); }
+            public JsonNode get(String target) throws Exception { return Json.MAPPER.valueToTree(dispatch("GET", URI.create(target), null)); }
+            public JsonNode post(String path, JsonNode body) throws Exception { return Json.MAPPER.valueToTree(dispatch("POST", URI.create(path), body)); }
+            public JsonNode catalog() throws Exception { return Json.MAPPER.valueToTree(snapshot(null, false)); }
+            public JsonNode conversationMeta(String id) throws Exception {
+                store.get(id);
+                return Json.object("queued", store.queued(id), "artifacts", store.artifacts(id), "messageRevision", store.messageRevision(id), "lastSequence", store.lastSequence(id),
+                        "requests", pending.values().stream().filter(p -> p.sessionId.equals(id)).map(p -> Json.object("id", p.id, "method", p.method, "params", p.params)).toList());
+            }
+            public JsonNode messagesAfter(String id, long after, int limit) throws Exception { return Json.MAPPER.valueToTree(store.messages(id, after, limit)); }
+            public JsonNode messagesBefore(String id, long before, int limit) throws Exception { return HostService.this.messagesBefore(id, before, limit); }
+            public JsonNode live(String id, long run, int offset) {
+                var live = running.get(id);
+                if (live == null) return Json.object("run", 0, "offset", 0, "length", 0, "text", "", "timestamp", 0);
+                long started = live.activity.snapshot().path("startedAt").asLong();
+                int length = live.text.length(); int from = run == started && offset >= 0 && offset <= length ? offset : 0;
+                return Json.object("run", started, "offset", from, "length", length, "text", live.text.substring(from, length), "timestamp", started);
+            }
+        };
     }
     private final Object resetLock=new Object();
     private Object command(String path,JsonNode body)throws Exception{
@@ -146,6 +188,11 @@ public final class HostService implements AutoCloseable {
         if(path.equals("/resources")){store.cpuControl(body.path("scope").asText(),body.path("target").asText(),body.path("settings"));resources.refresh();return resources.snapshot();}
         if(path.equals("/mobile/pair")) { startMobile(); return mobile.pairInfo(); }
         if(path.equals("/mobile/revoke")) { startMobile(); return mobile.revoke(); }
+        if(path.equals("/mobile/adb/status")) { startMobile(); return mobile.adbStatus(); }
+        if(path.equals("/mobile/adb/pair")) { startMobile(); return mobile.adbPair(body); }
+        if(path.equals("/mobile/adb/connect")) { startMobile(); return mobile.adbConnect(body); }
+        if(path.equals("/mobile/adb/forget")) { startMobile(); return mobile.adbForget(); }
+        if(path.equals("/mobile/adb/install")) { startMobile(); return mobile.adbInstall(body); }
         if(path.equals("/updates/restart/prepare")){if(!body.path("confirmed").asBoolean())throw new IllegalArgumentException("Требуется явное разрешение на остановку задач");return prepareRestart(body.path("id").asText());}
         if(path.equals("/updates/restart/stop")){var plan=WorkloadRestart.read(data,body.path("id").asText());if(plan==null||plan.path("completed").asBoolean()||!draining||!body.path("confirmed").asBoolean())throw new IllegalArgumentException("Нет подготовленного перезапуска");for(String id:List.copyOf(running.keySet()))stopRunning(id);return health();}
         if(path.equals("/updates/restart/restore")){if(!draining)throw new IllegalStateException("Восстановление выполняется до возобновления очередей");return WorkloadRestart.restore(store,data,body.path("id").asText());}
@@ -178,10 +225,13 @@ public final class HostService implements AutoCloseable {
             if(body.has("frequentPush")||body.path("createRepository").asBoolean())GitHubProjects.configure(directory,body);
             String id=store.project(directory);resources.refresh();return Json.object("id",id);
         }
+        if(path.equals("/projects/order")){var ids=new ArrayList<String>();for(var id:body.path("ids"))ids.add(id.asText());store.reorderProjects(ids);return Json.object("ok",true);}
+        if(path.matches("/projects/[a-zA-Z0-9-]+/sessions-order")){var ids=new ArrayList<String>();for(var id:body.path("ids"))ids.add(id.asText());store.reorderSessions(path.split("/")[2],ids);return Json.object("ok",true);}
         if(path.matches("/projects/[a-zA-Z0-9-]+/settings")){
             String pid=path.split("/")[2];Path root=Path.of(store.projects().stream().filter(p->p.id().equals(pid)).findFirst().orElseThrow().root());return GitHubProjects.configure(root,body);
         }
         if(path.matches("/projects/[a-zA-Z0-9-]+/active")){store.projectActive(path.split("/")[2],body.path("active").asBoolean());return Json.object("ok",true);}
+        if(path.matches("/projects/[a-zA-Z0-9-]+/cross-project")){store.crossProject(path.split("/")[2],body.path("enabled").asBoolean());return Json.object("ok",true);}
         if(path.matches("/projects/[a-zA-Z0-9-]+/app-publish")){
             Path root=projectRoot(path.split("/")[2]);return dev.tethium.mobile.ApkPublisher.publish(root,root.resolve(body.path("path").asText()),body.path("title").asText());
         }
@@ -222,13 +272,14 @@ public final class HostService implements AutoCloseable {
             case "purge" -> {
                 if(!body.path("confirmed").asBoolean())throw new IllegalArgumentException("Подтвердите окончательное удаление");
                 if(interruptionScope(id,"tree").stream().anyMatch(running::containsKey))throw new IllegalStateException("Сначала остановите сессию и её подсессии");
-                var removed=store.purge(id);for(String run:removed)removeOwnedDirectory("workers",run);removeOwnedDirectory("attachments",id);removeOwnedDirectory("chat-media",id);return Json.object("ok",true);
+                var removed=store.purge(id);usage.publishSidebar();for(String run:removed)removeOwnedDirectory("workers",run);removeOwnedDirectory("attachments",id);removeOwnedDirectory("chat-media",id);return Json.object("ok",true);
             }
             case "pinned-file" -> {String link=body.path("path").asText();var session=store.get(id);store.pinnedFile(id,link.isBlank()?null:pinPath(projectRoot(session.projectId()),session.directory(),link).toString());}
             case "autonomy" -> {var result=store.autonomy(id,body.path("action").asText(),body.path("goalId").asText(),body.path("goal").asText(),body.path("reason").asText());if(body.path("resumeQueue").asBoolean())store.pauseQueue(id,false);if(result.path("state").asText().equals("active")){usage.autoResume(id,true);answerAutonomousQuestions(id);}schedule(id);return result;}
             case "quota-auto" -> usage.autoResume(id,body.path("enabled").asBoolean());
             case "schedule" -> {return configureSchedule(id,body);}
             case "attention" -> store.marked(id,body.path("marked").asBoolean());
+            case "technical" -> store.technical(id,body.path("enabled").asBoolean());
             case "process-track" -> {resources.checkOwner(body.path("pid").asLong(),id);return store.claimProcess(id,body.path("pid").asLong());}
             case "seen" -> store.seen(id,body.path("version").asLong());
             case "run" -> {
@@ -261,6 +312,27 @@ public final class HostService implements AutoCloseable {
             case "queue-split" -> { return store.splitQueued(id,body.path("jobId").asText(),body.path("expectedPrompt").asText(),body.path("requestId").asText()); }
             case "active" -> { store.setActive(id, body.path("active").asBoolean()); schedule(id); }
             case "rename" -> store.rename(id, body.path("title").asText());
+            case "reset-context" -> {
+                if (running.containsKey(id)) throw new IllegalStateException("Сначала остановите сессию");
+                int removed = store.unbind(id);
+                store.append(id, "system", "TETHIUM", "Контекст исполнителя сброшен: следующий запуск начнёт новый разговор, прежняя память модели не используется.");
+                return Json.object("removed", removed);
+            }
+            case "history-delete" -> {
+                if (running.containsKey(id)) throw new IllegalStateException("Сначала остановите сессию");
+                int deleted;
+                if (body.has("after")) deleted = store.deleteMessagesAfter(id, body.path("after").asLong());
+                else { var sequences = new ArrayList<Long>(); for (var s : body.path("sequences")) sequences.add(s.asLong()); deleted = store.deleteMessages(id, sequences); }
+                if (body.path("resetContext").asBoolean()) store.unbind(id);
+                return Json.object("deleted", deleted);
+            }
+            case "reset-state" -> { store.resetState(id); return Json.object("ok", true); }
+            case "memory" -> {
+                Path memory = ClaudeMemory.directory(ClaudeMemory.defaultHome(), store.get(id).directory());
+                if (!body.path("action").asText("list").equals("delete")) return ClaudeMemory.list(memory);
+                var names = new ArrayList<String>(); for (var n : body.path("names")) names.add(n.asText());
+                return ClaudeMemory.delete(memory, names, data.resolve("trash").resolve("memory"));
+            }
             case "draft" -> { store.draft(id, body.path("draft").asText()); if(body.has("images"))store.draftImages(id,body.path("images")); }
             case "settings" -> {
                 var current = store.preferences(id);
@@ -291,19 +363,26 @@ public final class HostService implements AutoCloseable {
     }
     private JsonNode sessionJson(SessionStore.Session s) throws Exception {
         var run = running.get(s.id());
+        var queue = store.queued(s.id()); JsonNode hold = null;
+        if (run == null && !queue.isEmpty() && !queue.getFirst().urgent()) {
+            String blocker = store.interruptionBlocker(s.id(), queue.getFirst().id());
+            if (blocker != null && !blocker.equals(s.id())) { String title = blocker; try { title = store.get(blocker).title(); } catch (Exception ignored) { } hold = Json.object("sessionId", blocker, "title", title); }
+        }
         var attention=store.attention(s.id()); boolean question=pending.values().stream().anyMatch(p->p.sessionId.equals(s.id())&&!p.answer.isDone());
         ((com.fasterxml.jackson.databind.node.ObjectNode)attention).put("manual",store.marked(s.id()));
         ((com.fasterxml.jackson.databind.node.ObjectNode)attention).put("kind",question?"question":attention.path("manual").asBoolean()?"manual":attention.path("unread").asBoolean()?"finished":"");
-        return Json.object("id", s.id(), "projectId", s.projectId(), "parentId", s.parentId(), "title", s.title(), "active", s.active(), "directory", s.directory().toString(),
+        boolean technical=store.technical(s.id());
+        if(technical){var quiet=(com.fasterxml.jackson.databind.node.ObjectNode)attention;quiet.put("kind","");quiet.put("manual",false);quiet.put("unread",false);}
+        return Json.object("id", s.id(), "projectId", s.projectId(), "parentId", s.parentId(), "title", s.title(), "active", s.active(), "technical", technical, "directory", s.directory().toString(),
                 "running", run != null, "phase", run == null ? "" : run.phase, "stopping", run != null && run.stopping,
                 "progress", run == null ? null : run.activity.snapshot(), "queuePaused", store.queuePaused(s.id()),
-                "pinnedFile",store.pinnedFile(s.id()),"autonomy",store.autonomy(s.id()),"schedule",store.periodicSchedule(s.id()),"quotaWait",usage.waitState(s.id()),"status", store.lastStatus(s.id()), "queued", store.queued(s.id()).size(), "preferences", store.preferences(s.id()),"attention",attention);
+                "pinnedFile",store.pinnedFile(s.id()),"autonomy",store.autonomy(s.id()),"schedule",store.periodicSchedule(s.id()),"quotaWait",usage.waitState(s.id()),"status", store.lastStatus(s.id()), "queued", queue.size(), "preferences", store.preferences(s.id()),"attention",attention,"hold",hold);
     }
     private Object snapshot(String selected,boolean window) throws Exception {
         var sessions = new ArrayList<JsonNode>();
         var projects = store.projects();
         for (var project : projects) for (var session : store.list(project.id())) if(store.trashedAt(session.id())==0)sessions.add(sessionJson(session));
-        var projectValues=new ArrayList<JsonNode>();for(var p:projects)projectValues.add(Json.object("id",p.id(),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"widget",projectWidgets.read(Path.of(p.root()))));
+        var projectValues=new ArrayList<JsonNode>();for(var p:projects)projectValues.add(Json.object("id",p.id(),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"crossProject",store.crossProject(p.id()),"icon",ProjectIcons.version(Path.of(p.root())),"widget",projectWidgets.read(Path.of(p.root()))));
         var result = Json.object("machineUsage",cpu==null?Json.object():cpu.machineUsage(),"resources",resources.snapshot(),"files",store.projectFiles(),"resourceUsage",usage.sidebar(),"revision", revision.get(), "projects", projectValues, "sessions", sessions, "quota", quota.snapshot(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
         if (selected != null && sessions.stream().anyMatch(s -> s.path("id").asText().equals(selected))) {
             var messages = new ArrayList<SessionStore.Message>(); long cursor = 0;
@@ -346,7 +425,7 @@ public final class HostService implements AutoCloseable {
         var result=store.periodicSchedule(id,action,args.path("intervalSeconds").asLong(),args.path("prompt").asText(),System.currentTimeMillis());
         if(!action.equals("status")){
             if(result.path("state").asText().equals("active")){usage.autoResume(id,true);schedule(id);}
-            revision.incrementAndGet();
+            bump();
         }
         return result;
     }
@@ -355,15 +434,16 @@ public final class HostService implements AutoCloseable {
         try{for(String id:store.dueSchedules(now)){
             try{
                 if(running.containsKey(id)||usage.waitState(id).path("waiting").asBoolean())continue;
-                if(store.enqueueScheduled(id,now)){revision.incrementAndGet();schedule(id);}
+                if(store.enqueueScheduled(id,now)){bump();schedule(id);}
             }catch(Exception e){System.err.println("Session schedule "+id+": "+e.getMessage());}
         }}catch(Exception e){System.err.println("Session schedules: "+e.getMessage());}
     }
     private synchronized void schedule(String id) throws Exception {
-        if (closed || draining || running.containsKey(id) || usage.waitState(id).path("waiting").asBoolean() || !store.get(id).active()) return;
+        if (closed || draining || running.containsKey(id) || usage.waitState(id).path("waiting").asBoolean() || !store.acceptsWork(id)) return;
         store.ensureAutonomousContinuation(id);
         var queue=store.queued(id); if(queue.isEmpty() || store.queuePaused(id) && !queue.getFirst().urgent()) return;
-        if(store.interruptionBlocks(id,queue.getFirst().id()))return;
+        // Another session's urgent correction holds this queue, but the user's own "now" in this session outranks that hold.
+        if(!queue.getFirst().urgent()&&store.interruptionBlocks(id,queue.getFirst().id()))return;
         if(queue.getFirst().urgent() && store.interruptionScope(queue.getFirst().id()).stream().anyMatch(running::containsKey)) return;
         var run = new Running(); running.put(id, run);
         workers.submit(() -> execute(id, run));
@@ -376,7 +456,7 @@ public final class HostService implements AutoCloseable {
             acquired = true;
             synchronized (this) {
                 var queue = store.queued(id);
-                if (closed || draining || run.stopping || run.cancellation.isCancelled() || !store.get(id).active() || queue.isEmpty() || store.queuePaused(id) && !queue.getFirst().urgent() || store.interruptionBlocks(id,queue.getFirst().id())) return;
+                if (closed || draining || run.stopping || run.cancellation.isCancelled() || !store.acceptsWork(id) || queue.isEmpty() || store.queuePaused(id) && !queue.getFirst().urgent() || store.interruptionBlocks(id,queue.getFirst().id())) return;
                 job = queue.getFirst();
                 var provider=AgentAdapter.Provider.of(store.preferences(id).path("provider").asText(null));
                 executor=adapters.get(provider);
@@ -393,7 +473,7 @@ public final class HostService implements AutoCloseable {
                         return store.registerWorker(prepared.runId(),id,selected.id(),prepared.deliveredThrough(),spec);
                     });
                 }else{run.inProcessStarted=true;store.jobStatus(job.id(),"RUNNING");}
-                run.activity.preparingContext(); run.phase = "Подготовка контекста"; revision.incrementAndGet();
+                run.activity.preparingContext(); run.phase = "Подготовка контекста"; bump();
             }
             if(run.workerRun!=null){observeWorker(id,run);return;}
             try (var tools = new SessionToolsServer(store, id, tools(id,run))) {
@@ -412,19 +492,50 @@ public final class HostService implements AutoCloseable {
             } catch (Exception ignored) { }
         } finally {
             if (acquired) slots.release();
-            running.remove(id,run); revision.incrementAndGet();
+            running.remove(id,run); bump();
             try { for(var project:store.projects())for(var session:store.list(project.id()))schedule(session.id()); } catch (Exception ignored) { }
         }
     }
     private static boolean quotaError(String text){return text!=null&&(text.contains("usageLimitExceeded")||text.toLowerCase(Locale.ROOT).contains("usage limit")||text.toLowerCase(Locale.ROOT).contains("weekly limit"));}
+    private static final int THOUGHT_CAP = 1500;
+    /**
+     * The live answer narrates what the agent does: consecutive tool calls form one compact block of "▸" lines, and for Claude the
+     * start of each thought is shown muted (opened only when thought text actually arrives). The stored message keeps only the text.
+     */
+    private static void narrate(Running run, AgentAdapter.Event event) {
+        synchronized (run.text) {
+            switch (event.type()) {
+                case "text" -> { closeThought(run); endActions(run); run.text.append(event.text()); }
+                case "thinking" -> {
+                    if (!run.thoughtPending || event.text() == null || event.text().isBlank() && run.thoughtChars <= 0) return;
+                    if (run.thoughtChars < 0) { endActions(run); run.text.append("\n\n```thought\n"); run.thoughtChars = 0; }
+                    int left = THOUGHT_CAP - run.thoughtChars; if (left <= 0) return;
+                    String chunk = event.text();
+                    if (chunk.length() > left) { run.text.append(chunk, 0, left).append("…"); run.thoughtChars = THOUGHT_CAP; } else { run.text.append(chunk); run.thoughtChars += chunk.length(); }
+                }
+                case "item/started" -> {
+                    var item = event.raw().path("params").path("item");
+                    if (item.path("type").asText().equals("reasoning")) { closeThought(run); run.thoughtPending = true; return; }
+                    String label = RunActivity.label(item); if (label.isEmpty()) return;
+                    closeThought(run);
+                    // Hard line breaks keep a run of actions inside one paragraph instead of a gap per action.
+                    run.text.append(run.actionsOpen ? "  \n— " : "\n\n— ").append(label); run.actionsOpen = true;
+                }
+                case "item/completed" -> { if (event.raw().path("params").path("item").path("type").asText().equals("reasoning")) { closeThought(run); run.thoughtPending = false; } }
+                default -> { }
+            }
+        }
+    }
+    private static void closeThought(Running run) { if (run.thoughtChars < 0) return; run.text.append("\n```\n\n"); run.thoughtChars = -1; }
+    private static void endActions(Running run) { if (!run.actionsOpen) return; run.text.append("\n\n"); run.actionsOpen = false; }
     /** Only the Codex account quota is observed by the host; other executors report limit errors as ordinary failures. */
     private static boolean codexQuota(Running run){return run.provider==null||run.provider==AgentAdapter.Provider.CODEX;}
     private void observe(String id,Running run,AgentAdapter.Event event){
-        if(event.type().equals("text"))run.text.append(event.text());
+        narrate(run, event);
         if(codexQuota(run)&&(event.type().equals("error")||event.type().equals("finished"))&&quotaError(event.raw().toString()))run.quotaBlocked=true;
-        if(event.type().equals("thread/tokenUsage/updated")){try{var payload=event.raw().path("params");var tokenUsage=payload.path("tokenUsage");usage.sample(id,store.get(id).projectId(),payload.path("threadId").asText(),System.currentTimeMillis(),tokenUsage.path("total"),tokenUsage.path("last"));}catch(Exception e){System.err.println("Usage sample: "+e.getMessage());}}
+        if(event.type().equals("thread/tokenUsage/updated")){try{var payload=event.raw().path("params");var tokenUsage=payload.path("tokenUsage");usage.sample(id,store.get(id).projectId(),payload.path("threadId").asText(),System.currentTimeMillis(),tokenUsage.path("total"),tokenUsage.path("last"),run.provider==null?null:run.provider.name());}catch(Exception e){System.err.println("Usage sample: "+e.getMessage());}}
         if(event.type().equals("rate_limit_event")){try{var windows=Json.MAPPER.createArrayNode();event.raw().path("rate_limit_info").path("unifiedWindows").properties().forEach(w->{long minutes=w.getKey().equals("seven_day")?10080:w.getKey().equals("five_hour")?300:0;if(minutes>0&&w.getValue().path("resetsAt").asLong()>0)windows.add(Json.object("kind",w.getKey(),"durationMinutes",minutes,"resetsAt",w.getValue().path("resetsAt").asLong()));});if(!windows.isEmpty())usage.snapshot(Json.object("updatedAt",System.currentTimeMillis(),"buckets",List.of(Json.object("id","claude","label","Claude","windows",windows))));}catch(Exception e){System.err.println("Rate limit event: "+e.getMessage());}}
-        String phase=run.activity.accept(event);if(!run.stopping&&phase!=null)run.phase=phase;revision.incrementAndGet();
+        String phase=run.activity.accept(event);if(!run.stopping&&phase!=null)run.phase=phase;bump();
     }
     /** One merged catalog: every available executor contributes its models, each entry tagged with its provider. */
     private JsonNode modelCatalog(String sessionId)throws Exception{
@@ -445,7 +556,7 @@ public final class HostService implements AutoCloseable {
         boolean acquired=false;
         try{while(!slots.tryAcquire(100,TimeUnit.MILLISECONDS))if(closed)return;acquired=true;observeWorker(id,run);}
         catch(Exception e){if(!closed)System.err.println("Worker recovery: "+e);}
-        finally{if(acquired)slots.release();running.remove(id,run);revision.incrementAndGet();try{for(var project:store.projects())for(var session:store.list(project.id()))schedule(session.id());}catch(Exception ignored){}}
+        finally{if(acquired)slots.release();running.remove(id,run);bump();try{for(var project:store.projects())for(var session:store.list(project.id()))schedule(session.id());}catch(Exception ignored){}}
     }
     private void observeWorker(String id,Running run)throws Exception{
         try{
@@ -458,7 +569,7 @@ public final class HostService implements AutoCloseable {
                             var automatic=automaticAnswer(id,value.path("method").asText(),value.path("params"));if(automatic!=null){worker.answer(sequence,automatic);return;}
                             String key=worker.run.runId()+":"+sequence;
                             pending.putIfAbsent(key,new Pending(key,id,value.path("method").asText(),value.path("params"),new CompletableFuture<>(),worker,sequence));
-                            run.phase="Ждёт ответа";revision.incrementAndGet();
+                            run.phase="Ждёт ответа";bump();
                         }
                     });
                     var result=run.worker.await(()->closed,()->!draining);
@@ -490,7 +601,17 @@ public final class HostService implements AutoCloseable {
         for(var project:store.projects())for(var session:store.list(project.id())){var wait=usage.waitState(session.id());if(wait.path("autoResume").asBoolean()&&wait.path("waiting").asBoolean()&&!store.queuePaused(session.id())&&CodexQuotaService.available(snapshot,wait.path("blockedAt").asLong())){usage.waiting(session.id(),false);schedule(session.id());}}
     }catch(Exception e){if(!closed)System.err.println("Quota monitor: "+e.getMessage());}}
     private void blockAutonomy(String id,String reason)throws Exception{var a=store.autonomy(id);if(a.path("state").asText().equals("active"))store.autonomy(id,"blocked",a.path("goalId").asText(),"",reason.length()>1600?reason.substring(0,1600):reason);}
+    /** Nobody watches a technical session, so a question must not hang it: the agent gets a refusal and goes on by itself. */
+    private static JsonNode technicalAnswer(String method){
+        return switch(method){
+            case "item/tool/requestUserInput" -> Json.object("answers",Json.object());
+            case "item/permissions/requestApproval" -> Json.object("permissions",Json.object(),"scope","turn");
+            case "mcpServer/elicitation/request" -> Json.object("action","cancel");
+            default -> Json.object("decision","decline");
+        };
+    }
     private JsonNode automaticAnswer(String id,String method,JsonNode params)throws Exception{
+        if(store.technical(id))return technicalAnswer(method);
         if(store.queuePaused(id))return null;var answer=Autonomy.answer(method,params,store.autonomy(id));if(answer!=null)store.append(id,"system","TETHIUM","Автономный режим: агенту предложено самостоятельно выбрать обратимое решение. Если требуется ваше участие, он должен отметить блокер.");return answer;
     }
     private void answerAutonomousQuestions(String id)throws Exception{for(var p:List.copyOf(pending.values()))if(p.sessionId.equals(id)){var answer=automaticAnswer(id,p.method,p.params);if(answer!=null){if(p.worker!=null)p.worker.answer(p.sequence,answer);p.answer.complete(answer);pending.remove(p.id);}}}
@@ -511,7 +632,7 @@ public final class HostService implements AutoCloseable {
         if (!(method.endsWith("requestApproval") || method.equals("item/tool/requestUserInput") || method.equals("mcpServer/elicitation/request"))) return null;
         var automatic=automaticAnswer(id,method,params);if(automatic!=null)return automatic;
         var p = new Pending(UUID.randomUUID().toString(), id, method, params, new CompletableFuture<>(),null,0);
-        pending.put(p.id, p); run.phase = "Ждёт ответа"; revision.incrementAndGet();
+        pending.put(p.id, p); run.phase = "Ждёт ответа"; bump();
         try {
             while (!closed && !cancellation.isCancelled()) {
                 try { return p.answer.get(250, TimeUnit.MILLISECONDS); }
@@ -521,7 +642,7 @@ public final class HostService implements AutoCloseable {
             if (method.endsWith("requestApproval")) return Json.object("decision", "cancel");
             if (method.equals("item/tool/requestUserInput")) return Json.object("answers", Json.object());
             return Json.object("action", "cancel", "content", null);
-        } finally { pending.remove(p.id); run.phase = "Работает"; revision.incrementAndGet(); }
+        } finally { pending.remove(p.id); run.phase = "Работает"; bump(); }
     }
     private Path projectRoot(String id)throws Exception{return Path.of(store.projects().stream().filter(p->p.id().equals(id)).findFirst().orElseThrow(()->new IllegalArgumentException("Проект не найден")).root()).toRealPath();}
     private static Path pinPath(Path root,Path directory,String link)throws Exception{
@@ -535,18 +656,24 @@ public final class HostService implements AutoCloseable {
         var project = store.projects().stream().filter(p -> p.id().equals(session.projectId())).findFirst().orElseThrow();
         if (!(file.startsWith(session.directory()) || file.startsWith(Path.of(project.root()).toRealPath())) || !Files.isRegularFile(file)) throw new IllegalArgumentException("Файл должен находиться в рабочем каталоге проекта");
         String id = store.artifact(sessionId, file, args.path("title").asText(file.getFileName().toString()));
-        revision.incrementAndGet(); return Json.object("id", id, "path", file.toString());
+        bump(); return Json.object("id", id, "path", file.toString());
     }
     private SessionToolsServer.Extension tools(String caller,Running owner) {
         return new SessionToolsServer.Extension() {
             public List<JsonNode> tools() {
-                return List.of(Autonomy.tool(),SessionSchedule.tool(),tool("process_track","Attribute CPU of an existing or detached background process and its descendants to this session. Register long-lived helper services you start or reuse that were launched outside this session. PID reuse is guarded by start time.","pid"),tool("session_spawn", "Create and start a child session in this project; it inherits your executor, model and settings. Returns its id immediately. Result is delivered to the parent history. Do not create worktrees automatically.", "title", "prompt"),
+                var list=new ArrayList<>(List.of(Autonomy.tool(),SessionSchedule.tool(),tool("process_track","Attribute CPU of an existing or detached background process and its descendants to this session. Register long-lived helper services you start or reuse that were launched outside this session. PID reuse is guarded by start time.","pid"),tool("session_spawn", "Create and start a child session in this project; it inherits your executor, model and settings. Returns its id immediately. Result is delivered to the parent history. Do not create worktrees automatically.", "title", "prompt"),
                         tool("session_delegate", "Queue work for an active session in the same project. Returns immediately; result is delivered to your history.", "session_id", "prompt"),
                         tool("session_message", "Send an informational message to another session in this project without starting a run.", "session_id", "text"),
                         tool("artifact_publish", "Publish HTML, Markdown, images, or a runnable build (JAR, EXE, or ZIP containing it). Remote clients can download builds and launch them on their computer. Paths are relative to your working directory or absolute.", "path", "title"),
                         tool("app_publish", "Publish a signed standalone APK from this project to the user's local Android app store. Reads package/version from the APK, verifies signing, freezes the build and updates .tethium-apps.json. Phones can install or update it in Apps. Keep the signing key and increase versionCode for automatic updates; same-version builds can be reinstalled manually. Does not install anything on a device. Path relative to the session directory or absolute; title can be empty to use the APK label.", "path", "title"),
+                        tool("phone_service_publish", "Make a local service of this project reachable from its Android app through Tethium, with no port, firewall rule or typed address of its own. Writes .tethium/service.json and returns the client source for the app; Tethium on the phone handles pairing, address and tokens. Fields: name (lowercase letters, digits, hyphen), port (the service listens on 127.0.0.1), package (the Android package name).", "name", "port", "package"),
                         tool("session_rename", "Give your session a concise descriptive title.", "title"),
-                        tool("session_directory", "Set this session's working directory for subsequent runs to an existing checkout in the same Git project. Use only when the user requested a worktree. Does not create worktrees.", "path"));
+                        tool("session_directory", "Set this session's working directory for subsequent runs to an existing checkout in the same Git project. Use only when the user requested a worktree. Does not create worktrees.", "path")));
+                try{if(store.crossProject(store.get(caller).projectId())){
+                    list.add(tool("cross_project_sessions","List the active sessions of other projects, for cross_project_delegate. Allowed for this project by the user."));
+                    list.add(tool("cross_project_delegate","Queue work for an active session of another project. Returns immediately; the result is delivered to your history. For sessions of this project use session_delegate.","session_id","prompt"));
+                }}catch(Exception ignored){}
+                return list;
             }
             public Object call(String name, JsonNode args) throws Exception {
                 var source = store.get(caller);
@@ -568,7 +695,8 @@ public final class HostService implements AutoCloseable {
                         }
                     }
                     case "artifact_publish" -> response = publish(caller, args);
-                    case "app_publish" -> response=dev.tethium.mobile.ApkPublisher.publish(projectRoot(source.projectId()),source.directory().resolve(args.path("path").asText()),args.path("title").asText());
+                    case "app_publish" -> { var published=dev.tethium.mobile.ApkPublisher.publish(projectRoot(source.projectId()),source.directory().resolve(args.path("path").asText()),args.path("title").asText()); response=published; if(mobile!=null) mobile.pushAppLater(published.path("packageName").asText(),published.path("versionCode").asLong()); }
+                    case "phone_service_publish" -> response=dev.tethium.mobile.MobileGateway.publishService(projectRoot(source.projectId()),args.path("name").asText(),Integer.parseInt(args.path("port").asText().strip()),args.path("package").asText());
                     case "process_track" -> {resources.checkOwner(args.path("pid").asLong(),caller);response=store.claimProcess(caller,args.path("pid").asLong());}
                     case "session_rename" -> { store.rename(caller, args.path("title").asText()); response = Json.object("ok", true); }
                     case "session_directory" -> {
@@ -585,6 +713,25 @@ public final class HostService implements AutoCloseable {
                         var prefs = store.preferences(caller); store.preferences(child.id(), prefs.path("model").asText(null), prefs.path("access").asText(), prefs.path("reasoningEffort").asText(null));
                         store.enqueue(child.id(), caller, prompt); schedule(child.id()); response = Json.object("session_id", child.id());
                     }
+                    case "cross_project_sessions" -> {
+                        if (!store.crossProject(source.projectId())) throw new IllegalArgumentException("Для этого проекта делегирование в другие проекты выключено");
+                        var result = Json.MAPPER.createArrayNode();
+                        for (var project : store.projects()) {
+                            if (project.id().equals(source.projectId()) || !store.projectActive(project.id())) continue;
+                            var sessions = Json.MAPPER.createArrayNode();
+                            for (var s : store.list(project.id())) if (s.active() && store.trashedAt(s.id()) == 0) sessions.add(Json.object("id", s.id(), "title", s.title(), "running", running.containsKey(s.id()), "queued", store.queued(s.id()).size()));
+                            result.add(Json.object("title", project.title(), "root", project.root(), "sessions", sessions));
+                        }
+                        response = result;
+                    }
+                    case "cross_project_delegate" -> {
+                        if (!store.crossProject(source.projectId())) throw new IllegalArgumentException("Для этого проекта делегирование в другие проекты выключено");
+                        String target = args.path("session_id").asText(); var recipient = store.get(target);
+                        if (recipient.projectId().equals(source.projectId())) throw new IllegalArgumentException("Сессия этого же проекта: используйте session_delegate");
+                        String origin = store.projects().stream().filter(p -> p.id().equals(source.projectId())).findFirst().orElseThrow().title();
+                        response = Json.object("job_id", store.enqueue(target, caller, "Задача из проекта «" + origin + "», сессия «" + source.title() + "». Результат вернётся туда автоматически.\n\n" + args.path("prompt").asText()));
+                        schedule(target);
+                    }
                     case "session_delegate", "session_message" -> {
                         String target = args.path("session_id").asText();
                         if (!store.get(target).projectId().equals(source.projectId())) throw new IllegalArgumentException("Сессия другого проекта");
@@ -594,7 +741,7 @@ public final class HostService implements AutoCloseable {
                     }
                     default -> throw new IllegalArgumentException("Unknown tool");
                 }
-                revision.incrementAndGet(); return response;
+                bump(); return response;
             }
         };
     }
@@ -614,7 +761,7 @@ public final class HostService implements AutoCloseable {
     }
     private void requestShutdown() { Thread.ofVirtual().start(() -> { try { Thread.sleep(150); } catch (InterruptedException ignored) {} shutdown.run(); }); }
     private void startMobile() throws Exception {
-        if(mobile==null) mobile=new dev.tethium.mobile.MobileGateway(data,new HostClient(descriptor()),Integer.getInteger("tethium.mobile.port",8765),Integer.getInteger("tethium.mobile.downloadPort",8766));
+        if(mobile==null) mobile=new dev.tethium.mobile.MobileGateway(data,feed(),Integer.getInteger("tethium.mobile.port",8765),Integer.getInteger("tethium.mobile.downloadPort",8766));
         Files.writeString(Files.createDirectories(data.resolve("mobile")).resolve("enabled"),"true");
     }
     @Override public void close() throws Exception {

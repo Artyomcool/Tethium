@@ -12,6 +12,7 @@ java { toolchain { languageVersion = JavaLanguageVersion.of(25) } }
 
 dependencies {
     implementation 'com.fasterxml.jackson.core:jackson-databind:2.20.1'
+    implementation 'com.github.luben:zstd-jni:1.5.7-25'
     implementation 'org.xerial:sqlite-jdbc:3.50.3.0'
     implementation 'me.friwi:jcefmaven:152.0.6'
     implementation 'com.formdev:flatlaf:3.6.2'

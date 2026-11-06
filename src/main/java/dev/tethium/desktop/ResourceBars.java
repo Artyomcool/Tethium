@@ -8,18 +8,24 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 
-/** Every row uses global totals; RAM is live, CPU and tokens are cumulative. */
+/** Two groups side by side: Codex and Claude tokens on the left, CPU and RAM on the right.
+ *  Tokens and CPU time are scaled to the largest session (or project); current CPU load to the session's cap; RAM to the machine's physical memory. */
 final class ResourceBars extends JPanel {
-    static final int HEIGHT=9;
-    static final Color TOKENS=new Color(0x9bbcff),CPU=new Color(0x4e967e),CPU_NOW=new Color(0x80f5b5),RAM=new Color(0xc3a0f5);
+    static final int HEIGHT=6;
+    static final Color TOKENS=new Color(0x9bbcff),TOKENS_CLAUDE=new Color(0xe8a87c),CPU=new Color(0x4e967e),CPU_NOW=new Color(0x80f5b5),RAM=new Color(0xc3a0f5);
     private static final Locale RU=Locale.forLanguageTag("ru");
-    record Share(long tokens,long tokenTotal,long nanos,long cpuTotal,long memory,long memoryTotal,double cpuNow){
+    /** Width of the left (token) group; the right group starts after one gap. */
+    static int leftWidth(int width){return Math.max(0,(width-Theme.GAP)/2);}
+    /** Tokens and CPU time compare with the largest peer; current CPU load is measured against the session's cap and RAM against the machine's physical memory. */
+    record Share(long tokens,long codexTokens,long claudeTokens,long codexPeak,long claudePeak,long tokenTotal,long nanos,long cpuPeak,long cpuTotal,long memory,long memoryPhysical,long memoryTotal,double cpuNow,int cpuCap){
         double tokenFraction(){return fraction(tokens,tokenTotal);}
-        double cpuFraction(){return fraction(nanos,cpuTotal);}
+        double codexFraction(){return fraction(codexTokens,codexPeak);}
+        double claudeFraction(){return fraction(claudeTokens,claudePeak);}
+        double cpuFraction(){return fraction(nanos,cpuPeak);}
+        double memoryFraction(){return fraction(memory,memoryPhysical);}
+        double currentCpuFraction(){return Double.isFinite(cpuNow)&&cpuCap>0?Math.clamp(cpuNow/cpuCap,0,1):0;}
+        boolean hasUsage(){return tokens>0||nanos>0||memory>0||currentCpuFraction()>0;}
         private static double fraction(long own,long total){return total<=0?0:Math.clamp((double)own/total,0,1);}
-        double memoryFraction(){return fraction(memory,memoryTotal);}
-        double currentCpuFraction(){return Double.isFinite(cpuNow)?Math.clamp(cpuNow/100,0,1):0;}
-        boolean hasUsage(){return tokenFraction()>0||cpuFraction()>0||memoryFraction()>0||currentCpuFraction()>0;}
     }
     ResourceBars(){super(new BorderLayout(Theme.GAP,0));setBorder(BorderFactory.createEmptyBorder(0,0,HEIGHT+1,0));}
     static Share share(JsonNode usage,String id,boolean project){return share(usage,Json.object(),id,project);}
@@ -29,38 +35,57 @@ final class ResourceBars extends JPanel {
     static Share share(JsonNode usage,JsonNode machine,JsonNode controls,String id,boolean project){
         String group=project?"projects":"sessions";var cpu=usage.path("cpu");var memory=machine.path("memory");
         var current=controls.path(group).path(id).path("cpuPercent");
-        return new Share(usage.path(group).path(id).asLong(),usage.path("total").asLong(),cpu.path(group).path(id).asLong(),cpu.path("totalNanos").asLong(),
-            memory.path(group).path(id).path("bytes").asLong(),memory.path("totalBytes").asLong(),controls.path("supported").asBoolean()&&current.isNumber()?current.asDouble():Double.NaN);
+        var executors=usage.path("executors");var all=usage.path(group);
+        // Before executors were recorded every token belonged to Codex, so a missing breakdown keeps the old meaning.
+        var codex=executors.isObject()?executors.path("codex").path(group):all;var claude=executors.path("claude").path(group);
+        long claudeTokens=claude.path(id).asLong(),tokens=all.path(id).asLong();
+        return new Share(tokens,executors.isObject()?codex.path(id).asLong():tokens,claudeTokens,peak(codex,null),peak(claude,null),usage.path("total").asLong(),
+            cpu.path(group).path(id).asLong(),peak(cpu.path(group),null),cpu.path("totalNanos").asLong(),
+            memory.path(group).path(id).path("bytes").asLong(),machine.path("memoryTotal").asLong(),memory.path("totalBytes").asLong(),
+            controls.path("supported").asBoolean()&&current.isNumber()?current.asDouble():Double.NaN,controls.path(group).path(id).path("effectiveCap").asInt(100));
     }
+    /** Largest value among peers; nested maps read the given field. */
+    static long peak(JsonNode values,String field){long max=0;for(var v:values)max=Math.max(max,(field==null?v:v.path(field)).asLong());return max;}
     static void paint(Graphics g,int x,int bottom,int width,Share share){
         if(!share.hasUsage())return;
-        paintBar(g,x,bottom-HEIGHT,width,share.tokenFraction(),TOKENS);
-        paintBar(g,x,bottom-HEIGHT+3,width,share.cpuFraction(),CPU);
-        paintBar(g,x,bottom-HEIGHT+5,width,1,share.currentCpuFraction(),CPU_NOW);
-        paintBar(g,x,bottom-HEIGHT+7,width,share.memoryFraction(),RAM);
+        int left=leftWidth(width),rightX=x+left+Theme.GAP,right=Math.max(0,width-left-Theme.GAP),top=bottom-HEIGHT;
+        paintBar(g,x,top,left,share.codexFraction(),TOKENS);
+        paintBar(g,x,top+4,left,share.claudeFraction(),TOKENS_CLAUDE);
+        paintBar(g,rightX,top,right,share.cpuFraction(),CPU);
+        paintBar(g,rightX,top+2,right,1,share.currentCpuFraction(),CPU_NOW);
+        paintBar(g,rightX,top+4,right,share.memoryFraction(),RAM);
     }
-    static int lane(int y,int bottom){int offset=y-(bottom-HEIGHT);return offset<0||offset>=HEIGHT?-1:offset<3?0:offset<7?1:2;}
+    /** 0 — tokens (left group), 1 — CPU, 2 — RAM (right group); -1 outside the bars. */
+    static int lane(int x,int y,int left,int width,int bottom){
+        int offset=y-(bottom-HEIGHT);if(offset<0||offset>=HEIGHT||x<left||x>=left+width)return -1;
+        int tokens=leftWidth(width);if(x<left+tokens)return 0;if(x<left+tokens+Theme.GAP)return -1;
+        return offset<3?1:2;
+    }
     static String tooltip(int lane,JsonNode usage,JsonNode machine,JsonNode controls,String id,boolean project){
         var share=share(usage,machine,controls,id,project);String group=project?"projects":"sessions";
-        String subject=project?"Проект":"Сессия",body;
+        String subject=project?"Проект":"Сессия",peer=project?"наибольшего проекта":"наибольшей сессии",body;
         if(lane==0){
+            var byExecutor=usage.path("executors");long codexTotal=byExecutor.isObject()?byExecutor.path("codex").path("total").asLong():share.tokenTotal,claudeTotal=byExecutor.path("claude").path("total").asLong();
             body=heading(TOKENS,"Токены · "+subject)+String.format(RU,"<br><b>%,d</b> · %.2f%% от общего расхода<br>Все сессии: %,d токенов",share.tokens,100*share.tokenFraction(),share.tokenTotal)
-                +"<br>"+period(usage.path("start").asLong())+"<br>Учтённые токены разговоров, включая кэш; это не остаток квоты.";
+                +"<br>"+colored(TOKENS,"Codex")+String.format(RU,": <b>%,d</b> · %.0f%% от %s (%,d)",share.codexTokens,100*share.codexFraction(),peer,share.codexPeak)+(codexTotal>0?String.format(RU," · всего %,d",codexTotal):"")
+                +"<br>"+colored(TOKENS_CLAUDE,"Claude")+String.format(RU,": <b>%,d</b> · %.0f%% от %s (%,d)",share.claudeTokens,100*share.claudeFraction(),peer,share.claudePeak)+(claudeTotal>0?String.format(RU," · всего %,d",claudeTotal):"")
+                +"<br>Вход и выход, без чтения из кэша<br>"+period(usage.path("start").asLong())+"<br>Верхняя полоса — Codex, нижняя — Claude; длина сравнивается с "+peer+" того же исполнителя.<br>Учтённые токены разговоров, включая кэш; это не остаток квоты.";
         }else if(lane==1){
             var control=controls.path(group).path(id);
-            body=heading(CPU_NOW,"CPU · "+subject)+"<br>За период: <b>"+duration(share.nanos)+"</b> · "+percent(100*share.cpuFraction())+" от общего CPU-времени"
+            body=heading(CPU_NOW,"CPU · "+subject)+"<br>За период: <b>"+duration(share.nanos)+"</b> · "+percent(100*fraction(share.nanos,share.cpuTotal))+" от общего CPU-времени"
+                +String.format(RU,"<br>Полоса: %.0f%% от %s (%s)",100*share.cpuFraction(),peer,duration(share.cpuPeak))
                 +"<br>Все сессии: "+duration(share.cpuTotal)+"<br>"+period(Math.max(usage.path("start").asLong(),usage.path("cpu").path("observedSince").asLong()));
-            if(Double.isFinite(share.cpuNow))body+="<br>Сейчас: <b>"+percent(share.cpuNow)+"</b> мощности компьютера · лимит "+control.path("effectiveCap").asInt(100)+"%";
+            if(Double.isFinite(share.cpuNow))body+="<br>Сейчас: <b>"+percent(share.cpuNow)+"</b> мощности компьютера · лимит "+share.cpuCap+"%"+String.format(RU," · полоса: %.0f%% от лимита",100*share.currentCpuFraction());
             else body+="<br>Текущая загрузка пока недоступна.";
-            body+="<br>Верх полосы — накопленная доля; яркий низ — загрузка сейчас.<br>100% текущей загрузки = все ядра компьютера.";
+            body+="<br>Верх полосы — накопленное время относительно "+peer+"; яркий низ — загрузка сейчас относительно лимита CPU.<br>100% мощности = все ядра компьютера.";
         }else{
             var memory=machine.path("memory");var own=memory.path(group).path(id);
             body=heading(RAM,"RAM сейчас · "+subject);
             if(!memory.isObject())return "<html>"+body+"<br>Замер памяти ещё не получен.</html>";
-            body+="<br><b>"+bytes(share.memory)+"</b> · "+percent(100*share.memoryFraction())+" памяти всех сессий"
+            body+="<br><b>"+bytes(share.memory)+"</b> · "+percent(100*fraction(share.memory,share.memoryTotal))+" памяти всех сессий"
                 +"<br>Все сессии: "+bytes(share.memoryTotal)+" · процессов здесь: "+own.path("processes").asInt();
-            long physical=machine.path("memoryTotal").asLong();
-            if(physical>0)body+="<br>От RAM компьютера: "+percent(100.0*share.memory/physical)+" из "+bytes(physical);
+            if(share.memoryPhysical>0)body+="<br>Полоса: "+percent(100*share.memoryFraction())+" от RAM компьютера ("+bytes(share.memoryPhysical)+")";
+            else body+="<br>Объём RAM компьютера пока неизвестен; полоса пуста.";
             body+="<br>Личная физическая память процессов; ядро и GUI — отдельно.";
             if(memory.path("unmeasuredProcesses").asInt()>0)body+="<br>Неполный замер: без данных "+own.path("unmeasuredProcesses").asInt()+" процессов здесь, "+memory.path("unmeasuredProcesses").asInt()+" всего.";
             body+="<br>Замер: "+time(machine.path("updatedAt").asLong(),true);
@@ -76,7 +101,9 @@ final class ResourceBars extends JPanel {
     static String percent(double value){return String.format(RU,"%.2f%%",value);}
     static String time(long millis,boolean seconds){return millis<=0?"—":DateTimeFormatter.ofPattern(seconds?"dd.MM HH:mm:ss":"dd.MM HH:mm").format(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()));}
     private static String period(long start){return start<=0?"С начала учёта":"Период: с "+time(start,false);}
-    private static String heading(Color color,String title){return "<b><font color='#"+String.format("%06x",color.getRGB()&0xffffff)+"'>"+title+"</font></b>";}
+    private static double fraction(long own,long total){return total<=0?0:Math.clamp((double)own/total,0,1);}
+    private static String colored(Color color,String text){return "<font color='#"+String.format("%06x",color.getRGB()&0xffffff)+"'>"+text+"</font>";}
+    private static String heading(Color color,String title){return "<b>"+colored(color,title)+"</b>";}
     private static String duration(long nanos){long seconds=nanos/1_000_000_000;return String.format(RU,"%d ч %02d мин %02d с (%,.1f с)",seconds/3600,seconds/60%60,seconds%60,nanos/1e9);}
     private static void paintBar(Graphics g,int x,int y,int width,double fraction,Color color){
         paintBar(g,x,y,width,2,fraction,color);

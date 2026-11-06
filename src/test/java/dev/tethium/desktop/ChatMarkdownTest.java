@@ -13,4 +13,22 @@ class ChatMarkdownTest {
         assertFalse(markdown.render("[Blocked](javascript:alert%281%29)").contains("href=\"javascript:"));
         assertFalse(markdown.render("<script>alert(1)</script>").contains("<script>"));
     }
+    @Test void liveNarrationRendersMutedThoughtsAndActionsAndCanHideThoughts(){
+        var markdown=new ChatMarkdown();String live="""
+
+
+            ```thought
+            Сначала тесты.
+            Потом сборка…
+            ```
+
+            — Команда: Запускает тесты\s\s
+            — Файлы: A.java
+
+            Готово.""";
+        ChatMarkdown.showThoughts=true;String shown=markdown.render(live);
+        assertTrue(shown.contains("<div class='thought'>Сначала тесты.<br>Потом сборка…</div>"),shown);assertTrue(shown.contains("<p class='action'>Команда: Запускает тесты</p>\n<p class='action'>Файлы: A.java</p>"),shown);assertFalse(shown.contains("—"),shown);assertFalse(shown.contains("language-thought"),shown);
+        ChatMarkdown.showThoughts=false;String hidden=markdown.render(live);
+        assertFalse(hidden.contains("Сначала тесты"),hidden);assertTrue(hidden.contains("class='action'"),hidden);ChatMarkdown.showThoughts=true;
+    }
 }

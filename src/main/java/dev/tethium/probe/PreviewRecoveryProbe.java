@@ -47,7 +47,7 @@ public final class PreviewRecoveryProbe {
                 until(()->browser()==null&&view.browserResourceCount()==0,"Repeated crash stops automatic retries");
                 SwingUtilities.invokeAndWait(view::reload);until(PreviewRecoveryProbe::ready,"Manual reload after repeated crash");
             }
-            SwingUtilities.invokeAndWait(view::clear);until(()->view.browserResourceCount()==0,"Browser cleanup");
+            SwingUtilities.invokeAndWait(view::clear);until(()->view.browserResourceCount()<=1,"Browser cleanup keeps one warm tab");
             Json.MAPPER.writeValue(root.resolve("report.json").toFile(),Json.object("passed",true,"scenario",args.length==0?"race":args[0]));System.out.println("PREVIEW_RECOVERY_PASSED "+root);
         }catch(Throwable error){error.printStackTrace();exit=1;}finally{SwingUtilities.invokeAndWait(()->{if(view!=null)view.close();if(frame[0]!=null)frame[0].dispose();});}System.exit(exit);
     }

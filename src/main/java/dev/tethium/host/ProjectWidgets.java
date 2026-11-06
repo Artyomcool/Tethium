@@ -11,10 +11,13 @@ import javax.imageio.ImageIO;
 
 /** The project owns the entire row; Tethium transports its rendered SVG unchanged. */
 final class ProjectWidgets {
-    static final String BOTTOM=".tethium-widget-bottom.svg", RIGHT=".tethium-widget-right.svg";
+    /** Widgets live with the rest of the project's Tethium files in .tethium/; the old root-level names still work. */
+    static final String BOTTOM=".tethium/widget-bottom.svg", RIGHT=".tethium/widget-right.svg";
+    static final String LEGACY_BOTTOM=".tethium-widget-bottom.svg", LEGACY_RIGHT=".tethium-widget-right.svg";
     private record Cached(long checked,long modified,long size,JsonNode value){}
     private final Map<Path,Cached> cache=new HashMap<>();
-    synchronized JsonNode read(Path root){return Json.object("bottom",readFile(root.resolve(BOTTOM)),"right",readFile(root.resolve(RIGHT)));}
+    synchronized JsonNode read(Path root){return Json.object("bottom",readFile(locate(root,BOTTOM,LEGACY_BOTTOM)),"right",readFile(locate(root,RIGHT,LEGACY_RIGHT)));}
+    private static Path locate(Path root,String preferred,String legacy){Path file=root.resolve(preferred);return Files.isRegularFile(file)||!Files.isRegularFile(root.resolve(legacy))?file:root.resolve(legacy);}
     private JsonNode readFile(Path file){
         long now=System.currentTimeMillis();var old=cache.get(file);
         if(old!=null&&now-old.checked<2000)return old.value;

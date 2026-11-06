@@ -20,6 +20,11 @@ final class IdentityIcons {
         if(project){String path=Objects.requireNonNullElse(directory,"").replace('\\','/').replaceAll("/+$","");if(!path.isBlank())name=path.substring(path.lastIndexOf('/')+1);}
         String normalized=normalize(name);
         String asset=names.getProperty((project?"project.":"session.")+normalized);
+        if(asset==null&&!project&&!normalized.equals("новая сессия")){
+            // Unknown session names get the same generated identity as on the laptop.
+            String key="hash:"+normalized;Bitmap generated=images.get(key);if(generated==null){generated=SessionIdenticon.render(normalized,88);images.put(key,generated);}
+            var drawable=new BitmapDrawable(context.getResources(),generated);drawable.setFilterBitmap(true);return drawable;
+        }
         if(asset==null)return new Ui.Glyph(project?"project-folder":"session-chat",0xffffffff);
         Bitmap image=images.get(asset);
         if(image==null)try(var in=context.getAssets().open("identity/"+asset+"-88.png")){image=BitmapFactory.decodeStream(in);images.put(asset,image);}catch(IOException ignored){}

@@ -14,9 +14,9 @@ import java.io.*;
 
 /** Remote transport only. It cannot start or discover a local executor. */
 public final class RemoteClient extends HostClient {
-    private final PinnedConnection connection;private final Path data;private final Map<String,JsonNode> drafts=new ConcurrentHashMap<>();
+    private final LanConnection connection;private final Path data;private final Map<String,JsonNode> drafts=new ConcurrentHashMap<>();
     private final Map<String,String> artifactIds=new ConcurrentHashMap<>();private volatile String session="";private HttpServer preview;private ExecutorService previewWorkers;
-    public RemoteClient(Path data,JsonNode credentials)throws Exception{super(Json.object());this.data=Files.createDirectories(data);connection=new PinnedConnection(credentials.path("address").asText(),credentials.path("pin").asText(),credentials.path("token").asText());Path file=data.resolve("drafts.json");if(Files.exists(file))Json.MAPPER.readTree(file.toFile()).properties().forEach(e->drafts.put(e.getKey(),e.getValue()));}
+    public RemoteClient(Path data,JsonNode credentials)throws Exception{super(Json.object());this.data=Files.createDirectories(data);connection=new LanConnection(credentials.path("address").asText(),credentials.path("token").asText());Path file=data.resolve("drafts.json");if(Files.exists(file))Json.MAPPER.readTree(file.toFile()).properties().forEach(e->drafts.put(e.getKey(),e.getValue()));}
     @Override public boolean remote(){return true;}
     @Override public long hostPid(){return 0;}
     @Override public JsonNode get(String path)throws Exception{

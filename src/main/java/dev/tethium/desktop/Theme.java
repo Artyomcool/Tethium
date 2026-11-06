@@ -44,6 +44,8 @@ public final class Theme {
         UIManager.put("ProgressBar.background", BORDER); UIManager.put("ProgressBar.foreground", PRIMARY); UIManager.put("ProgressBar.arc", 4);
         UIManager.put("PopupMenu.background", SURFACE); UIManager.put("MenuItem.background", SURFACE);
         UIManager.put("MenuItem.selectionBackground", SELECTED); UIManager.put("ToolTip.background", SURFACE); UIManager.put("ToolTip.foreground", TEXT);
+        // Swing hides tooltips after 4 s by default; here they stay until the pointer leaves the component.
+        ToolTipManager.sharedInstance().setDismissDelay(Integer.MAX_VALUE); ToolTipManager.sharedInstance().setInitialDelay(400); ToolTipManager.sharedInstance().setReshowDelay(100);
         UIManager.put("TitlePane.background", SIDEBAR); UIManager.put("TitlePane.foreground", MUTED); UIManager.put("TitlePane.unifiedBackground", false);
         JFrame.setDefaultLookAndFeelDecorated(true);
     }

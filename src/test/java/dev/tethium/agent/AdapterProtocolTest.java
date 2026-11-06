@@ -125,4 +125,28 @@ class AdapterProtocolTest {
         process.close();
         assertFalse(process.isAlive());
     }
+    @Test void claudeIgnoresTheEmptyTurnThatClosesAnInterruptedBackgroundTaskOnResume() throws Exception {
+        var events = new ArrayList<AgentAdapter.Event>();
+        var result = new ClaudeAdapter(command("claude-stale")).run(request("claude-thread"), events::add, new Cancellation());
+        assertEquals(AgentAdapter.Status.COMPLETED, result.status());
+        assertEquals("Hello world\n\nDone", result.text(), "The run answers the prompt instead of ending on the stale empty turn");
+        var finished = events.stream().filter(e -> e.type().equals("finished")).toList();
+        assertEquals(1, finished.size());
+        assertNotEquals(0, finished.getFirst().raw().path("num_turns").asInt(-1), "Only the real result finishes the run");
+    }
+    @Test void claudeStillCompletesWhenTheProcessLeavesRightAfterTheEmptyTurn() throws Exception {
+        var command = new ArrayList<>(command("claude-stale")); command.add("--exit-after-stale");
+        var events = new ArrayList<AgentAdapter.Event>();
+        var result = new ClaudeAdapter(command).run(request("claude-thread"), events::add, new Cancellation());
+        assertEquals(AgentAdapter.Status.COMPLETED, result.status());
+        assertEquals("", result.text());
+        assertEquals(1, events.stream().filter(e -> e.type().equals("finished")).count());
+    }
+    @Test void claudeCommandItemsPreferTheModelsOwnDescription() {
+        var item = ClaudeAdapter.toolItem(Json.object("id", "t1", "name", "Bash", "input", Json.object("command", "git status --short && git diff --stat", "description", "Show working tree status")));
+        assertEquals("Show working tree status", item.path("command").asText());
+        assertEquals("git status --short && git diff --stat", item.path("detail").asText());
+        var bare = ClaudeAdapter.toolItem(Json.object("id", "t2", "name", "PowerShell", "input", Json.object("command", "Get-Process")));
+        assertEquals("Get-Process", bare.path("command").asText());
+    }
 }

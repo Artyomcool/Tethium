@@ -90,9 +90,28 @@ public final class SessionStore implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS compaction_notices(run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,item_id TEXT NOT NULL,phase TEXT NOT NULL,PRIMARY KEY(run_id,item_id,phase))");
             s.execute("CREATE TABLE IF NOT EXISTS compaction_messages(run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,item_id TEXT NOT NULL,message_sequence INTEGER NOT NULL REFERENCES messages(sequence) ON DELETE CASCADE,started_at INTEGER NOT NULL,PRIMARY KEY(run_id,item_id))");
             s.execute("CREATE TABLE IF NOT EXISTS message_revisions(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,revision INTEGER NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS project_cross_project(project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,enabled INTEGER NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS session_technical(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,enabled INTEGER NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS project_order(project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,position INTEGER NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS session_order(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,position INTEGER NOT NULL)");
         }
     }
 
+    /** A technical session serves a program: it lights no indicators, never waits for a person, and works even when listed as inactive. */
+    public synchronized boolean technical(String id)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT enabled FROM session_technical WHERE session_id=?")){q.setString(1,id);try(var r=q.executeQuery()){return r.next()&&r.getBoolean(1);}}
+    }
+    public synchronized void technical(String id,boolean enabled)throws SQLException{
+        get(id);execute("INSERT INTO session_technical VALUES(?,?) ON CONFLICT(session_id) DO UPDATE SET enabled=excluded.enabled",id,enabled);
+    }
+    public synchronized boolean acceptsWork(String id)throws SQLException{return get(id).active()||technical(id);}
+    /** Whether this project's sessions may queue work in other projects. Off unless the user turned it on for the project. */
+    public synchronized boolean crossProject(String id)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT enabled FROM project_cross_project WHERE project_id=?")){q.setString(1,id);try(var r=q.executeQuery()){return r.next()&&r.getBoolean(1);}}
+    }
+    public synchronized void crossProject(String id,boolean enabled)throws SQLException{
+        execute("INSERT INTO project_cross_project VALUES(?,?) ON CONFLICT(project_id) DO UPDATE SET enabled=excluded.enabled",id,enabled);
+    }
     public synchronized boolean projectActive(String id)throws SQLException{
         try(var q=connection.prepareStatement("SELECT active FROM project_visibility WHERE project_id=?")){q.setString(1,id);try(var r=q.executeQuery()){return !r.next()||r.getBoolean(1);}}
     }
@@ -117,7 +136,7 @@ public final class SessionStore implements AutoCloseable {
             for(String table:List.of("autonomy_jobs","queue_merges","queue_interruptions"))execute("DELETE FROM "+table+" WHERE job_id IN (SELECT id FROM jobs WHERE session_id=?)",id);
             execute("DELETE FROM imported_messages WHERE source_key IN (SELECT source_key FROM imports WHERE session_id=?)",id);
             for(String table:List.of("imports","messages","run_messages","media_jobs","session_media","bindings","run_progress","events","runs","jobs","preferences","queue_state","queue_returns","queue_operations","session_seen","session_marks","cpu_claims","session_files","session_autonomy","artifacts","session_trash"))execute("DELETE FROM "+table+" WHERE session_id=?",id);
-            for(String table:List.of("token_samples","cpu_samples","cpu_processes","quota_wait")){try(var q=connection.prepareStatement("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")){q.setString(1,table);try(var r=q.executeQuery()){if(r.next())execute("DELETE FROM "+table+" WHERE session_id=?",id);}}}
+            for(String table:List.of("token_totals","cpu_totals","quota_wait")){try(var q=connection.prepareStatement("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?")){q.setString(1,table);try(var r=q.executeQuery()){if(r.next())execute("DELETE FROM "+table+" WHERE session_id=?",id);}}}
             execute("DELETE FROM sessions WHERE id=?",id);historyIndexes.remove(id);return runs;
         });
     }
@@ -283,7 +302,7 @@ public final class SessionStore implements AutoCloseable {
     }
     public synchronized List<Session> list(String projectId) throws SQLException {
         var result = new ArrayList<Session>();
-        try (var q = connection.prepareStatement("SELECT * FROM sessions WHERE project_id=? ORDER BY rowid")) {
+        try (var q = connection.prepareStatement("SELECT s.* FROM sessions s LEFT JOIN session_order o ON o.session_id=s.id WHERE s.project_id=? ORDER BY o.position IS NULL,o.position,s.rowid")) {
             q.setString(1, projectId);
             try (var rows = q.executeQuery()) { while (rows.next()) result.add(session(rows)); }
         }
@@ -324,7 +343,7 @@ public final class SessionStore implements AutoCloseable {
         execute("INSERT INTO session_seen(session_id,last_run) VALUES(?,?) ON CONFLICT(session_id) DO UPDATE SET last_run=MAX(last_run,excluded.last_run)",id,bounded);
     }
     public synchronized String beginRun(String sessionId, Provider provider) throws SQLException {
-        if (!get(sessionId).active()) throw new IllegalStateException("Session is deactivated");
+        if (!acceptsWork(sessionId)) throw new IllegalStateException("Session is deactivated");
         String id = UUID.randomUUID().toString();
         execute("INSERT INTO runs(id,session_id,provider,status) VALUES(?,?,?,'RUNNING')", id, sessionId, provider.name());
         return id;
@@ -466,7 +485,7 @@ public final class SessionStore implements AutoCloseable {
     }
     public synchronized List<Project> projects() throws SQLException {
         var result = new ArrayList<Project>();
-        try (var q = connection.createStatement(); var rows = q.executeQuery("SELECT id,root FROM projects ORDER BY rowid")) {
+        try (var q = connection.createStatement(); var rows = q.executeQuery("SELECT p.id,p.root FROM projects p LEFT JOIN project_order o ON o.project_id=p.id ORDER BY o.position IS NULL,o.position,p.rowid")) {
             while (rows.next()) { var path = Path.of(rows.getString(2)); result.add(new Project(rows.getString(1), path.toString(), path.getFileName() == null ? path.toString() : path.getFileName().toString())); }
         }
         return List.copyOf(result);
@@ -544,7 +563,7 @@ public final class SessionStore implements AutoCloseable {
         Collections.reverse(result); return result;
     }
     public synchronized String enqueue(String target, String source, String prompt) throws SQLException {
-        if (!get(target).active()) throw new IllegalStateException("Сессия деактивирована");
+        if (!acceptsWork(target)) throw new IllegalStateException("Сессия деактивирована");
         if (prompt.isBlank()) throw new IllegalArgumentException("Пустое сообщение");
         String id = UUID.randomUUID().toString();
         execute("INSERT INTO jobs(id,session_id,source_id,prompt,prompt_parts,queue_order) VALUES(?,?,?,?,?,(SELECT COALESCE(MAX(queue_order),0)+1 FROM jobs WHERE session_id=? AND status='QUEUED'))", id, target, source, prompt, Json.MAPPER.valueToTree(List.of(prompt)).toString(), target);
@@ -552,7 +571,7 @@ public final class SessionStore implements AutoCloseable {
     }
     /** User input appends to the queue tail unless a separate message was requested. */
     public synchronized String submit(String target, String prompt, boolean separate) throws SQLException {
-        if (!get(target).active()) throw new IllegalStateException("Сессия деактивирована");
+        if (!acceptsWork(target)) throw new IllegalStateException("Сессия деактивирована");
         if (prompt.isBlank()) throw new IllegalArgumentException("Пустое сообщение");
         if (!separate) {
             String id = null; List<String> parts = null;
@@ -774,10 +793,12 @@ public final class SessionStore implements AutoCloseable {
         }catch(SQLException|RuntimeException error){connection.rollback();throw error;}finally{connection.setAutoCommit(true);}
     }
     /** Transient ordering barrier, independent of the user's durable queue pause. */
-    public synchronized boolean interruptionBlocks(String session,String candidateJob)throws SQLException{
-        try(var q=connection.prepareStatement("SELECT i.affected FROM queue_interruptions i JOIN jobs j ON j.id=i.job_id WHERE j.urgent=1 AND j.status IN ('QUEUED','RUNNING') AND j.id<>?")){
-            q.setString(1,candidateJob);try(var rows=q.executeQuery()){while(rows.next())for(var affected:parseStored(rows.getString(1)))if(session.equals(affected.asText()))return true;}
-        }return false;
+    public synchronized boolean interruptionBlocks(String session,String candidateJob)throws SQLException{return interruptionBlocker(session,candidateJob)!=null;}
+    /** Session of the urgent correction whose scope still holds this session's queue, or null when nothing holds it. */
+    public synchronized String interruptionBlocker(String session,String candidateJob)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT i.affected,j.session_id FROM queue_interruptions i JOIN jobs j ON j.id=i.job_id WHERE j.urgent=1 AND j.status IN ('QUEUED','RUNNING') AND j.id<>?")){
+            q.setString(1,candidateJob);try(var rows=q.executeQuery()){while(rows.next())for(var affected:parseStored(rows.getString(1)))if(session.equals(affected.asText()))return rows.getString(2);}
+        }return null;
     }
     public synchronized List<String> interruptionScope(String jobId) throws SQLException {
         try(var q=connection.prepareStatement("SELECT affected FROM queue_interruptions WHERE job_id=?")) {
@@ -832,6 +853,16 @@ public final class SessionStore implements AutoCloseable {
         }
         return List.copyOf(result);
     }
+    /** Newest messages strictly before a sequence, oldest first; feeds backward paging on the phone. */
+    public synchronized List<Message> messagesBefore(String sessionId, long before, int limit) throws SQLException {
+        if (limit < 1 || limit > 1001) throw new IllegalArgumentException("History limit must be 1..1000");
+        var result = new ArrayList<Message>();
+        try (var q = connection.prepareStatement("SELECT sequence,role,provider,text,created_at FROM messages WHERE session_id=? AND sequence<? ORDER BY sequence DESC LIMIT ?")) {
+            q.setString(1, sessionId); q.setLong(2, before); q.setInt(3, limit);
+            try (var rows = q.executeQuery()) { while (rows.next()) result.add(new Message(rows.getLong(1), rows.getString(2), rows.getString(3), rows.getString(4),rows.getLong(5))); }
+        }
+        Collections.reverse(result); return List.copyOf(result);
+    }
     public synchronized long lastSequence(String sessionId) throws SQLException {
         try (var q = connection.prepareStatement("SELECT COALESCE(MAX(sequence),0) FROM messages WHERE session_id=?")) {
             q.setString(1, sessionId);
@@ -852,6 +883,62 @@ public final class SessionStore implements AutoCloseable {
             for (int i = 0; i < values.length; i++) q.setObject(i + 1, values[i]);
             q.executeUpdate();
         }
+    }
+    /** Forget the executor conversations of a session: the next run starts a fresh one while the Tethium chat stays. */
+    public synchronized int unbind(String id) throws SQLException {
+        get(id); try (var q = connection.prepareStatement("DELETE FROM bindings WHERE session_id=?")) { q.setString(1, id); return q.executeUpdate(); }
+    }
+    /** Remove chosen chat messages; the executor keeps its own memory of them until the context is reset. */
+    public synchronized int deleteMessages(String id, java.util.Collection<Long> sequences) throws Exception {
+        return transaction(() -> { get(id); int removed = 0; for (long sequence : sequences) removed += deleteMessage(id, sequence); if (removed > 0) messagesChanged(id); return removed; });
+    }
+    public synchronized int deleteMessagesAfter(String id, long sequence) throws Exception {
+        return transaction(() -> {
+            get(id); var doomed = new ArrayList<Long>();
+            try (var q = connection.prepareStatement("SELECT sequence FROM messages WHERE session_id=? AND sequence>?")) { q.setString(1, id); q.setLong(2, sequence); try (var r = q.executeQuery()) { while (r.next()) doomed.add(r.getLong(1)); } }
+            int removed = 0; for (long s : doomed) removed += deleteMessage(id, s); if (removed > 0) messagesChanged(id); return removed;
+        });
+    }
+    private int deleteMessage(String id, long sequence) throws SQLException {
+        execute("DELETE FROM compaction_messages WHERE message_sequence=?", sequence);
+        try (var q = connection.prepareStatement("DELETE FROM messages WHERE session_id=? AND sequence=?")) { q.setString(1, id); q.setLong(2, sequence); return q.executeUpdate(); }
+    }
+    private void messagesChanged(String id) throws SQLException {
+        execute("INSERT INTO message_revisions VALUES(?,1) ON CONFLICT(session_id) DO UPDATE SET revision=revision+1", id); historyIndexes.remove(id);
+    }
+    /** One action for everything that keeps a session busy on its own: autonomy, schedule, queue pause, attention mark and draft. */
+    public synchronized void resetState(String id) throws Exception {
+        transaction(() -> {
+            get(id); autonomy(id, "disable", "", "", ""); periodicSchedule(id, "disable", 0, "", System.currentTimeMillis());
+            pauseQueue(id, false); marked(id, false); draft(id, ""); draftImages(id, Json.MAPPER.createArrayNode()); return null;
+        });
+    }
+    /** Projects are reordered by drag and drop in the sidebar. The given ids are the visible subset in their new relative
+     *  order; projects not mentioned (e.g. in the other tree) keep their places. */
+    public synchronized void reorderProjects(List<String> ids) throws Exception {
+        transaction(() -> {
+            var current = new ArrayList<String>(); for (var p : projects()) current.add(p.id());
+            var merged = merge(current, ids);
+            for (int i = 0; i < merged.size(); i++) execute("INSERT INTO project_order VALUES(?,?) ON CONFLICT(project_id) DO UPDATE SET position=excluded.position", merged.get(i), i);
+            return null;
+        });
+    }
+    /** Same for the sessions of one project: nested sessions stay under their parents, only the relative order changes. */
+    public synchronized void reorderSessions(String projectId, List<String> ids) throws Exception {
+        transaction(() -> {
+            var current = new ArrayList<String>(); for (var s : list(projectId)) current.add(s.id());
+            for (String id : ids) if (!current.contains(id)) throw new IllegalArgumentException("Сессия " + id + " не из этого проекта");
+            var merged = merge(current, ids);
+            for (int i = 0; i < merged.size(); i++) execute("INSERT INTO session_order VALUES(?,?) ON CONFLICT(session_id) DO UPDATE SET position=excluded.position", merged.get(i), i);
+            return null;
+        });
+    }
+    /** Keeps unmentioned ids in place and fills the mentioned slots with the subset in its new order. */
+    static List<String> merge(List<String> current, List<String> subset) {
+        var wanted = new LinkedHashSet<>(subset); wanted.retainAll(current);
+        var queue = new ArrayDeque<String>(wanted); var result = new ArrayList<String>();
+        for (String id : current) result.add(wanted.contains(id) ? queue.poll() : id);
+        return result;
     }
     @Override public synchronized void close() throws SQLException { connection.close(); }
 }

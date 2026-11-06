@@ -29,17 +29,8 @@ final class RunActivity {
         if (!event.type().equals("item/started") && !event.type().equals("item/completed")) return null;
         var item = event.raw().path("params").path("item");
         String type = item.path("type").asText(), id = item.path("id").asText();
-        String label = switch (type) {
-            case "commandExecution" -> "Команда: " + item.path("command").asText("выполнение");
-            case "fileChange" -> "Файлы: " + paths(item.path("changes"));
-            case "mcpToolCall", "dynamicToolCall" -> "Инструмент: " + item.path("tool").asText(item.path("name").asText("вызов"));
-            case "webSearch" -> "Поиск: " + item.path("query").asText("в интернете");
-            case "imageGeneration", "imageGenerationCall" -> "Генерация изображения";
-            default -> "";
-        };
+        String label = label(item);
         if (label.isEmpty()) return type.equals("reasoning") && pending.isEmpty() ? "Обдумывает" : null;
-        label = label.replaceAll("\\s+", " ").strip();
-        if (label.length() > 200) label = label.substring(0, 197) + "…";
         if (event.type().equals("item/started")) {
             pending.put(id, label); detail = label;
             return type.equals("commandExecution") ? "Выполняет команду" : type.equals("fileChange") ? "Изменяет файлы" : "Работает";
@@ -53,6 +44,20 @@ final class RunActivity {
         }
         detail = pending.isEmpty() ? recent.getLast() : pending.values().iterator().next();
         return "Работает";
+    }
+    /** One human line per tool call, shared by the status panel and the live answer; empty for reasoning and unknown items. */
+    static String label(JsonNode item) {
+        String type = item.path("type").asText();
+        String label = switch (type) {
+            case "commandExecution" -> "Команда: " + item.path("command").asText("выполнение");
+            case "fileChange" -> "Файлы: " + paths(item.path("changes"));
+            case "mcpToolCall", "dynamicToolCall" -> "Инструмент: " + item.path("tool").asText(item.path("name").asText("вызов"));
+            case "webSearch" -> "Поиск: " + item.path("query").asText("в интернете");
+            case "imageGeneration", "imageGenerationCall" -> "Генерация изображения";
+            default -> "";
+        };
+        label = label.replaceAll("\\s+", " ").strip();
+        return label.length() > 200 ? label.substring(0, 197) + "…" : label;
     }
     synchronized JsonNode snapshot() {
         return Json.object("startedAt", startedAt, "updatedAt", updatedAt, "detail", detail,

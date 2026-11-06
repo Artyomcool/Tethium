@@ -28,7 +28,15 @@ final class CpuSampler implements AutoCloseable {
     private final Map<String,Assignment> retained=new HashMap<>();
     private volatile List<com.fasterxml.jackson.databind.JsonNode> restartInventory=List.of();
     List<com.fasterxml.jackson.databind.JsonNode> restartInventory(){return restartInventory;}
-    private long previous=System.currentTimeMillis();
+    private long previous=System.currentTimeMillis(),flushed=previous;
+    private record Seen(long nanos,Owner owner){}
+    private Map<String,Seen> seen=new HashMap<>();
+    private final Map<Owner,Long> pending=new HashMap<>();
+    private final WindowsProcesses windows=WindowsProcesses.supported()?new WindowsProcesses():null;
+    private Map<String,String> commands=new HashMap<>();
+    private static final int INTERVAL_SECONDS=5;
+    private static final long FLUSH_MILLIS=30_000;
+    private static final java.util.regex.Pattern INSPECTED=java.util.regex.Pattern.compile("(javaw?|powershell|pwsh)\\.exe",java.util.regex.Pattern.CASE_INSENSITIVE);
     private final MachineUsage machine=new MachineUsage();
     com.fasterxml.jackson.databind.JsonNode machineUsage(){return machine.snapshot();}
     CpuSampler(UsageLedger ledger,Supplier<List<Root>> roots)throws Exception{this(ledger,roots,new Object());}
@@ -37,8 +45,7 @@ final class CpuSampler implements AutoCloseable {
     }
     CpuSampler(UsageLedger ledger,Supplier<List<Root>> roots,Object writeGate,ResourceController resources)throws Exception{
         this.ledger=ledger;this.roots=roots;this.writeGate=writeGate;this.resources=resources;
-        for(var p:ledger.cpuProcesses())if(!p.path("session").isNull())retained.put(p.path("key").asText(),new Assignment(new Owner(p.path("session").asText(),p.path("project").asText()),p.path("kind").asText().equals("shared")));
-        timer.scheduleWithFixedDelay(()->{try{sample();}catch(Exception e){System.err.println("CPU sampling: "+e.getMessage());}},0,2,TimeUnit.SECONDS);
+        timer.scheduleWithFixedDelay(()->{try{sample();}catch(Exception e){System.err.println("CPU sampling: "+e.getMessage());}},0,INTERVAL_SECONDS,TimeUnit.SECONDS);
     }
     static Map<Long,Assignment> attribute(List<Sample> samples,List<Root> roots,Map<String,Assignment> retained,List<Link> links){
         samples=workloads(samples,roots);
@@ -66,40 +73,50 @@ final class CpuSampler implements AutoCloseable {
         var parents=new HashMap<Long,Sample>();samples.forEach(p->parents.put(p.pid,p));
         boolean changed;do{changed=false;for(var p:samples)if(parents.containsKey(p.parent)&&parents.get(p.parent).started<=p.started&&!excluded.contains(p.pid)&&!owners.containsKey(p.pid)&&owners.containsKey(p.parent)){owners.put(p.pid,owners.get(p.parent));changed=true;}}while(changed);
     }
-    private void sample()throws Exception{
+    synchronized void sample()throws Exception{
         var samples=snapshot();long now=System.currentTimeMillis();
-        var links=samples.stream().anyMatch(Sample::daemon)?connections(command("netstat.exe","-ano")):List.<Link>of();
+        var links=windows!=null&&samples.stream().anyMatch(Sample::daemon)?connections(windows.loopback()):List.<Link>of();
         var allRoots=new ArrayList<>(roots.get());if(resources!=null)allRoots.addAll(resources.roots(samples));var assigned=attribute(samples,allRoots,retained,links);if(resources!=null)resources.observe(samples,assigned);
         var os=java.lang.management.ManagementFactory.getOperatingSystemMXBean();
         if(os instanceof com.sun.management.OperatingSystemMXBean system)machine.sample(samples,assigned,system.getCpuLoad(),system.getTotalMemorySize(),system.getFreeMemorySize(),now,system.getAvailableProcessors());
         var inventory=new ArrayList<com.fasterxml.jackson.databind.JsonNode>();for(var p:samples){var a=assigned.get(p.pid);if(a!=null&&a.owner()!=null)inventory.add(Json.object("pid",p.pid,"started",p.started,"session",a.owner().session(),"command",p.command));}restartInventory=List.copyOf(inventory);
-        var liveKeys=new HashSet<String>();
-        for(var p:samples){liveKeys.add(p.key());var a=assigned.get(p.pid);if(a!=null||p.daemon()||retained.containsKey(p.key()))synchronized(writeGate){ledger.cpuSample(p.key(),p.pid,p.started,a==null?null:a.owner.session,a==null?null:a.owner.project,p.nanos,now,a!=null?a.shared?"shared":"child":p.daemon()?"shared":"child",p.started>=previous);}}
+        var next=new HashMap<String,Seen>(samples.size()*2);
+        synchronized(pending){for(var p:samples){
+            var a=assigned.get(p.pid);var owner=a==null?null:a.owner;var old=seen.get(p.key());next.put(p.key(),new Seen(p.nanos,owner));
+            // A shared daemon changing owners between observations charges nobody rather than guessing the boundary.
+            long delta=old==null?p.started>=previous?p.nanos:0:old.owner==null||old.owner.equals(owner)?Math.max(0,p.nanos-old.nanos):0;
+            if(owner!=null&&delta>0)pending.merge(owner,delta,Long::sum);
+        }}
+        seen=next;
         retained.clear();for(var p:samples){var a=assigned.get(p.pid);if(a!=null)retained.put(p.key(),a);else if(p.daemon())retained.put(p.key(),new Assignment(null,true));}
         previous=now;
+        if(now-flushed>=FLUSH_MILLIS){flushed=now;flush();}
     }
-    private static List<Sample> snapshot()throws Exception{
+    /** Sums reach the database in small batches: a finer view is only needed for the live header. */
+    void flush(){
+        Map<Owner,Long> batch;synchronized(pending){batch=new HashMap<>(pending);pending.clear();}
+        for(var e:batch.entrySet())try{synchronized(writeGate){ledger.cpuAdd(e.getKey().session,e.getKey().project,e.getValue());}}catch(Exception failure){synchronized(pending){pending.merge(e.getKey(),e.getValue(),Long::sum);}System.err.println("CPU totals: "+failure.getMessage());}
+    }
+    private List<Sample> snapshot(){
         var samples=new ArrayList<Sample>();
-        if(System.getProperty("os.name").toLowerCase(Locale.ROOT).contains("win")){
-            // One native WMI snapshot avoids hundreds of slow per-process command-line lookups on Windows.
-            // Only Java command lines are inspected, and none are persisted or logged.
-            String output=command("powershell.exe","-NoProfile","-NonInteractive","-WindowStyle","Hidden","-Command",
-                "[Console]::OutputEncoding=[Text.UTF8Encoding]::new(); $mem=@{}; Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | ForEach-Object {$mem[[long]$_.IDProcess]=[long]$_.WorkingSetPrivate}; @(Get-CimInstance Win32_Process | Where-Object {$null -ne $_.CreationDate} | Select-Object @{n='pid';e={$_.ProcessId}},@{n='parent';e={$_.ParentProcessId}},@{n='started';e={([DateTimeOffset]$_.CreationDate).ToUnixTimeMilliseconds()}},@{n='cpu';e={([long]$_.KernelModeTime+[long]$_.UserModeTime)*100}},@{n='memory';e={if($mem.ContainsKey([long]$_.ProcessId)){$mem[[long]$_.ProcessId]}else{-1}}},@{n='command';e={if($_.Name -match '^(javaw?|powershell|pwsh)\\.exe$'){$_.CommandLine}else{$_.Name}}}) | ConvertTo-Json -Compress");
-            if(output.isBlank())throw new IllegalStateException("Windows process snapshot timed out");
-            for(var row:Json.parse(output))samples.add(new Sample(row.path("pid").asLong(),row.path("parent").asLong(),row.path("started").asLong(),row.path("cpu").asLong(),row.path("command").asText(""),row.path("memory").asLong(-1)));
+        if(windows!=null){
+            // Only Java and PowerShell command lines are read, once per process; none are persisted or logged.
+            var known=new HashMap<String,String>();
+            for(var row:windows.snapshot()){
+                String command=row.image(),key=row.pid()+":"+row.started();
+                if(INSPECTED.matcher(command).matches()){String line=commands.get(key);if(line==null){line=windows.commandLine(row.pid());if(line==null)line=command;}known.put(key,line);command=line;}
+                samples.add(new Sample(row.pid(),row.parent(),row.started(),row.nanos(),command,row.memory()));
+            }
+            commands=known;
         }else{
             for(var p:ProcessHandle.allProcesses().toList()){var info=p.info();if(info.startInstant().isPresent()&&info.totalCpuDuration().isPresent())samples.add(new Sample(p.pid(),p.parent().map(ProcessHandle::pid).orElse(-1L),info.startInstant().get().toEpochMilli(),info.totalCpuDuration().get().toNanos(),info.commandLine().orElse("")));}
         }
         return samples;
     }
-    static List<Link> connections(String output){
-        record Socket(String local,String remote,long pid){}var sockets=new HashMap<String,Socket>();var links=new ArrayList<Link>();
-        for(String line:output.lines().toList()){var a=line.strip().split("\\s+");if(a.length<5||!a[0].equalsIgnoreCase("TCP")||!(a[1].startsWith("127.")||a[1].startsWith("[::1]"))||!(a[2].startsWith("127.")||a[2].startsWith("[::1]")))continue;try{var socket=new Socket(a[1],a[2],Long.parseLong(a[4]));var reverse=sockets.get(socket.remote+"|"+socket.local);if(reverse!=null&&reverse.pid!=socket.pid)links.add(new Link(reverse.pid,socket.pid));sockets.put(socket.local+"|"+socket.remote,socket);}catch(NumberFormatException ignored){}}
+    static List<Link> connections(List<WindowsProcesses.Socket> sockets){
+        var open=new HashMap<String,WindowsProcesses.Socket>();var links=new ArrayList<Link>();
+        for(var socket:sockets){var reverse=open.get(socket.remote()+"|"+socket.local());if(reverse!=null&&reverse.pid()!=socket.pid())links.add(new Link(reverse.pid(),socket.pid()));open.put(socket.local()+"|"+socket.remote(),socket);}
         return links;
     }
-    private static String command(String...args)throws Exception{
-        var process=new ProcessBuilder(args).redirectError(ProcessBuilder.Redirect.DISCARD).start();var read=CompletableFuture.supplyAsync(()->{try{return new String(process.getInputStream().readAllBytes(),StandardCharsets.UTF_8);}catch(Exception e){return "";}});
-        try{if(!process.waitFor(4,TimeUnit.SECONDS))return "";return read.get(1,TimeUnit.SECONDS);}finally{if(process.isAlive())process.destroyForcibly();}
-    }
-    @Override public void close()throws InterruptedException{timer.shutdownNow();timer.awaitTermination(6,TimeUnit.SECONDS);}
+    @Override public void close()throws InterruptedException{timer.shutdownNow();timer.awaitTermination(6,TimeUnit.SECONDS);flush();}
 }

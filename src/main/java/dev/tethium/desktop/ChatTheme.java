@@ -22,6 +22,8 @@ final class ChatTheme {
                 ".label{font-size:11px;font-weight:bold;color:" + Theme.hex(Theme.MUTED) + ";margin:0 0 5px 0;}" +
                 ".time{font-weight:normal;}.gallery{margin:0;}.gallery img{margin:0 6px 6px 0;}" +
                 ".live{color:" + Theme.hex(Theme.ACCENT) + ";}.muted{color:" + Theme.hex(Theme.MUTED) + ";}" +
+                ".thought{color:" + Theme.hex(Theme.MUTED) + ";font-style:italic;font-size:12px;margin:4px 0 8px 12px;}" +
+                ".action{color:" + Theme.hex(Theme.MUTED) + ";font-size:12px;margin:1px 0 1px 10px;}" +
                 "table{border-collapse:collapse;margin:12px 0;}th,td{border:1px solid #555b68;padding:6px 10px;text-align:left;}th{background:#303541;}" +
                 "hr{border:0;height:1px;background:" + Theme.hex(Theme.BORDER) + ";margin:12px 0;}" +
                 "</style></head><body>" + body + "</body></html>";

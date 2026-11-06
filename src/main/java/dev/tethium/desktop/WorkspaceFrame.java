@@ -25,17 +25,22 @@ public final class WorkspaceFrame extends JFrame {
     private final JButton archiveToggle = Theme.button("› Неактивные", "Показать деактивированные сессии", this::toggleInactive);
     private final JLabel heading = new JLabel("Выберите сессию"), status = new JLabel(" ");
     private final QuotaPanel quota = new QuotaPanel(this::refreshQuota,this::resetQuota,this::showUsage);
-    private final ChatTranscript transcript = new ChatTranscript();
-    private final JScrollPane history = new JScrollPane(transcript);
+    private ChatTranscript transcript;
+    private JScrollPane history;
     private VirtualHistory pagedHistory;
-    private final ChatNavigation chatNavigation = new ChatNavigation(transcript, history);
+    private ChatNavigation chatNavigation;
+    private ChatView chatView;
+    /** Recently shown sessions keep their rendered chat, scroll position and history index; switching back is a component swap. */
+    private final LinkedHashMap<String,ChatView> chatViews=new LinkedHashMap<>(8,.75f,true);
+    private static final int CACHED_CHATS=4;
+    private JButton quote; private JPopupMenu quoteMenu;
     private final JTextArea input = new PromptInput();
     private final ModelSelector model = new ModelSelector(this::saveSettings);
     private final JLabel access = new JLabel("Полный доступ");
     private final JButton send = Theme.button("Отправить", "Enter — отправить; если есть очередь — дополнить последнее сообщение", this::send);
     private final JButton sendOptions = Theme.button("", "Способы отправки · Alt+Enter — отдельное сообщение", this::sendMenu);
     private final JButton stop = Theme.button("Стоп", "Остановить текущий запуск; сохранить очередь на паузе", this::stop);
-    private final JButton interrupt = Theme.button("Сейчас", "Прервать работу и выполнить это сообщение сейчас · Shift+Enter. Очередь продолжится; ручная пауза сохранится", this::interrupt);
+    private final JButton interrupt = Theme.button("Сейчас", "Прервать работу и выполнить это сообщение сейчас · Ctrl+Enter. Очередь продолжится; ручная пауза сохранится", this::interrupt);
     private final AttachmentStrip imageStrip = new AttachmentStrip(this::openArtifact,this::removeImage);
     private final JButton results = Theme.button("Результаты", "Изображения и HTML от агента", () -> {if(this.previewOpen)closePreview();else showPreview(true);});
     private final JPanel requests = new JPanel();
@@ -121,12 +126,15 @@ public final class WorkspaceFrame extends JFrame {
         this.initialSelection = initialSelection;
         try{Path saved=dev.tethium.host.AppPaths.data().resolve("session-views.json");if(Files.isRegularFile(saved))Json.MAPPER.readTree(saved.toFile()).properties().forEach(e->sessionViews.put(e.getKey(),e.getValue()));}catch(Exception ignored){}
         restoreProjectExpansion();
+        ChatMarkdown.showThoughts=sessionViews.getOrDefault("$showThoughts",Json.MAPPER.getNodeFactory().booleanNode(true)).asBoolean(true);
         if(initialSelection==null)initialDocument=sessionViews.getOrDefault("$document",Json.MAPPER.nullNode()).asText(null);
         setDefaultCloseOperation(DO_NOTHING_ON_CLOSE); setMinimumSize(new Dimension(920, 600)); setSize(1280, 860); setLocationRelativeTo(null);
         draftTimer = new javax.swing.Timer(600, e -> saveDraft()); draftTimer.setRepeats(false);
-        build();pagedHistory=new VirtualHistory(host,transcript,history,chatNavigation);transcript.setText(page("<p class='muted'>Загружаем проекты и сессии…</p>"));
+        build();bindChat(createChatView(null));transcript.setText(page("<p class='muted'>Загружаем проекты и сессии…</p>"));
         addWindowListener(new WindowAdapter() { @Override public void windowClosing(WindowEvent e) { closeWindow(); } });
         poller.scheduleWithFixedDelay(this::poll, 0, 500, TimeUnit.MILLISECONDS);
+        // Warm the single preview browser after the window settles, so the first document opens without Chromium start-up.
+        var warm=new javax.swing.Timer(2500,e->viewer.warmUp());warm.setRepeats(false);warm.start();
     }
     private JsonNode resourceUsage=Json.object(),resourceControl=Json.object(),machineUsage=Json.object();
     private final ProjectWidget projectWidgets=new ProjectWidget();
@@ -138,6 +146,7 @@ public final class WorkspaceFrame extends JFrame {
         };
         tree.setRootVisible(false); tree.setShowsRootHandles(true); tree.setRowHeight(28);
         tree.setExpandsSelectedPaths(false);
+        installReordering(tree);
         tree.addComponentListener(new ComponentAdapter(){int lastWidth;@Override public void componentResized(ComponentEvent event){if(lastWidth!=tree.getWidth()){lastWidth=tree.getWidth();tree.treeDidChange();}}});
         tree.setBorder(new EmptyBorder(Theme.UNIT, Theme.UNIT, Theme.UNIT, Theme.UNIT)); tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         tree.setCellRenderer(new DefaultTreeCellRenderer() {
@@ -153,10 +162,15 @@ public final class WorkspaceFrame extends JFrame {
                     label.setToolTipText(n.path); label.setBorder(new EmptyBorder(0, (n.project?Theme.UNIT/2:Theme.UNIT)+22+Theme.GAP, 0, Theme.UNIT));
                     rowPanel.removeAll(); rowPanel.setBackground(selected?Theme.SELECTED:Theme.SIDEBAR); rowPanel.add(label);
                     rowPanel.add(Box.createHorizontalStrut((n.pausedQueued>0?Theme.GUTTER*2:n.project?Theme.GAP:Theme.GUTTER)+(n.project&&expanded&&projectWidgets.available(projects.get(n.id),"right")?rightWidgetWidth(projects.get(n.id))+2+(n.pausedQueued==0&&!n.attention.isEmpty()?12:0):0)),BorderLayout.EAST);
-                    String hint=n.path+(n.attention.isEmpty()?"":n.attention.equals("question")?" · Ждёт ответа":n.attention.equals("manual")?" · Отмечено: требует внимания":" · Работа завершена · новый результат");
-                    if(n.pausedQueued>0)hint+=" · Очередь на паузе: "+n.pausedQueued;
-                    if(n.project){var widget=projects.get(n.id);if(widget!=null){var w=widget.path("widget");for(String slot:List.of("bottom","right")){var v=w.path(slot);if(v.isObject())hint+=" · "+v.path("description").asText()+" · "+v.path("error").asText();}}}
-                    rowPanel.setToolTipText(hint);label.setToolTipText(hint);
+                    // One line per fact: path, attention, paused queue, then each project widget with its error (if any).
+                    var hint=new StringBuilder("<html>").append(escapeHtml(n.path));
+                    if(!n.attention.isEmpty())hint.append("<br>").append(n.attention.equals("question")?"Ждёт ответа":n.attention.equals("manual")?"Отмечено: требует внимания":"Работа завершена · новый результат");
+                    if(n.pausedQueued>0)hint.append("<br>Очередь на паузе: ").append(n.pausedQueued);
+                    if(n.project){var widget=projects.get(n.id);if(widget!=null){var w=widget.path("widget");for(String slot:List.of("bottom","right")){var v=w.path(slot);if(!v.isObject())continue;
+                        String description=v.path("description").asText().strip(),error=v.path("error").asText().strip();
+                        if(!description.isEmpty())hint.append("<br>").append(escapeHtml(description));
+                        if(!error.isEmpty())hint.append("<br><font color='#e4bd82'>").append(escapeHtml(error)).append("</font>");}}}
+                    hint.append("</html>");rowPanel.setToolTipText(hint.toString());label.setToolTipText(hint.toString());
                     rowPanel.setPreferredSize(null); var size=rowPanel.getPreferredSize();
                     if(t.getWidth()>0)size.width=Math.max(48,t.getWidth()-((DefaultMutableTreeNode)value).getLevel()*treeIndent(t)-t.getInsets().left-t.getInsets().right);
                     boolean below=n.project&&expanded&&projectWidgets.available(projects.get(n.id),"bottom");
@@ -175,6 +189,51 @@ public final class WorkspaceFrame extends JFrame {
     private static int treeIndent(JTree tree){return tree.getUI() instanceof javax.swing.plaf.basic.BasicTreeUI ui?ui.getLeftChildIndent()+ui.getRightChildIndent():20;}
     private static Font projectFont(JTree tree){return tree.getFont().deriveFont(Font.BOLD,Math.max(11f,tree.getFont().getSize2D()-1));}
     private int rightWidgetWidth(JsonNode project){return Math.min(96,projectWidgets.preferredWidth(project,"right",26));}
+    /** Drag and drop reorders projects among projects and sessions among their siblings; nothing moves between projects. */
+    private void installReordering(JTree tree){
+        tree.setDragEnabled(true);tree.setDropMode(DropMode.INSERT);
+        tree.setTransferHandler(new TransferHandler(){
+            @Override public int getSourceActions(JComponent c){return MOVE;}
+            @Override protected java.awt.datatransfer.Transferable createTransferable(JComponent c){
+                var path=tree.getSelectionPath();if(path==null)return null;
+                if(!(((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject() instanceof Node n)||n.file)return null;
+                return new java.awt.datatransfer.StringSelection((n.project?"project:":"session:")+n.id);
+            }
+            @Override public boolean canImport(TransferSupport support){return support.isDrop()&&reorderTarget(tree,support)!=null;}
+            @Override public boolean importData(TransferSupport support){
+                var target=reorderTarget(tree,support);if(target==null)return false;
+                action(()->host.post(target[0],Json.object("ids",List.of(target[1].split(",")))));return true;
+            }
+        });
+    }
+    /** Returns {endpoint, comma-separated ids in new order} for a drop, or null when the drop would change nesting or cross projects. */
+    private static String[] reorderTarget(JTree tree,TransferHandler.TransferSupport support){
+        String dragged;
+        try{dragged=(String)support.getTransferable().getTransferData(java.awt.datatransfer.DataFlavor.stringFlavor);}catch(Exception e){return null;}
+        if(dragged==null||!dragged.contains(":"))return null;
+        boolean project=dragged.startsWith("project:");String id=dragged.substring(dragged.indexOf(':')+1);
+        var drop=(JTree.DropLocation)support.getDropLocation();if(drop==null||drop.getPath()==null||drop.getChildIndex()<0)return null;
+        var parent=(DefaultMutableTreeNode)drop.getPath().getLastPathComponent();
+        DefaultMutableTreeNode source=null;
+        for(var e=((DefaultMutableTreeNode)tree.getModel().getRoot()).depthFirstEnumeration();e.hasMoreElements();){var n=(DefaultMutableTreeNode)e.nextElement();if(n.getUserObject() instanceof Node node&&node.project==project&&!node.file&&node.id.equals(id))source=n;}
+        if(source==null||source.getParent()!=parent)return null; // only among the current siblings
+        var children=new ArrayList<DefaultMutableTreeNode>();for(int i=0;i<parent.getChildCount();i++)children.add((DefaultMutableTreeNode)parent.getChildAt(i));
+        int from=children.indexOf(source),to=drop.getChildIndex();if(to>from)to--;
+        children.remove(source);children.add(Math.min(to,children.size()),source);
+        var ids=new ArrayList<String>();
+        if(project){for(var c:children)if(c.getUserObject() instanceof Node n&&n.project)ids.add(n.id);return new String[]{"/projects/order",String.join(",",ids)};}
+        var projectNode=parent;while(projectNode!=null&&!(projectNode.getUserObject() instanceof Node n&&n.project))projectNode=(DefaultMutableTreeNode)projectNode.getParent();
+        if(projectNode==null)return null;
+        collectSessions(projectNode,parent,children,ids);
+        return new String[]{"/projects/"+((Node)projectNode.getUserObject()).id+"/sessions-order",String.join(",",ids)};
+    }
+    /** Pre-order walk of the project's sessions with one parent's children replaced by their new order. */
+    private static void collectSessions(DefaultMutableTreeNode node,DefaultMutableTreeNode reordered,List<DefaultMutableTreeNode> order,List<String> ids){
+        var children=new ArrayList<DefaultMutableTreeNode>();
+        if(node==reordered)children.addAll(order);else for(int i=0;i<node.getChildCount();i++)children.add((DefaultMutableTreeNode)node.getChildAt(i));
+        for(var child:children){if(child.getUserObject() instanceof Node n&&!n.project&&!n.file)ids.add(n.id);collectSessions(child,reordered,order,ids);}
+    }
+    private static String escapeHtml(String text){return text==null?"":text.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;");}
     private static int resourceLeft(JTree tree){return tree.getInsets().left+2*treeIndent(tree)+Theme.UNIT+22+Theme.GAP;}
     private String resourceTooltip(JTree tree,MouseEvent event){
         int row=tree.getClosestRowForLocation(event.getX(),event.getY());if(row<0)return null;
@@ -183,7 +242,7 @@ public final class WorkspaceFrame extends JFrame {
         if(!(value instanceof Node n)||n.file||n.project&&tree.isExpanded(path))return null;
         if(!ResourceBars.share(resourceUsage,machineUsage,resourceControl,n.id,n.project).hasUsage())return null;
         if(event.getX()<resourceLeft(tree)||event.getX()>=tree.getWidth()-tree.getInsets().right-Theme.GAP)return null;
-        int lane=ResourceBars.lane(event.getY(),bounds.y+bounds.height);
+        int lane=ResourceBars.lane(event.getX(),event.getY(),resourceLeft(tree),tree.getWidth()-tree.getInsets().right-Theme.GAP-resourceLeft(tree),bounds.y+bounds.height);
         return lane<0?null:ResourceBars.tooltip(lane,resourceUsage,machineUsage,resourceControl,n.id,n.project);
     }
     private void paintTreeIndicators(JTree tree,Graphics g){
@@ -194,7 +253,7 @@ public final class WorkspaceFrame extends JFrame {
         for(int row=Math.max(0,tree.getClosestRowForLocation(0,clip.y));row<tree.getRowCount();row++){
             Rectangle bounds=tree.getRowBounds(row);if(bounds==null||bounds.y>clip.y+clip.height)break;
             var path=tree.getPathForRow(row);var value=((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject();
-            if(!(value instanceof Node n))continue;var icon=n.file?Theme.icon("attachment"):IdentityIcons.of(n.project,n.title,n.path);icon.paintIcon(tree,g,bounds.x+(n.project?Theme.UNIT/2:Theme.UNIT)+(22-icon.getIconWidth())/2,bounds.y+(bounds.height-icon.getIconHeight())/2);if(n.file)continue;
+            if(!(value instanceof Node n))continue;var icon=n.file?Theme.icon("attachment"):n.project?IdentityIcons.ofProject(n.id,n.title,n.path):IdentityIcons.of(false,n.title,n.path);icon.paintIcon(tree,g,bounds.x+(n.project?Theme.UNIT/2:Theme.UNIT)+(22-icon.getIconWidth())/2,bounds.y+(bounds.height-icon.getIconHeight())/2);if(n.file)continue;
             if(!n.project||!tree.isExpanded(path))ResourceBars.paint(g,x,bounds.y+bounds.height,Math.max(0,right-x),ResourceBars.share(resourceUsage,machineUsage,resourceControl,n.id,n.project));
             if(n.project&&tree.isExpanded(path)&&projectWidgets.available(projects.get(n.id))){
                 var project=projects.get(n.id);int start=bounds.x+Theme.UNIT/2+22+Theme.GAP,edge=right-(n.pausedQueued>0?28:!n.attention.isEmpty()?12:0);
@@ -207,7 +266,11 @@ public final class WorkspaceFrame extends JFrame {
                 }
                 projectWidgets.paint(g,project,"bottom",start,bounds.y+14,Math.max(0,edge-start),13);
             }
-            if(!n.attention.isEmpty()){g.setColor(!n.attention.equals("finished")?Theme.AMBER:Theme.ACCENT);g.fillOval(right-7,bounds.y+(bounds.height-7)/2-3,7,7);}
+            if(!n.attention.isEmpty()){
+                var dot=(Graphics2D)g.create();
+                try{dot.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);dot.setColor(!n.attention.equals("finished")?Theme.AMBER:Theme.ACCENT);dot.fill(new java.awt.geom.Ellipse2D.Double(right-7,bounds.y+(bounds.height-7)/2.0-3,7,7));}
+                finally{dot.dispose();}
+            }
             if(n.pausedQueued>0){int y=bounds.y+(bounds.height-8)/2-3;g.setColor(Theme.AMBER);g.fillRect(right-22,y,2,8);g.fillRect(right-17,y,2,8);}
         }
     }
@@ -256,36 +319,28 @@ public final class WorkspaceFrame extends JFrame {
         results.setText(""); results.getAccessibleContext().setAccessibleName("Результаты агента");
         results.setIcon(Theme.icon("image")); Theme.toolbar(results); controls.add(results);
         controls.add(Theme.iconButton("more", "Действия сессии", this::sessionMenu)); header.add(controls, BorderLayout.EAST);
-        transcript.addHyperlinkListener(e -> { if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) openLink(e.getDescription()); });
-        var quote = Theme.button("Цитировать", "Цитировать выделение · Ctrl+Shift+Q", this::quoteSelection);
+        quote = Theme.button("Цитировать", "Цитировать выделение · Ctrl+Shift+Q", this::quoteSelection);
         quote.setName("chat.quote"); quote.setVisible(false); controls.add(quote,0);
-        transcript.addCaretListener(e -> quote.setVisible(transcript.getSelectedText()!=null&&!transcript.getSelectedText().isBlank()));
-        var quoteMenu = new JPopupMenu(); quoteMenu.add(new AbstractAction("Цитировать выделение") { public void actionPerformed(ActionEvent e){quoteSelection();} });
-        quoteMenu.add(new AbstractAction("Копировать") { public void actionPerformed(ActionEvent e){transcript.copy();} }); transcript.imageCopyMenu(quoteMenu,this::copyChatImage);
-        transcript.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_Q,InputEvent.CTRL_DOWN_MASK|InputEvent.SHIFT_DOWN_MASK),"quote");
-        transcript.getActionMap().put("quote",new AbstractAction(){public void actionPerformed(ActionEvent e){quoteSelection();}});
-        history.setName("chat.history"); history.setBorder(null); history.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
-        history.getVerticalScrollBar().setUnitIncrement(24);
-        var historyArea = new JPanel(new BorderLayout()); historyArea.add(history); historyArea.add(chatNavigation.requestMap(), BorderLayout.EAST);
-        chat.add(historyArea); chat.add(chatNavigation, BorderLayout.NORTH);
+        quoteMenu = new JPopupMenu(); quoteMenu.add(new AbstractAction("Цитировать выделение") { public void actionPerformed(ActionEvent e){quoteSelection();} });
+        quoteMenu.add(new AbstractAction("Копировать") { public void actionPerformed(ActionEvent e){transcript.copy();} });
         chat.setMinimumSize(new Dimension(340, 0));
         var bottom = new JPanel(new BorderLayout()); requests.setLayout(new BoxLayout(requests, BoxLayout.Y_AXIS));
         var feedback = new JPanel(new BorderLayout()); feedback.add(requests, BorderLayout.NORTH); feedback.add(runStatus); bottom.add(feedback, BorderLayout.NORTH);
         var composerWrap = new JPanel(new BorderLayout()); composerWrap.setBorder(new EmptyBorder(Theme.UNIT, Theme.GUTTER, Theme.GAP, Theme.GUTTER));
         var composer = new ComposerPanel(input); composerWrap.add(composer);
         input.setLineWrap(true); input.setWrapStyleWord(true); input.setFont(input.getFont().deriveFont(14f)); input.setBorder(new EmptyBorder(Theme.UNIT, Theme.UNIT, Theme.UNIT, Theme.UNIT)); input.putClientProperty("JTextArea.placeholderText", "Сообщение агенту…");
-        input.setToolTipText("Enter — отправить или дополнить очередь; Shift+Enter — прервать и выполнить сейчас; Ctrl+Enter — новая строка; Alt+Enter — отдельное сообщение в очередь.");
+        input.setToolTipText("Enter — отправить или дополнить очередь; Ctrl+Enter — прервать и выполнить сейчас; Shift+Enter — новая строка; Alt+Enter — отдельное сообщение в очередь.");
         input.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "send");
         input.addFocusListener(new FocusAdapter() { @Override public void focusGained(FocusEvent e) { viewer.releaseFocus(); } });
         input.addMouseListener(new MouseAdapter() { @Override public void mousePressed(MouseEvent e) { viewer.releaseFocus(); input.requestFocusInWindow(); } });
-        input.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.CTRL_DOWN_MASK), javax.swing.text.DefaultEditorKit.insertBreakAction);
+        input.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.SHIFT_DOWN_MASK), javax.swing.text.DefaultEditorKit.insertBreakAction);
         input.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.ALT_DOWN_MASK), "sendSeparate");
         input.getActionMap().put("send", new AbstractAction() { public void actionPerformed(ActionEvent e) { send(); } });
         input.getActionMap().put("sendSeparate", new AbstractAction() { public void actionPerformed(ActionEvent e) { send(true); } });
         // Windows AltGr can arrive as ALT_GRAPH or as synthetic Ctrl+Alt. Both mean separate queue entry.
         for (int modifiers : new int[]{InputEvent.ALT_GRAPH_DOWN_MASK|InputEvent.CTRL_DOWN_MASK,InputEvent.ALT_GRAPH_DOWN_MASK, InputEvent.CTRL_DOWN_MASK|InputEvent.ALT_DOWN_MASK, InputEvent.ALT_GRAPH_DOWN_MASK|InputEvent.CTRL_DOWN_MASK|InputEvent.ALT_DOWN_MASK, InputEvent.ALT_GRAPH_DOWN_MASK|InputEvent.ALT_DOWN_MASK})
             input.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER,modifiers),"sendSeparate");
-        input.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER,InputEvent.SHIFT_DOWN_MASK),"interrupt");
+        input.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER,InputEvent.CTRL_DOWN_MASK),"interrupt");
         input.getActionMap().put("interrupt",new AbstractAction(){public void actionPerformed(ActionEvent e){interrupt();}});
         input.getDocument().addDocumentListener(new DocumentListener() {
             private void changed() { if (!applying && selected != null) { drafts.put(selected, input.getText()); draftTimer.restart(); refreshTakeControls(); } }
@@ -352,6 +407,8 @@ public final class WorkspaceFrame extends JFrame {
             var rename = new JMenuItem("Переименовать"); rename.addActionListener(e -> rename()); menu.add(rename);
             var state = new JMenuItem(sessions.get(n.id).path("active").asBoolean() ? "Деактивировать" : "Активировать"); state.addActionListener(e -> toggleActive()); menu.add(state);
             var attention=new JCheckBoxMenuItem("Требует внимания",sessions.get(n.id).path("attention").path("manual").asBoolean());attention.addActionListener(e->toggleAttention(n.id));menu.add(attention);
+            var technical=new JCheckBoxMenuItem("Техническая сессия",sessions.get(n.id).path("technical").asBoolean());technical.setToolTipText("Без индикаторов, не ждёт ответов человека и работает даже в неактивных");technical.addActionListener(e->{String id=n.id;boolean on=technical.isSelected();action(()->{host.post("/sessions/"+id+"/technical",Json.object("enabled",on));poller.execute(this::poll);});});menu.add(technical);
+            var reset=new JMenuItem("История и сброс…");reset.addActionListener(e->{var s=sessions.get(n.id);if(s!=null){SessionResetDialog.show(this,host,n.id,s.path("title").asText(),s.path("running").asBoolean());poller.execute(this::poll);}});menu.add(reset);
             var trash=new JMenuItem("Удалить сессию…");trash.addActionListener(e->trashSession(n.id));menu.add(trash);
         }
         if(n.file){
@@ -363,7 +420,7 @@ public final class WorkspaceFrame extends JFrame {
         if(n.project){var pin=new JMenuItem("Закрепить файл в проекте…");pin.addActionListener(e->choosePinnedFile(true));menu.add(pin);}
         if(n.project&&!host.remote()){var settings=new JMenuItem("Настройки проекта и GitHub…");settings.addActionListener(e->ProjectDialog.open(this,host,projects.get(n.id),value->{}));menu.add(settings);}
         var cpuItem=new JMenuItem("CPU: лимит и приоритет…");cpuItem.addActionListener(e->configureCpu(n.project?"project":"session",n.id,n.title));menu.add(cpuItem);
-        var usageItem=new JMenuItem("Токены и история квоты…");usageItem.addActionListener(e->UsageDialog.open(this,host,projects,sessions,n.project?n.id:sessions.get(n.id).path("projectId").asText(),n.project?null:n.id));menu.add(usageItem);
+        var usageItem=new JMenuItem("Токены и CPU…");usageItem.addActionListener(e->UsageDialog.open(this,host,projects,sessions,n.project?n.id:sessions.get(n.id).path("projectId").asText(),n.project?null:n.id));menu.add(usageItem);
         menu.show(tree, event.getX(), event.getY());
     }
     private void sessionMenu() {
@@ -372,10 +429,11 @@ public final class WorkspaceFrame extends JFrame {
         var accessInfo = new JMenuItem("Полный доступ"); accessInfo.setEnabled(false); menu.add(accessInfo); menu.addSeparator();
         for (var entry : List.<Map.Entry<String, Runnable>>of(Map.entry("Новая сессия", this::newSession), Map.entry("Переименовать", this::rename),
                 Map.entry("Активировать / деактивировать", this::toggleActive), Map.entry("Требует внимания · переключить",()->toggleAttention(selected)), Map.entry("Удалить сессию…",()->trashSession(selected)), Map.entry("Результаты агента", () -> {if(previewOpen)closePreview();else showPreview(true);}),
-                Map.entry("Открыть изображение, HTML или Markdown…", this::chooseArtifact), Map.entry("Закрепить файл справа…",()->choosePinnedFile(false)), Map.entry("Периодическая задача…",this::configureSchedule), Map.entry("Действия агента…", this::showActivity))) {
+                Map.entry("Открыть изображение, HTML или Markdown…", this::chooseArtifact), Map.entry("Закрепить файл справа…",()->choosePinnedFile(false)), Map.entry("Периодическая задача…",this::configureSchedule), Map.entry("История и сброс…",this::resetDialog), Map.entry("Действия агента…", this::showActivity))) {
             var item = new JMenuItem(entry.getKey()); item.addActionListener(e -> entry.getValue().run()); menu.add(item);
         }
         if(selected!=null){String id=selected;var a=sessions.get(id).path("autonomy");var autonomous=new JCheckBoxMenuItem("Работать автономно до завершения цели",Set.of("active","waiting").contains(a.path("state").asText()));autonomous.addActionListener(e->{if(!autonomous.isSelected()){action(()->host.post("/sessions/"+id+"/autonomy",Json.object("action","disable")));return;}String goal=a.path("goal").asText();if(goal.isBlank()||a.path("state").asText().equals("complete")){goal="";for(var m:conversation.path("messages"))if(m.path("role").asText().equals("user"))goal=m.path("text").asText();}var editor=new JTextArea(goal,6,52);editor.setLineWrap(true);editor.setWrapStyleWord(true);if(JOptionPane.showConfirmDialog(this,new JScrollPane(editor),"Цель автономной работы",JOptionPane.OK_CANCEL_OPTION,JOptionPane.PLAIN_MESSAGE)==JOptionPane.OK_OPTION&&!editor.getText().isBlank())action(()->host.post("/sessions/"+id+"/autonomy",Json.object("action","start","goal",editor.getText(),"resumeQueue",true)));});menu.add(autonomous);}
+        {var thoughts=new JCheckBoxMenuItem("Показывать мысли Claude в ответе",ChatMarkdown.showThoughts);thoughts.addActionListener(e->{ChatMarkdown.showThoughts=thoughts.isSelected();sessionViews.put("$showThoughts",Json.MAPPER.getNodeFactory().booleanNode(thoughts.isSelected()));persistViews();});menu.add(thoughts);}
         if(selected!=null){String id=selected;var automatic=new JCheckBoxMenuItem("Продолжать автоматически после появления квоты",sessions.get(id).path("quotaWait").path("autoResume").asBoolean());automatic.addActionListener(e->action(()->host.post("/sessions/"+id+"/quota-auto",Json.object("enabled",automatic.isSelected()))));menu.add(automatic);}
         menu.addSeparator(); var quit = new JMenuItem("Завершить ядро и все запуски"); quit.addActionListener(e -> {
             if (JOptionPane.showConfirmDialog(this, "Остановить все запуски и завершить Tethium?", "Завершение", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION)
@@ -387,6 +445,10 @@ public final class WorkspaceFrame extends JFrame {
     }
     private void configureCpu(String scope,String id,String title){
         action(()->{var state=host.get("/resources");var row=scope.equals("global")?state.path("global"):state.path(scope+"s").path(id);SwingUtilities.invokeLater(()->{var settings=CpuSettingsDialog.show(this,scope,title,state,row);if(settings!=null)action(()->host.post("/resources",Json.object("scope",scope,"target",id,"settings",settings)));});});
+    }
+    private void resetDialog(){
+        if(selected==null)return;String id=selected;var session=sessions.get(id);if(session==null)return;
+        SessionResetDialog.show(this,host,id,session.path("title").asText(),session.path("running").asBoolean());poller.execute(this::poll);
     }
     private void configureSchedule(){
         if(selected==null)return;String id=selected;var session=sessions.get(id);if(session==null)return;
@@ -424,15 +486,16 @@ public final class WorkspaceFrame extends JFrame {
         if (Objects.equals(selected, id)) return;
         var session = sessions.get(id); if(session==null)return;
         saveDraft();rememberPreview();exitFullScreen();switchingView=true;selectedFile=null;initialDocument=null;sessionViews.remove("$document");persistViews();content.setLeftComponent(chat);model.setVisible(true);results.setVisible(true);pinPreview.setVisible(true);closePreview.setVisible(true);selected = id;restoreViewFor=id;pinnedSignature="";
-        selectedProject = session.path("projectId").asText(); chatSignature = ""; requestSignature = ""; artifactSignature = ""; conversation = Json.object();
-        scrollToLatest = true; chatRender++; chatNavigation.reset();pagedHistory.reset(id);
+        selectedProject = session.path("projectId").asText(); requestSignature = ""; artifactSignature = ""; conversation = Json.object();
+        boolean cached=chatViews.containsKey(id);var previous=chatView;bindChat(chatViewFor(id));if(previous!=null&&previous!=chatView&&!chatViews.containsValue(previous))previous.close();
+        if(!cached){chatSignature = ""; scrollToLatest = true; chatRender++; chatNavigation.reset();pagedHistory.reset(id);}
         applying = true;
         input.setText(drafts.getOrDefault(id, session.path("preferences").path("draft").asText()));
         draftImages.computeIfAbsent(id,key->strings(session.path("preferences").path("draftImages"))); refreshImages();
         var preferences = settingsDrafts.getOrDefault(id, session.path("preferences"));
         model.selection(preferences.path("provider").asText(null), preferences.path("model").asText(null), preferences.path("reasoningEffort").asText(null));
         model.loading(); catalogSession = null; catalogAttempt = 0;
-        applying = false; renderHeader(session); requests.removeAll(); transcript.setText(page("<p class='muted'>Загружаем историю…</p>"));
+        applying = false; renderHeader(session); requests.removeAll(); if(!cached)transcript.setText(page("<p class='muted'>Загружаем историю…</p>"));
         showPreview(false); viewer.clear(); applying = true; artifacts.removeAllItems(); applying = false;switchingView=false;
         runStatus.update(session, conversation);
         selectTreeEntry(id);treeSignature="";input.requestFocusInWindow(); poller.execute(this::poll);
@@ -499,10 +562,12 @@ public final class WorkspaceFrame extends JFrame {
         groupingAvailable=state.path("queueGrouping").asBoolean();imagesAvailable=state.path("imageAttachments").asBoolean();interruptAvailable=state.path("priorityInterrupt").asBoolean();
         runStatus.setGroupingAvailable(groupingAvailable);runStatus.setQueueEditing(queueEditingAvailable, pendingTake != null || grouping);
         projects.clear(); for (var p : state.path("projects")) projects.put(p.path("id").asText(), p);
+        for (var p : state.path("projects")) { String pid = p.path("id").asText(), version = p.path("icon").asText();
+            if (IdentityIcons.projectIconStale(pid, version)) io.submit(() -> { try { var icon = host.get("/project-icon?project=" + pid); IdentityIcons.registerProjectIcon(pid, icon.path("version").asText(), icon.path("png").asText()); SwingUtilities.invokeLater(() -> { active.repaint(); inactive.repaint(); }); } catch (Exception e) { IdentityIcons.registerProjectIcon(pid, version, ""); } }); }
         projectWidgets.update(projects.values());active.repaint();inactive.repaint();
         sessions.clear(); for (var s : state.path("sessions")) sessions.put(s.path("id").asText(), s);
         documents.clear();for(var d:state.path("files"))documents.put(d.path("id").asText(),d);
-        String signature = state.path("files").toString()+state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("sessions").findValues("active") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
+        String signature = state.path("files").toString()+state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("sessions").findValues("active") + state.path("sessions").findValues("technical") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
         signature+=state.path("sessions").findValues("queuePaused").toString()+state.path("sessions").findValues("queued");
         if (!signature.equals(treeSignature)) { rebuildTrees(state); treeSignature = signature; }
         if (selectedProject == null && !projects.isEmpty()) selectedProject = projects.keySet().iterator().next();
@@ -511,7 +576,7 @@ public final class WorkspaceFrame extends JFrame {
             if(documents.containsKey(selectedFile)){renderDocument();lastAppliedState=System.currentTimeMillis();finishHandoff();retryQueueTake();retryInterrupt();return;}
             selectedFile=null;documentSignature="";sessionViews.remove("$document");persistViews();content.setLeftComponent(chat);model.setVisible(true);results.setVisible(true);pinPreview.setVisible(true);closePreview.setVisible(true);showPreview(false);viewer.clear();
         }
-        if(selected!=null&&!sessions.containsKey(selected)){pagedHistory.legacy();chatNavigation.reset();input.setEnabled(false);send.setEnabled(false);sendOptions.setEnabled(false);stop.setEnabled(false);interrupt.setEnabled(false);selected=null;restoreViewFor=null;chatSignature="";input.setText("");showPreview(false);viewer.clear();transcript.setText(page("<p>Сессия убрана из списка. Восстановить её можно в настройках → корзина.</p>"));}
+        if(selected!=null&&!sessions.containsKey(selected)){var gone=chatViews.remove(selected);if(gone!=null&&gone!=chatView)gone.close();pagedHistory.legacy();chatNavigation.reset();input.setEnabled(false);send.setEnabled(false);sendOptions.setEnabled(false);stop.setEnabled(false);interrupt.setEnabled(false);selected=null;restoreViewFor=null;chatSignature="";input.setText("");showPreview(false);viewer.clear();transcript.setText(page("<p>Сессия убрана из списка. Восстановить её можно в настройках → корзина.</p>"));}
         if (selected == null && !sessions.isEmpty()) {
             String first = initialSelection != null && sessions.containsKey(initialSelection) ? initialSelection : state.path("sessions").get(0).path("id").asText();
             initialSelection = null; selectSession(first); treeSignature = ""; return;
@@ -577,13 +642,14 @@ public final class WorkspaceFrame extends JFrame {
                     String pid = project.path("id").asText();
                     var matching = new ArrayList<JsonNode>(); for (var s : state.path("sessions")) if (s.path("projectId").asText().equals(pid) && (s.path("active").asBoolean()&&project.path("active").asBoolean(true)) != archived) matching.add(s);
                     boolean projectArchived=!project.path("active").asBoolean(true);if(!archived&&projectArchived||archived&&matching.isEmpty()&&!projectArchived)continue;
-                    boolean running=matching.stream().anyMatch(s->s.path("running").asBoolean());
-                    String attention=matching.stream().anyMatch(s->s.path("attention").path("kind").asText().equals("question"))?"question":matching.stream().anyMatch(s->s.path("attention").path("manual").asBoolean())?"manual":matching.stream().anyMatch(s->!s.path("attention").path("kind").asText().isEmpty())?"finished":"";
-                    int pausedQueued=matching.stream().filter(s->s.path("queuePaused").asBoolean()).mapToInt(s->Math.max(0,s.path("queued").asInt())).sum();
+                    var noticed=matching.stream().filter(s->!s.path("technical").asBoolean()).toList();
+                    boolean running=noticed.stream().anyMatch(s->s.path("running").asBoolean());
+                    String attention=noticed.stream().anyMatch(s->s.path("attention").path("kind").asText().equals("question"))?"question":noticed.stream().anyMatch(s->s.path("attention").path("manual").asBoolean())?"manual":noticed.stream().anyMatch(s->!s.path("attention").path("kind").asText().isEmpty())?"finished":"";
+                    int pausedQueued=noticed.stream().filter(s->s.path("queuePaused").asBoolean()).mapToInt(s->Math.max(0,s.path("queued").asInt())).sum();
                     var projectNode = new DefaultMutableTreeNode(new Node(pid, project.path("title").asText(), true, running, "", project.path("root").asText(),attention,false,pausedQueued)); root.add(projectNode);
                     if(archived==projectArchived)for(var document:documents.values())if(document.path("projectId").asText().equals(pid)){var node=new DefaultMutableTreeNode(new Node(document.path("id").asText(),document.path("title").asText(),false,false,"",document.path("path").asText(),"",true));projectNode.add(node);if(document.path("id").asText().equals(selectedFile))selection=new TreePath(node.getPath());}
                     var nodes = new LinkedHashMap<String, DefaultMutableTreeNode>();
-                    for (var s : matching) nodes.put(s.path("id").asText(), new DefaultMutableTreeNode(new Node(s.path("id").asText(), s.path("title").asText(), false, s.path("running").asBoolean(), s.path("status").asText(), s.path("directory").asText(),s.path("attention").path("kind").asText())));
+                    for (var s : matching) nodes.put(s.path("id").asText(), new DefaultMutableTreeNode(new Node(s.path("id").asText(), s.path("title").asText(), false, s.path("running").asBoolean()&&!s.path("technical").asBoolean(), s.path("technical").asBoolean()?"":s.path("status").asText(), s.path("directory").asText(),s.path("attention").path("kind").asText())));
                     for (var s : matching) { var n = nodes.get(s.path("id").asText()); var parent = nodes.get(s.path("parentId").asText()); (parent == null ? projectNode : parent).add(n); }
                     for (var entry : nodes.entrySet()) if (entry.getKey().equals(selected)) selection = new TreePath(entry.getValue().getPath());
                 }
@@ -593,6 +659,32 @@ public final class WorkspaceFrame extends JFrame {
             }
             long count = sessions.values().stream().filter(s -> !s.path("active").asBoolean()||!projects.get(s.path("projectId").asText()).path("active").asBoolean(true)).count(); archiveToggle.setText((inactiveOpen ? "⌄ " : "› ") + "Неактивные  " + count);
         } finally { changingTree = false; }
+    }
+    private ChatView createChatView(String id){
+        var view=new ChatView(id,host);
+        view.transcript.addHyperlinkListener(e -> { if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) openLink(e.getDescription()); });
+        view.transcript.addCaretListener(e -> { if(transcript==view.transcript) quote.setVisible(view.transcript.getSelectedText()!=null&&!view.transcript.getSelectedText().isBlank()); });
+        view.transcript.imageCopyMenu(quoteMenu,this::copyChatImage);
+        view.transcript.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_Q,InputEvent.CTRL_DOWN_MASK|InputEvent.SHIFT_DOWN_MASK),"quote");
+        view.transcript.getActionMap().put("quote",new AbstractAction(){public void actionPerformed(ActionEvent e){quoteSelection();}});
+        return view;
+    }
+    /** Makes a view the visible chat: fields the rest of the window uses point at its components. */
+    private void bindChat(ChatView view){
+        if(chatView==view)return;
+        if(chatView!=null){chatView.chatSignature=chatSignature;chatView.scrollToLatest=scrollToLatest;chatView.chatRender=chatRender;chat.remove(chatView.area);chat.remove(chatView.navigation);}
+        chatView=view;transcript=view.transcript;history=view.history;chatNavigation=view.navigation;pagedHistory=view.paged;
+        chatSignature=view.chatSignature;scrollToLatest=view.scrollToLatest;chatRender=view.chatRender;
+        chat.add(view.area,BorderLayout.CENTER);chat.add(view.navigation,BorderLayout.NORTH);chat.revalidate();chat.repaint();
+        if(quote!=null)quote.setVisible(transcript.getSelectedText()!=null&&!transcript.getSelectedText().isBlank());
+    }
+    /** Cached view for a session, or a fresh one; the least recently shown beyond the cache size is released. */
+    private ChatView chatViewFor(String id){
+        var view=chatViews.get(id);if(view!=null)return view;
+        view=createChatView(id);chatViews.put(id,view);
+        var stale=new ArrayList<ChatView>();for(var it=chatViews.entrySet().iterator();chatViews.size()-stale.size()>CACHED_CHATS&&it.hasNext();){var entry=it.next();if(entry.getValue()==view)continue;stale.add(entry.getValue());it.remove();}
+        for(var old:stale)if(old!=chatView)old.close();
+        return view;
     }
     private void renderChat() {
         if(conversation.path("windowed").asBoolean()&&selected!=null){pagedHistory.update(selected,conversation.path("historyVersion").asText(),scrollToLatest);scrollToLatest=false;return;}
@@ -636,7 +728,11 @@ public final class WorkspaceFrame extends JFrame {
     private void renderRequests() {
         String signature = conversation.path("requests").toString(); if (signature.equals(requestSignature)) return; requestSignature = signature;
         requests.removeAll();
+        QuestionCard firstCard = null;
         for (var r : conversation.path("requests")) {
+            if (r.path("method").asText().equals("item/tool/requestUserInput") && r.path("params").path("questions").isArray() && r.path("params").path("questions").size() > 0) {
+                var card = new QuestionCard(r, response -> answer(r, response)); requests.add(card); if (firstCard == null) firstCard = card; continue;
+            }
             var panel = new JPanel(new BorderLayout(Theme.GAP, Theme.GAP)); panel.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, Theme.BORDER), new EmptyBorder(Theme.UNIT, Theme.GUTTER, Theme.UNIT, Theme.GUTTER)));
             String method = r.path("method").asText(); var params = r.path("params");
             String details = params.path("command").asText(params.path("reason").asText(params.path("message").asText("Агент ждёт вашего ответа")));
@@ -655,6 +751,7 @@ public final class WorkspaceFrame extends JFrame {
             panel.add(actions, BorderLayout.SOUTH); requests.add(panel);
         }
         requests.revalidate(); requests.repaint();
+        if (firstCard != null && !input.isFocusOwner()) { var card = firstCard; SwingUtilities.invokeLater(card::focusFirst); }
     }
     private void answerQuestions(JsonNode request) {
         String method = request.path("method").asText(); var params = request.path("params");
@@ -719,7 +816,7 @@ public final class WorkspaceFrame extends JFrame {
         var separate = new JMenuItem("Отдельным сообщением в очередь"); separate.setName("composer.sendSeparate");
         separate.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, InputEvent.ALT_DOWN_MASK));
         separate.setEnabled(send.isEnabled() && !input.getText().isBlank()); separate.addActionListener(e -> send(true)); menu.add(separate);
-        var urgent=new JMenuItem("Прервать и выполнить сейчас");urgent.setEnabled(interrupt.isEnabled());urgent.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER,InputEvent.SHIFT_DOWN_MASK));urgent.addActionListener(e->interrupt());menu.add(urgent);
+        var urgent=new JMenuItem("Прервать и выполнить сейчас");urgent.setEnabled(interrupt.isEnabled());urgent.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER,InputEvent.CTRL_DOWN_MASK));urgent.addActionListener(e->interrupt());menu.add(urgent);
         menu.show(sendOptions, sendOptions.getWidth() - menu.getPreferredSize().width, -menu.getPreferredSize().height);
     }
     public void send() { send(false); }
@@ -998,7 +1095,7 @@ public final class WorkspaceFrame extends JFrame {
     public void setUpdating(boolean value) { externalUpdate = value; poller.execute(this::poll); }
     public void closeWindow() {closeWindow(true);}
     private void closeWindow(boolean notify) {
-        if (disposed) return; saveDraft();rememberPreview(); disposed = true; exitFullScreen(); draftTimer.stop(); poller.shutdownNow();pagedHistory.close(); viewer.close(); io.shutdown(); dispose();
+        if (disposed) return; saveDraft();rememberPreview(); disposed = true; exitFullScreen(); draftTimer.stop(); poller.shutdownNow();for(var view:chatViews.values())view.close();if(chatView!=null&&!chatViews.containsValue(chatView))chatView.close(); viewer.close(); io.shutdown(); dispose();
         Thread.ofVirtual().start(() -> { try { io.awaitTermination(20, TimeUnit.SECONDS); } catch (InterruptedException ignored) {} host.close(); if(notify)onClose.run(); });
     }
 }

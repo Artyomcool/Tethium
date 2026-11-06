@@ -17,7 +17,16 @@ final class ChatMarkdown {
                 }
             }).build();
 
+    /** Thoughts of the live answer are shown muted when on, dropped when off; action lines are always muted. */
+    static volatile boolean showThoughts = true;
     String render(String text) {
-        return renderer.render(parser.parse(text)).replaceAll("<img[^>]*>", "<em>[изображение — откройте в результатах]</em>");
+        String html = renderer.render(parser.parse(text)).replaceAll("<img[^>]*>", "<em>[изображение — откройте в результатах]</em>");
+        // A run of actions arrives as one paragraph with hard breaks; each becomes its own muted line without a marker.
+        html = html.replaceAll("(?s)<p>— (.*?)</p>", "<p class='action'>$1</p>").replaceAll("<br />\\s*— ", "</p>\n<p class='action'>");
+        var thought = java.util.regex.Pattern.compile("(?s)<pre><code class=\"language-thought\">(.*?)</code></pre>").matcher(html);
+        var out = new StringBuilder();
+        while (thought.find()) { String body = thought.group(1).strip(); thought.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(showThoughts && !body.isEmpty() ? "<div class='thought'>" + body.replace("\n", "<br>") + "</div>" : "")); }
+        thought.appendTail(out);
+        return out.toString();
     }
 }

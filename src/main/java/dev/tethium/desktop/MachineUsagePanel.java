@@ -11,7 +11,7 @@ import java.util.Locale;
 final class MachineUsagePanel extends JComponent {
     private JsonNode value=Json.object();
     MachineUsagePanel(){
-        setPreferredSize(new Dimension(0,19));setMinimumSize(new Dimension(0,19));
+        setPreferredSize(new Dimension(0,17));setMinimumSize(new Dimension(0,17));
         setFont(UIManager.getFont("Label.font").deriveFont(Font.PLAIN,12f));setToolTipText("CPU / RAM");
     }
     void update(JsonNode value){this.value=value;repaint();}

@@ -62,10 +62,20 @@ public final class ProtocolFixture {
         if (mode.equals("claude-flags")) {
             require(args, "--model", "chosen-model"); require(args, "--effort", "max"); require(args, "--permission-mode", "bypassPermissions");
             require(args, "--resume", "claude-thread"); require(args, "--permission-prompt-tool", "stdio");
+            int prompt = args.indexOf("--append-system-prompt");
+            if (prompt < 0 || !args.get(prompt + 1).contains("Never end a turn to wait for a background job")) throw new AssertionError("Claude must be told that background waits do not survive the turn");
             if (args.contains("--session-id")) throw new AssertionError("A resumed conversation must not get a new session id");
             if (!first.path("message").path("content").get(1).path("source").path("media_type").asText().equals("image/png")) throw new AssertionError("Images must be sent as base64 content blocks");
         }
         if (mode.equals("claude-new") && (fresh < 0 || resume >= 0)) throw new AssertionError("A new conversation must announce its own session id");
+        if (!mode.equals("claude-flags") && !args.contains("--model")) throw new AssertionError("Runs without an explicit model must still name the default model instead of the account default");
+        if (mode.equals("claude-stale")) {
+            // A resumed session with an interrupted background task closes that stale turn first: notification, init, empty result.
+            output(Json.object("type", "system", "subtype", "task_notification", "task_id", "b1", "status", "stopped", "summary", "Background shell command didn't finish before the previous session ended", "session_id", session));
+            output(Json.object("type", "system", "subtype", "init", "session_id", session, "model", "fixture-model"));
+            output(Json.object("type", "result", "subtype", "success", "is_error", false, "num_turns", 0, "duration_api_ms", 0, "result", "", "session_id", session));
+            if (args.contains("--exit-after-stale")) return;
+        }
         output(Json.object("type", "system", "subtype", "init", "session_id", session, "model", "fixture-model"));
         if (mode.equals("claude-error")) {
             output(Json.object("type", "result", "subtype", "success", "is_error", true, "result", "Weekly limit reached", "session_id", session)); return;

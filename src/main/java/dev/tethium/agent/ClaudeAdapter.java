@@ -15,6 +15,19 @@ public final class ClaudeAdapter implements AgentAdapter {
     public ClaudeAdapter() { this(System.getenv().getOrDefault("TETHIUM_CLAUDE", "claude")); }
     public ClaudeAdapter(String executable) { this(List.of(executable)); }
     public ClaudeAdapter(List<String> executable) { this.executable = List.copyOf(executable); }
+    /** Each Tethium run is a fresh print-mode process, so Claude Code's own waiting mechanisms end with the turn. */
+    static final String CLAUDE_INSTRUCTIONS = " Each Tethium run is a separate claude process: background shell tasks, Monitor watches and scheduled wakeups do not survive the end of your turn, and a turn ended to wait for them only restarts you with the wait lost. Never end a turn to wait for a background job or event. Wait in the foreground instead: a polling loop with sleep inside one tool call up to its timeout, repeated as needed. If a job will take hours, finish the turn with a short status and let the next run check it. Before every command that may run longer than a minute, and at least every few minutes of work, write one short line in the user's language saying what you are doing and what you are waiting for: it is the only progress the user sees in Tethium.";
+    /** Sessions without an explicit model run on Opus: the account default (Fable) weighs several times more in the weekly quota. */
+    public static final String DEFAULT_MODEL = "opus";
+    /** TETHIUM_CLAUDE_MODEL, then the model from the user's Claude Code settings, then Opus. */
+    public static String defaultModel() {
+        String configured = System.getenv("TETHIUM_CLAUDE_MODEL");
+        if (configured != null && !configured.isBlank()) return configured;
+        Path settings = Path.of(System.getProperty("user.home"), ".claude", "settings.json");
+        try { if (Files.isRegularFile(settings)) { String model = Json.MAPPER.readTree(settings.toFile()).path("model").asText(null); if (model != null && !model.isBlank()) return model; } }
+        catch (Exception unreadable) { }
+        return DEFAULT_MODEL;
+    }
     @Override public Provider provider() { return Provider.CLAUDE; }
     @Override public List<String> executable() { return executable; }
 
@@ -24,14 +37,22 @@ public final class ClaudeAdapter implements AgentAdapter {
         var command = new ArrayList<>(executable);
         command.addAll(List.of("-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose", "--include-partial-messages",
                 "--permission-prompt-tool", "stdio", "--permission-mode", fullAccess ? "bypassPermissions" : "default", "--no-chrome",
-                "--append-system-prompt", DEVELOPER_INSTRUCTIONS));
+                "--append-system-prompt", DEVELOPER_INSTRUCTIONS + CLAUDE_INSTRUCTIONS));
         String conversation = request.conversationId();
         if (conversation != null) command.addAll(List.of("--resume", conversation));
         else { conversation = UUID.randomUUID().toString(); command.addAll(List.of("--session-id", conversation)); }
-        if (request.model() != null) command.addAll(List.of("--model", request.model()));
+        command.addAll(List.of("--model", request.model() != null ? request.model() : defaultModel()));
         if (request.reasoningEffort() != null) command.addAll(List.of("--effort", request.reasoningEffort()));
         var environment = new HashMap<String, String>();
         environment.put("CLAUDECODE", null); // Tethium itself may be driven from a Claude Code session; the child is not nested.
+        // Narration hook: after N tool calls without text the model is reminded to tell the user what it does and why.
+        Path hookDir = hookDirectory(); Path hookSettings = hookDir == null ? null : NarrationHook.settings(hookDir);
+        if (hookSettings != null) {
+            command.addAll(List.of("--settings", hookSettings.toString()));
+            environment.put("TETHIUM_HOOK_DIR", hookDir.toString()); environment.put("TETHIUM_NARRATE_EVERY", Integer.toString(NarrationHook.every())); environment.put("TETHIUM_NARRATE_TEXT", NarrationHook.REMINDER);
+            NarrationHook.reset(hookDir, conversation);
+        }
+        boolean[] toolSinceText = {false};
         Path configFile = null;
         if (request.toolsUrl() != null) {
             // Windows command lines cannot carry the JSON intact, so it goes through a private file.
@@ -45,6 +66,7 @@ public final class ClaudeAdapter implements AgentAdapter {
         }
         var text = new StringBuilder();
         String turn = UUID.randomUUID().toString();
+        JsonNode[] stale = {null}; // the empty result Claude Code emits for an interrupted background task before answering
         try (var process = new JsonProcess(command, request.directory(), environment)) {
             cancellation.onCancel(process::stop);
             if (cancellation.isCancelled()) return new Result(request.conversationId(), Status.CANCELLED, "");
@@ -53,7 +75,7 @@ public final class ClaudeAdapter implements AgentAdapter {
                 try { process.send(Json.object("type", "control_request", "request_id", UUID.randomUUID().toString(), "request", Json.object("subtype", "interrupt"))); }
                 catch (Exception ignored) { process.stop(); }
             });
-            boolean announced = false;
+            boolean announced = false, answered = false;
             var started = new HashMap<String, ObjectNode>();
             var thinking = new HashMap<Integer, String>();
             var usage = new long[4];
@@ -78,8 +100,13 @@ public final class ClaudeAdapter implements AgentAdapter {
                     }
                     case "stream_event" -> {
                         var event = message.path("event"); String kind = Json.text(event, "type");
+                        answered = true;
                         if (kind.equals("content_block_delta") && event.path("delta").path("type").asText().equals("text_delta")) {
                             String chunk = Json.text(event.path("delta"), "text"); text.append(chunk); events.accept(new Event("text", chunk, message));
+                            if (toolSinceText[0] && hookSettings != null) { toolSinceText[0] = false; NarrationHook.reset(hookDir, conversation); }
+                        } else if (kind.equals("content_block_delta") && event.path("delta").path("type").asText().equals("thinking_delta")) {
+                            // Shown muted in the live answer only; never part of the stored message.
+                            events.accept(new Event("thinking", Json.text(event.path("delta"), "thinking"), message));
                         } else if (kind.equals("content_block_start")) {
                             String block = event.path("content_block").path("type").asText();
                             if (block.equals("text") && !text.isEmpty() && !text.toString().endsWith("\n\n")) { text.append("\n\n"); events.accept(new Event("text", "\n\n", message)); }
@@ -90,9 +117,10 @@ public final class ClaudeAdapter implements AgentAdapter {
                         }
                     }
                     case "assistant" -> {
+                        answered = true;
                         var payload = message.path("message");
                         for (var block : payload.path("content")) if (block.path("type").asText().equals("tool_use") && !block.path("name").asText().equals("AskUserQuestion")) {
-                            var item = toolItem(block); started.put(item.path("id").asText(), item); events.accept(item("item/started", item));
+                            var item = toolItem(block); started.put(item.path("id").asText(), item); events.accept(item("item/started", item)); toolSinceText[0] = true;
                         }
                         var last = usage(payload.path("usage"));
                         if (last != null) {
@@ -111,6 +139,11 @@ public final class ClaudeAdapter implements AgentAdapter {
                     case "control_response" -> { }
                     case "result" -> {
                         boolean success = !message.path("is_error").asBoolean() && message.path("subtype").asText().equals("success");
+                        if (success && message.path("num_turns").asInt(-1) == 0 && !answered && !cancellation.isCancelled()) {
+                            // Resuming after an interrupted background task: Claude Code first closes that stale turn with an
+                            // empty result and only then answers our prompt. Ending the run here would answer nothing at all.
+                            stale[0] = message; continue;
+                        }
                         if (text.isEmpty()) text.append(Json.text(message, "result"));
                         if (!success) {
                             for (var error : message.path("errors")) text.append(text.isEmpty() ? "" : "\n").append(error.asText());
@@ -126,6 +159,10 @@ public final class ClaudeAdapter implements AgentAdapter {
             throw new java.util.concurrent.TimeoutException("Claude turn timed out");
         } catch (Exception failure) {
             if (cancellation.isCancelled()) return new Result(conversation, Status.CANCELLED, text.toString());
+            if (stale[0] != null && failure instanceof java.io.IOException) {
+                // The process left after the empty turn without answering: report that turn as before instead of an error.
+                events.accept(new Event("finished", "completed", stale[0])); return new Result(conversation, Status.COMPLETED, text.toString());
+            }
             throw failure;
         } finally {
             if (configFile != null) Files.deleteIfExists(configFile);
@@ -143,13 +180,22 @@ public final class ClaudeAdapter implements AgentAdapter {
         }
         return blocks;
     }
+    /** Hook files live in the Tethium data directory; without one (tests, probes) the hook is skipped. */
+    private static Path hookDirectory() {
+        try { String data = System.getProperty("tethium.data"); if (data == null || data.isBlank()) { String local = System.getenv("LOCALAPPDATA"); if (local == null) return null; data = Path.of(local, "Tethium").toString(); } return Path.of(data, "hooks"); }
+        catch (Exception e) { return null; }
+    }
     private static Event item(String method, ObjectNode item) { return new Event(method, "", Json.object("method", method, "params", Json.object("item", item))); }
     /** Codex item vocabulary, so RunActivity and the activity log describe Claude tools the same way. */
     static ObjectNode toolItem(JsonNode block) {
         String name = block.path("name").asText(); var input = block.path("input");
         var item = Json.object("id", block.path("id").asText(), "name", name);
         switch (name) {
-            case "Bash", "PowerShell" -> { item.put("type", "commandExecution"); item.put("command", input.path("command").asText(input.path("description").asText(name))); }
+            case "Bash", "PowerShell" -> {
+                // The model's own one-line description reads better in the status line than a long shell command.
+                item.put("type", "commandExecution"); String description = input.path("description").asText("").strip();
+                item.put("command", description.isEmpty() ? input.path("command").asText(name) : description); item.put("detail", input.path("command").asText(""));
+            }
             case "Edit", "Write", "MultiEdit", "NotebookEdit" -> {
                 item.put("type", "fileChange");
                 item.set("changes", Json.MAPPER.createArrayNode().add(Json.object("path", input.path("file_path").asText(input.path("notebook_path").asText("")), "kind", name.equals("Write") ? "add" : "update")));
@@ -180,7 +226,7 @@ public final class ClaudeAdapter implements AgentAdapter {
             var questions = Json.MAPPER.createArrayNode(); int index = 0;
             for (var question : input.path("questions")) {
                 var options = Json.MAPPER.createArrayNode(); for (var option : question.path("options")) options.add(Json.object("label", option.path("label").asText(), "description", option.path("description").asText("")));
-                questions.add(Json.object("id", "q" + index++, "header", question.path("header").asText(""), "question", question.path("question").asText(), "options", options));
+                questions.add(Json.object("id", "q" + index++, "header", question.path("header").asText(""), "question", question.path("question").asText(), "options", options, "multiSelect", question.path("multiSelect").asBoolean(false)));
             }
             var params = Json.object("questions", questions);
             events.accept(new Event("request", "item/tool/requestUserInput", Json.object("id", id, "method", "item/tool/requestUserInput", "params", params)));

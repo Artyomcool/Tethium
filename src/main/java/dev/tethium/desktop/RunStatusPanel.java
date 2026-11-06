@@ -198,7 +198,14 @@ final class RunStatusPanel extends JPanel {
         String id=session.path("id").asText();
         if(!java.util.Objects.equals(id,sessionId)){sessionId=id;pendingFocus=null;queueSignature="";}
         boolean busy = session.path("running").asBoolean(); paused = session.path("queuePaused").asBoolean();
-        activity.setVisible(busy); spinner.setIndeterminate(busy);
+        boolean held = !busy && session.path("hold").isObject();
+        activity.setVisible(busy || held); spinner.setIndeterminate(busy); spinner.setVisible(busy);
+        if (held) {
+            String holder = session.path("hold").path("title").asText();
+            phase.setText("Очередь ждёт"); phase.setToolTipText(phase.getText());
+            String text = "Ждёт срочной правки в сессии «" + holder + "». Ваше «Сейчас» в этой сессии стартует без ожидания.";
+            detail.setText(text); detail.setToolTipText(text);
+        }
         if (busy) {
             var progress = session.path("progress"); long now = System.currentTimeMillis();
             long elapsed = Math.max(0, (now - progress.path("startedAt").asLong(now)) / 1000);

@@ -23,7 +23,7 @@ public final class PreviewLifecycleProbe {
                 SwingUtilities.invokeAndWait(()->view[0].open(md));until(()->{var browser=(CefBrowser)field(view[0],"browser");if(browser==null||browser.getIdentifier()<=0)return false;String result=browser.getDevToolsClient().executeDevToolsMethod("Runtime.evaluate",Json.object("expression","!!document.querySelector('table') && document.body.innerText.includes('TABLE_CELL')","returnByValue",true).toString()).get(5,TimeUnit.SECONDS);return Json.parse(result).path("result").path("value").asBoolean();});
                 if(i%4==0)SwingUtilities.invokeAndWait(()->{view[0].open(html);view[0].clear();view[0].open(md);});
             }
-            SwingUtilities.invokeAndWait(()->view[0].clear());until(()->view[0].browserResourceCount()==0);Thread.sleep(400);if(!failures.isEmpty())throw new AssertionError("Uncaught rendering errors",failures.getFirst());
+            SwingUtilities.invokeAndWait(()->view[0].clear());until(()->view[0].browserResourceCount()<=1);Thread.sleep(400);if(!failures.isEmpty())throw new AssertionError("Uncaught rendering errors",failures.getFirst());
             Json.MAPPER.writeValue(out.resolve("report.json").toFile(),Json.object("passed",true,"htmlMarkdownCycles",20,"tableRenders",true,"browserResourcesAfterClear",view[0].browserResourceCount(),"supersededLoads",true));System.out.println("PREVIEW_LIFECYCLE_PASSED "+out);
         }catch(Throwable error){error.printStackTrace();exit=1;}finally{SwingUtilities.invokeAndWait(()->{if(view[0]!=null)view[0].close();if(frame[0]!=null)frame[0].dispose();});}System.exit(exit);
     }

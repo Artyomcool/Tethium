@@ -22,7 +22,7 @@ final class AppUpdates {
     static final String SELF="dev.tethium.mobile", CHANNEL="app-updates";
     static SharedPreferences prefs(Context c){return c.getSharedPreferences("app-updates",0);}
     static Connection connection(Context c)throws Exception{return connection(c,null);}
-    static Connection connection(Context c,android.net.Network network)throws Exception{var p=c.getSharedPreferences("tethium",0);return new Connection(p.getString("address",""),p.getString("pin",""),p.getString("token",""),network);}
+    static Connection connection(Context c,android.net.Network network)throws Exception{var p=c.getSharedPreferences("tethium",0);return new Connection(p.getString("address",""),p.getString("token",""),p.getInt("httpPort",8766),network);}
     static void schedule(Context c){
         var scheduler=c.getSystemService(JobScheduler.class);
         if(scheduler.getPendingJob(7021)==null)scheduler.schedule(new JobInfo.Builder(7021,new ComponentName(c,UpdateJob.class)).setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED).setPeriodic(15*60_000L).setPersisted(true).build());
@@ -74,7 +74,8 @@ final class AppUpdates {
         if(current>offered||auto&&current==offered||pending(c,pkg))return;
         var installer=c.getPackageManager().getPackageInstaller();var params=new PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL);
         params.setAppPackageName(pkg);params.setSize(file.length());
-        if(Build.VERSION.SDK_INT>=31)params.setRequireUserAction(auto?PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED:PackageInstaller.SessionParams.USER_ACTION_REQUIRED);
+        // Always ask for an unattended install; Android itself falls back to its confirmation when the rules are not met (first install, foreign installer, old targetSdk).
+        if(Build.VERSION.SDK_INT>=31)params.setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_NOT_REQUIRED);
         int id=installer.createSession(params);
         try(var session=installer.openSession(id)){
             try(var in=new FileInputStream(file);var out=session.openWrite("base.apk",0,file.length())){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1)out.write(b,0,n);session.fsync(out);}
