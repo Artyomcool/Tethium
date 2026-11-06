@@ -5,7 +5,7 @@ if (signingFile.exists()) signingFile.withInputStream { signing.load(it) }
 android {
     namespace 'dev.tethium.mobile'
     compileSdk 36
-    defaultConfig { applicationId 'dev.tethium.mobile'; minSdk 26; targetSdk 36; versionCode 30; versionName '0.6.7' }
+    defaultConfig { applicationId 'dev.tethium.mobile'; minSdk 26; targetSdk 36; versionCode 31; versionName '0.6.8' }
     signingConfigs { release { if (signingFile.exists()) { storeFile file(signing.storeFile); storePassword signing.password; keyAlias 'tethium'; keyPassword signing.password } } }
     buildTypes { release { signingConfig signingConfigs.release; minifyEnabled false } }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }

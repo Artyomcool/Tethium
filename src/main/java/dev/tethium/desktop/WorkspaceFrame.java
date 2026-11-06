@@ -110,7 +110,7 @@ public final class WorkspaceFrame extends JFrame {
     private JsonNode pendingTake;
     private final Runnable onClose;
     private final javax.swing.Timer draftTimer;
-    private record Node(String id, String title, boolean project, boolean running, String status, String path, String attention,boolean file,int pausedQueued,int backlog) {
+    record Node(String id, String title, boolean project, boolean running, String status, String path, String attention,boolean file,int pausedQueued,int backlog) {
         Node(String id,String title,boolean project,boolean running,String status,String path,String attention){this(id,title,project,running,status,path,attention,false,0,0);}
         Node(String id,String title,boolean project,boolean running,String status,String path,String attention,boolean file){this(id,title,project,running,status,path,attention,file,0,0);}
         public String toString() { return title; }
@@ -161,7 +161,7 @@ public final class WorkspaceFrame extends JFrame {
                     label.setForeground(n.running ? Theme.ACCENT : n.status.equals("FAILED") ? Theme.RED : Theme.TEXT);
                     label.setToolTipText(n.path); label.setBorder(new EmptyBorder(0, (n.project?Theme.UNIT/2:Theme.UNIT)+22+Theme.GAP, 0, Theme.UNIT));
                     rowPanel.removeAll(); rowPanel.setBackground(selected?Theme.SELECTED:Theme.SIDEBAR); rowPanel.add(label);
-                    rowPanel.add(Box.createHorizontalStrut(backlogWidth(label,n)+(n.pausedQueued>0?Theme.GUTTER*2:n.project?Theme.GAP:Theme.GUTTER)+(n.project&&expanded&&projectWidgets.available(projects.get(n.id),"right")?rightWidgetWidth(projects.get(n.id))+2+(n.pausedQueued==0&&!n.attention.isEmpty()?12:0):0)),BorderLayout.EAST);
+                    rowPanel.add(Box.createHorizontalStrut(backlogWidth(label,shownBacklog(t,t.getPathForRow(row),n))+(n.pausedQueued>0?Theme.GUTTER*2:n.project?Theme.GAP:Theme.GUTTER)+(n.project&&expanded&&projectWidgets.available(projects.get(n.id),"right")?rightWidgetWidth(projects.get(n.id))+2+(n.pausedQueued==0&&!shownAttention(t,t.getPathForRow(row),n).isEmpty()?12:0):0)),BorderLayout.EAST);
                     // One line per fact: path, attention, paused queue, then each project widget with its error (if any).
                     var hint=new StringBuilder("<html>").append(escapeHtml(n.path));
                     if(!n.attention.isEmpty())hint.append("<br>").append(n.attention.equals("question")?"Ждёт ответа":n.attention.equals("manual")?"Отмечено: требует внимания":"Работа завершена · новый результат");
@@ -256,9 +256,10 @@ public final class WorkspaceFrame extends JFrame {
             var path=tree.getPathForRow(row);var value=((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject();
             if(!(value instanceof Node n))continue;var icon=n.file?Theme.icon("attachment"):n.project?IdentityIcons.ofProject(n.id,n.title,n.path):IdentityIcons.of(false,n.title,n.path);icon.paintIcon(tree,g,bounds.x+(n.project?Theme.UNIT/2:Theme.UNIT)+(22-icon.getIconWidth())/2,bounds.y+(bounds.height-icon.getIconHeight())/2);if(n.file)continue;
             if(!n.project||!tree.isExpanded(path))ResourceBars.paint(g,x,bounds.y+bounds.height,Math.max(0,right-x),ResourceBars.share(resourceUsage,machineUsage,resourceControl,n.id,n.project));
-            if(n.backlog>0){var label=backlogBounds(tree,n,bounds);var fm=tree.getFontMetrics(tree.getFont());g.setFont(tree.getFont());g.setColor(Theme.MUTED);g.drawString("["+n.backlog+"]",label.x,bounds.y+(bounds.height+fm.getAscent()-fm.getDescent())/2-3);}
+            int deferred=shownBacklog(tree,path,n);String dotted=shownAttention(tree,path,n);
+            if(deferred>0){var label=backlogBounds(tree,n,deferred,dotted,bounds);var fm=tree.getFontMetrics(tree.getFont());g.setFont(tree.getFont());g.setColor(Theme.MUTED);g.drawString("["+deferred+"]",label.x,bounds.y+(bounds.height+fm.getAscent()-fm.getDescent())/2-3);}
             if(n.project&&tree.isExpanded(path)&&projectWidgets.available(projects.get(n.id))){
-                var project=projects.get(n.id);int start=bounds.x+Theme.UNIT/2+22+Theme.GAP,edge=right-(n.pausedQueued>0?28:!n.attention.isEmpty()?12:0)-backlogWidth(tree,n);
+                var project=projects.get(n.id);int start=bounds.x+Theme.UNIT/2+22+Theme.GAP,edge=right-(n.pausedQueued>0?28:!dotted.isEmpty()?12:0)-backlogWidth(tree,deferred);
                 if(projectWidgets.available(project,"right")){
                     int textWidth=tree.getFontMetrics(projectFont(tree)).stringWidth(n.title),widgetWidth=rightWidgetWidth(project);
                     int contentWidth=Math.max(textWidth,projectWidgets.preferredWidth(project,"bottom",13));
@@ -268,9 +269,9 @@ public final class WorkspaceFrame extends JFrame {
                 }
                 projectWidgets.paint(g,project,"bottom",start,bounds.y+14,Math.max(0,edge-start),13);
             }
-            if(!n.attention.isEmpty()){
+            if(!dotted.isEmpty()){
                 var dot=(Graphics2D)g.create();
-                try{dot.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);dot.setColor(!n.attention.equals("finished")?Theme.AMBER:Theme.ACCENT);dot.fill(new java.awt.geom.Ellipse2D.Double(right-7,bounds.y+(bounds.height-7)/2.0-3,7,7));}
+                try{dot.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);dot.setColor(!dotted.equals("finished")?Theme.AMBER:Theme.ACCENT);dot.fill(new java.awt.geom.Ellipse2D.Double(right-7,bounds.y+(bounds.height-7)/2.0-3,7,7));}
                 finally{dot.dispose();}
             }
             if(n.pausedQueued>0){int y=bounds.y+(bounds.height-8)/2-3;g.setColor(Theme.AMBER);g.fillRect(right-22,y,2,8);g.fillRect(right-17,y,2,8);}
@@ -310,7 +311,7 @@ public final class WorkspaceFrame extends JFrame {
             tree.addMouseListener(new MouseAdapter() {
                 @Override public void mouseClicked(MouseEvent e) {
                     if(!SwingUtilities.isLeftMouseButton(e))return;int row=tree.getClosestRowForLocation(e.getX(),e.getY());var bounds=tree.getRowBounds(row);if(bounds==null)return;
-                    if(((DefaultMutableTreeNode)tree.getPathForRow(row).getLastPathComponent()).getUserObject() instanceof Node n&&n.backlog>0&&backlogBounds(tree,n,bounds).contains(e.getPoint())){if(n.project)openBacklog(n.id,sessionIn(n.id));else openBacklog(sessions.get(n.id).path("projectId").asText(),n.id);}
+                    var rowPath=tree.getPathForRow(row);if(((DefaultMutableTreeNode)rowPath.getLastPathComponent()).getUserObject() instanceof Node n&&shownBacklog(tree,rowPath,n)>0&&backlogBounds(tree,n,shownBacklog(tree,rowPath,n),shownAttention(tree,rowPath,n),bounds).contains(e.getPoint())){if(n.project)openBacklog(n.id,sessionIn(n.id));else openBacklog(sessions.get(n.id).path("projectId").asText(),n.id);}
                 }
                 @Override public void mousePressed(MouseEvent e) { popup(e, tree); }
                 @Override public void mouseReleased(MouseEvent e) { popup(e, tree); }
@@ -403,10 +404,27 @@ public final class WorkspaceFrame extends JFrame {
         var split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, sidebar, workspace); split.setDividerLocation(260); split.setDividerSize(4); split.setBorder(null); setContentPane(split);
         model.sessionEnabled(false); access.setEnabled(false); send.setEnabled(false); stop.setEnabled(false);
     }
-    private static int backlogWidth(JComponent c,Node n){return n.backlog>0?c.getFontMetrics(c.getFont()).stringWidth("["+n.backlog+"]")+Theme.GAP:0;}
-    private static Rectangle backlogBounds(JTree tree,Node n,Rectangle row){
-        int right=tree.getWidth()-tree.getInsets().right-Theme.GAP,edge=right-(n.pausedQueued>0?28:!n.attention.isEmpty()?12:0),width=backlogWidth(tree,n);
+    private static int backlogWidth(JComponent c,int count){return count>0?c.getFontMetrics(c.getFont()).stringWidth("["+count+"]")+Theme.GAP:0;}
+    private static Rectangle backlogBounds(JTree tree,Node n,int count,String dotted,Rectangle row){
+        int right=tree.getWidth()-tree.getInsets().right-Theme.GAP,edge=right-(n.pausedQueued>0?28:!dotted.isEmpty()?12:0),width=backlogWidth(tree,count);
         return new Rectangle(edge-width+Theme.GAP,row.y,width,row.height);
+    }
+    /** Session rows under a project that are visible, or that are not: a project repeats only what no visible row shows. */
+    private static List<Node> sessionsUnder(JTree tree,TreePath path,boolean visible){
+        var found=new ArrayList<Node>();var top=(DefaultMutableTreeNode)path.getLastPathComponent();
+        for(var e=top.depthFirstEnumeration();e.hasMoreElements();){var node=(DefaultMutableTreeNode)e.nextElement();if(node!=top&&node.getUserObject() instanceof Node m&&!m.file&&tree.isVisible(new TreePath(node.getPath()))==visible)found.add(m);}
+        return found;
+    }
+    static int shownBacklog(JTree tree,TreePath path,Node n){
+        if(!n.project||path==null)return n.backlog;
+        int onRows=0;for(var m:sessionsUnder(tree,path,true))onRows+=m.backlog;
+        return Math.max(0,n.backlog-onRows);
+    }
+    static String shownAttention(JTree tree,TreePath path,Node n){
+        if(!n.project||path==null)return n.attention;
+        String shown="";
+        for(var m:sessionsUnder(tree,path,false)){if(m.attention.equals("question"))return "question";if(m.attention.equals("manual"))shown="manual";else if(shown.isEmpty())shown=m.attention;}
+        return shown;
     }
     private String sessionIn(String project){var s=selected==null?null:sessions.get(selected);return s!=null&&s.path("projectId").asText().equals(project)?selected:null;}
     private void openBacklog(String project,String session){BacklogDialog.open(this,host,projects,sessions,project,session);}
