@@ -15,7 +15,9 @@ final class RunStatusPanel extends JPanel {
     private final JProgressBar spinner = new JProgressBar();
     private final JLabel phase = new JLabel(), detail = new JLabel(), queueTitle = new JLabel();
     private final JTextArea recent = new JTextArea();
-    private final JButton details, resume, remove, queueToggle, up, down, take, group;
+    private final JButton details, resume, remove, queueToggle, up, down, take, group, backlogLink;
+    private Runnable backlogAction;
+    void setBacklogAction(Runnable action) { backlogAction = action; }
     private final JPanel queueActions = new JPanel(new BorderLayout());
     private final JLabel partsLabel = new JLabel();
     private boolean editingAvailable, groupingAvailable, taking;
@@ -41,7 +43,10 @@ final class RunStatusPanel extends JPanel {
         recent.setEditable(false); recent.setFocusable(false); recent.setLineWrap(true); recent.setWrapStyleWord(true);
         recent.setFont(recent.getFont().deriveFont(11f)); recent.setForeground(Theme.MUTED); recent.setVisible(false); activity.add(recent, BorderLayout.SOUTH);
         add(activity, BorderLayout.NORTH);
-        var queueHeader = new JPanel(new BorderLayout(Theme.UNIT, 0)); queueTitle.setName("queue.title"); queueTitle.setFont(queueTitle.getFont().deriveFont(11f)); queueTitle.setForeground(Theme.MUTED); queueHeader.add(queueTitle);
+        var queueHeader = new JPanel(new BorderLayout(Theme.UNIT, 0)); queueTitle.setName("queue.title"); queueTitle.setFont(queueTitle.getFont().deriveFont(11f)); queueTitle.setForeground(Theme.MUTED);
+        backlogLink = Theme.button("Отложено · 0", "Задачи на потом: запускаются сами, когда хватает квоты и CPU", () -> { if (backlogAction != null) backlogAction.run(); });
+        backlogLink.setName("queue.backlog"); Theme.toolbar(backlogLink); backlogLink.setFont(backlogLink.getFont().deriveFont(11f));
+        var queueCounts = new JPanel(new FlowLayout(FlowLayout.LEFT, Theme.UNIT, 0)); queueCounts.setOpaque(false); queueCounts.add(queueTitle); queueCounts.add(backlogLink); queueHeader.add(queueCounts);
         var buttons = new JPanel(new FlowLayout(FlowLayout.RIGHT, Theme.UNIT, 0));
         resume = Theme.button("Продолжить", "Приостановить следующие сообщения, не прерывая текущий ответ", () -> { if(paused) resumeQueue.run(); else pauseQueue.run(); });
         resume.setIcon(Theme.icon("play")); Theme.toolbar(resume);
@@ -228,6 +233,7 @@ final class RunStatusPanel extends JPanel {
             if (previousIndex != queueList.getSelectedIndex()) SwingUtilities.invokeLater(() -> queueList.ensureIndexIsVisible(queueList.getSelectedIndex()));
         }
         queueTitle.setText((paused ? "Пауза · " : session.path("quotaWait").path("waiting").asBoolean()?"Ждём квоту · ":"Очередь · ") + queueModel.size());
+        backlogLink.setText("Отложено · " + session.path("backlog").asInt());
         queueTitle.setToolTipText(paused ? "Следующие сообщения ждут. Снять паузу можно и во время текущего ответа." : "Сообщения выполняются по порядку");
         resume.setVisible(true); resume.setEnabled(session.path("active").asBoolean());
         resume.setText(paused ? "Продолжить" : "Пауза"); resume.setIcon(Theme.icon(paused ? "play" : "queue-pause"));

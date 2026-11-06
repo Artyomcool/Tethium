@@ -45,6 +45,7 @@ public final class WorkspaceFrame extends JFrame {
     private final JButton results = Theme.button("Результаты", "Изображения и HTML от агента", () -> {if(this.previewOpen)closePreview();else showPreview(true);});
     private final JPanel requests = new JPanel();
     private final RunStatusPanel runStatus = new RunStatusPanel(this::pauseQueue, this::resumeQueue, this::removeQueued, this::moveQueued, this::takeQueued, this::groupQueued);
+    { runStatus.setBacklogAction(this::openSessionBacklog); }
     private final JPanel chat = new JPanel(new BorderLayout());
     private final JPanel preview = new JPanel(new BorderLayout());
     private final ArtifactView viewer = new ArtifactView();
@@ -427,6 +428,7 @@ public final class WorkspaceFrame extends JFrame {
         return shown;
     }
     private String sessionIn(String project){var s=selected==null?null:sessions.get(selected);return s!=null&&s.path("projectId").asText().equals(project)?selected:null;}
+    private void openSessionBacklog(){var session=selected==null?null:sessions.get(selected);if(session!=null)openBacklog(session.path("projectId").asText(),selected);}
     private void openBacklog(String project,String session){BacklogDialog.open(this,host,projects,sessions,project,session);}
     private void popup(MouseEvent event, JTree tree) {
         if (!event.isPopupTrigger()) return;
