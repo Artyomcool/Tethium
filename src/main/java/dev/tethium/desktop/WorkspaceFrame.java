@@ -294,10 +294,14 @@ public final class WorkspaceFrame extends JFrame {
     private void build() {
         var sidebar = new JPanel(new BorderLayout()); sidebar.setBackground(Theme.SIDEBAR); sidebar.setMinimumSize(new Dimension(210, 100));
         var brand = new JPanel(new BorderLayout(Theme.GAP, 0)); brand.setOpaque(false); brand.setBorder(new EmptyBorder(Theme.INSET, Theme.GUTTER, Theme.GAP, Theme.INSET));
-        var actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, Theme.UNIT, 0)); actions.setOpaque(false);
-        var addProject = Theme.button("Проект", "Добавить каталог проекта", this::addProject); addProject.setIcon(Theme.icon("project-add")); Theme.toolbar(addProject); addProject.setVisible(!host.remote()); actions.add(addProject);
-        var addSession = Theme.button("Сессия", "Новая сессия в выбранном проекте", this::newSession); addSession.setIcon(Theme.icon("session-new")); Theme.toolbar(addSession); actions.add(addSession);
-        var phone = Theme.iconButton("phone", "Подключить телефон по Wi-Fi", () -> MobileConnectDialog.open(this)); phone.getAccessibleContext().setAccessibleName("Подключить телефон"); phone.setVisible(!host.remote()); actions.add(phone);actions.add(Theme.iconButton("more","Настройки",this::workspaceSettings)); brand.add(actions, BorderLayout.WEST);
+        var actions = new JPanel(); actions.setLayout(new BoxLayout(actions, BoxLayout.X_AXIS)); actions.setOpaque(false);
+        var addProject = Theme.button("Проект", "Добавить каталог проекта", this::addProject); addProject.setIcon(Theme.icon("project-add")); Theme.toolbar(addProject); addProject.setVisible(!host.remote());
+        var addSession = Theme.button("Сессия", "Новая сессия в выбранном проекте", this::newSession); addSession.setIcon(Theme.icon("session-new")); Theme.toolbar(addSession);
+        var phone = Theme.iconButton("phone", "Подключить телефон по Wi-Fi", () -> MobileConnectDialog.open(this)); phone.getAccessibleContext().setAccessibleName("Подключить телефон"); phone.setVisible(!host.remote());
+        for (var button : List.of(addProject, addSession, phone, Theme.iconButton("more","Настройки",this::workspaceSettings))) { if (!button.isVisible()) continue; if (actions.getComponentCount() > 0) actions.add(Box.createHorizontalStrut(Theme.UNIT)); actions.add(button); }
+        brand.add(actions, BorderLayout.WEST);
+        // The icon of the first button, not its invisible frame, lines up with the text of the panels below.
+        brand.setBorder(new EmptyBorder(Theme.INSET, Theme.GUTTER - addSession.getInsets().left, Theme.GAP, Theme.INSET));
         var sidebarHeader = new JPanel(new BorderLayout()); sidebarHeader.setOpaque(false); sidebarHeader.add(brand, BorderLayout.NORTH); sidebarHeader.add(quota); sidebar.add(sidebarHeader, BorderLayout.NORTH);
         var scroll = new JScrollPane(active); scroll.setBorder(null); scroll.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER); sidebar.add(scroll);
         var archive = new JPanel(new BorderLayout()); archive.setBackground(Theme.SIDEBAR); archive.setBorder(BorderFactory.createMatteBorder(1, 0, 0, 0, Theme.BORDER));
