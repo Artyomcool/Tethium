@@ -31,6 +31,7 @@ public final class HostService implements AutoCloseable {
     private final HttpServer server;
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
     private final Map<String, Running> running = new ConcurrentHashMap<>();
+    private Backlog backlog;
     private final Map<String, Pending> pending = new ConcurrentHashMap<>();
     private final Semaphore slots = new Semaphore(16);
     private final String token = UUID.randomUUID() + "-" + UUID.randomUUID();
@@ -100,10 +101,19 @@ public final class HostService implements AutoCloseable {
             workers.submit(()->observeRestoredWorker(saved.sessionId(),run));
         }
         for (var project : store.projects()) for (var session : store.list(project.id())) schedule(session.id());
+        backlog=new Backlog(store,quota::snapshot,()->cpu==null?Json.object():cpu.machineUsage(),this::sessionBusy,this::bump);
         quotaMonitor.scheduleWithFixedDelay(this::observeQuota,0,15,TimeUnit.SECONDS);
+        quotaMonitor.scheduleWithFixedDelay(this::observeBacklog,15,15,TimeUnit.SECONDS);
         scheduleMonitor.scheduleWithFixedDelay(()->observeSchedules(System.currentTimeMillis()),1,1,TimeUnit.SECONDS);
         if(detachedEnabled)awake=new AwakeGuard(()->{try{return !closed&&store.autonomousWorkPending();}catch(Exception e){return false;}});
         if(detachedEnabled)cpu=new CpuSampler(usage,()->{var roots=new ArrayList<CpuSampler.Root>();for(var entry:running.entrySet())try{var worker=entry.getValue().worker;if(worker!=null){var root=worker.cpuRoot(store.get(entry.getKey()).projectId());if(root!=null)roots.add(root);}}catch(Exception ignored){}try{for(var p:store.claimedProcesses())roots.add(new CpuSampler.Root(p.path("pid").asLong(),p.path("started").asLong(),new CpuSampler.Owner(p.path("session").asText(),p.path("project").asText())));}catch(Exception ignored){}return roots;},store,resources);
+    }
+    private boolean sessionBusy(String id){
+        try{return running.containsKey(id)||!store.queued(id).isEmpty()||store.queuePaused(id)||usage.waitState(id).path("waiting").asBoolean();}catch(Exception e){return true;}
+    }
+    void observeBacklog(){
+        if(closed||draining)return;
+        try{for(String session:backlog.tick())schedule(session);}catch(Exception e){System.err.println("Backlog: "+e.getMessage());}
     }
     public JsonNode descriptor() { return Json.object("port", server.getAddress().getPort(), "token", token, "version", VERSION, "protocol", BuildInfo.PROTOCOL, "build", BuildInfo.BUILD, "hostBuild", BuildInfo.HOST, "pid", ProcessHandle.current().pid()); }
     private JsonNode health() { return Json.object("version", VERSION, "protocol", BuildInfo.PROTOCOL, "build", BuildInfo.BUILD, "hostBuild", BuildInfo.HOST, "draining", draining, "running", running.size(), "restartProtocol",1,"resourceControlProtocol",1,"workerProtocol",dev.tethium.worker.WorkerJournal.PROTOCOL,"handoffReady",running.values().stream().noneMatch(r->r.inProcessStarted)); }
@@ -131,6 +141,7 @@ public final class HostService implements AutoCloseable {
         if (method.equals("GET")) return switch (path) {
             case "/health" -> health();
             case "/resources" -> resources.snapshot();
+            case "/backlog" -> backlog.state(query(uri,"project"));
             case "/state" -> snapshot(query(uri, "session"),"window".equals(query(uri,"history")));
             case "/history/index" -> historyIndex(query(uri,"session"),"true".equals(query(uri,"gallery")));
             case "/history/page" -> historyPage(query(uri,"session"),Integer.parseInt(query(uri,"first")),Integer.parseInt(query(uri,"count")),"true".equals(query(uri,"gallery")));
@@ -185,6 +196,17 @@ public final class HostService implements AutoCloseable {
         synchronized(this){return commandBody(path,body);}
     }
     private Object commandBody(String path, JsonNode body) throws Exception {
+        if(path.equals("/backlog"))return backlog.add(body,body.path("sourceId").asText(null));
+        if(path.equals("/backlog-settings"))return backlog.settings(body);
+        if(path.startsWith("/backlog/")){
+            var parts=path.split("/");if(parts.length!=4)throw new IllegalArgumentException("Unknown endpoint");
+            return switch(parts[3]){
+                case "update"->backlog.update(parts[2],body);
+                case "remove"->backlog.remove(parts[2]);
+                case "start"->{String started=backlog.start(parts[2]);schedule(started);yield Json.object("session",started);}
+                default->throw new IllegalArgumentException("Unknown endpoint");
+            };
+        }
         if(path.equals("/resources")){store.cpuControl(body.path("scope").asText(),body.path("target").asText(),body.path("settings"));resources.refresh();return resources.snapshot();}
         if(path.equals("/mobile/pair")) { startMobile(); return mobile.pairInfo(); }
         if(path.equals("/mobile/revoke")) { startMobile(); return mobile.revoke(); }
@@ -382,7 +404,7 @@ public final class HostService implements AutoCloseable {
         var sessions = new ArrayList<JsonNode>();
         var projects = store.projects();
         for (var project : projects) for (var session : store.list(project.id())) if(store.trashedAt(session.id())==0)sessions.add(sessionJson(session));
-        var projectValues=new ArrayList<JsonNode>();for(var p:projects)projectValues.add(Json.object("id",p.id(),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"crossProject",store.crossProject(p.id()),"icon",ProjectIcons.version(Path.of(p.root())),"widget",projectWidgets.read(Path.of(p.root()))));
+        var backlogWaiting=store.backlogWaiting();var projectValues=new ArrayList<JsonNode>();for(var p:projects)projectValues.add(Json.object("backlog",backlogWaiting.getOrDefault(p.id(),0),"id",p.id(),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"crossProject",store.crossProject(p.id()),"icon",ProjectIcons.version(Path.of(p.root())),"widget",projectWidgets.read(Path.of(p.root()))));
         var result = Json.object("machineUsage",cpu==null?Json.object():cpu.machineUsage(),"resources",resources.snapshot(),"files",store.projectFiles(),"resourceUsage",usage.sidebar(),"revision", revision.get(), "projects", projectValues, "sessions", sessions, "quota", quota.snapshot(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
         if (selected != null && sessions.stream().anyMatch(s -> s.path("id").asText().equals(selected))) {
             var messages = new ArrayList<SessionStore.Message>(); long cursor = 0;
@@ -661,7 +683,7 @@ public final class HostService implements AutoCloseable {
     private SessionToolsServer.Extension tools(String caller,Running owner) {
         return new SessionToolsServer.Extension() {
             public List<JsonNode> tools() {
-                var list=new ArrayList<>(List.of(Autonomy.tool(),SessionSchedule.tool(),tool("process_track","Attribute CPU of an existing or detached background process and its descendants to this session. Register long-lived helper services you start or reuse that were launched outside this session. PID reuse is guarded by start time.","pid"),tool("session_spawn", "Create and start a child session in this project; it inherits your executor, model and settings. Returns its id immediately. Result is delivered to the parent history. Do not create worktrees automatically.", "title", "prompt"),
+                var list=new ArrayList<>(Backlog.tools());list.addAll(List.of(Autonomy.tool(),SessionSchedule.tool(),tool("process_track","Attribute CPU of an existing or detached background process and its descendants to this session. Register long-lived helper services you start or reuse that were launched outside this session. PID reuse is guarded by start time.","pid"),tool("session_spawn", "Create and start a child session in this project; it inherits your executor, model and settings. Returns its id immediately. Result is delivered to the parent history. Do not create worktrees automatically.", "title", "prompt"),
                         tool("session_delegate", "Queue work for an active session in the same project. Returns immediately; result is delivered to your history.", "session_id", "prompt"),
                         tool("session_message", "Send an informational message to another session in this project without starting a run.", "session_id", "text"),
                         tool("artifact_publish", "Publish HTML, Markdown, images, or a runnable build (JAR, EXE, or ZIP containing it). Remote clients can download builds and launch them on their computer. Paths are relative to your working directory or absolute.", "path", "title"),
@@ -679,6 +701,9 @@ public final class HostService implements AutoCloseable {
                 var source = store.get(caller);
                 Object response;
                 switch (name) {
+                    case "backlog_add" -> response=backlog.addFromAgent(caller,source.projectId(),args);
+                    case "backlog_list" -> response=backlog.state(source.projectId());
+                    case "backlog_remove" -> response=backlog.removeInProject(source.projectId(),args.path("id").asText());
                     case "session_autonomy" -> {
                         synchronized(HostService.this){
                             // Serialize with Stop and reject calls from a cancelled or superseded run.

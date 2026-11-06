@@ -92,11 +92,54 @@ public final class SessionStore implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS message_revisions(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,revision INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS project_cross_project(project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,enabled INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS session_technical(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,enabled INTEGER NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS backlog_tasks(id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,title TEXT NOT NULL,prompt TEXT NOT NULL,priority INTEGER NOT NULL,min_quota INTEGER,min_free_cpu INTEGER,target TEXT NOT NULL,session_id TEXT,session_title TEXT,source_id TEXT,state TEXT NOT NULL,job_id TEXT,created_at INTEGER NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS backlog_settings(id INTEGER PRIMARY KEY CHECK(id=1),max_running INTEGER NOT NULL,min_quota INTEGER NOT NULL,min_free_cpu INTEGER NOT NULL,paused INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS project_order(project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,position INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS session_order(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,position INTEGER NOT NULL)");
         }
     }
 
+    /** Tasks put off for better times, most important first; the rules for starting them are in host.Backlog. */
+    public synchronized List<JsonNode> backlog()throws SQLException{
+        var rows=new ArrayList<JsonNode>();
+        try(var q=connection.createStatement();var r=q.executeQuery("SELECT * FROM backlog_tasks ORDER BY priority,created_at,rowid")){while(r.next()){
+            Integer quota=r.getInt("min_quota");if(r.wasNull())quota=null;Integer cpu=r.getInt("min_free_cpu");if(r.wasNull())cpu=null;
+            rows.add(Json.object("id",r.getString("id"),"projectId",r.getString("project_id"),"title",r.getString("title"),"prompt",r.getString("prompt"),"priority",switch(r.getInt("priority")){case 0->"high";case 2->"low";default->"normal";},"minQuota",quota,"minFreeCpu",cpu,"target",r.getString("target"),"sessionId",r.getString("session_id"),"sessionTitle",r.getString("session_title"),"sourceId",r.getString("source_id"),"state",r.getString("state"),"jobId",r.getString("job_id"),"createdAt",r.getLong("created_at")));
+        }}
+        return rows;
+    }
+    public synchronized String backlogAdd(String project,String title,String prompt,int priority,Integer minQuota,Integer minFreeCpu,String target,String session,String sessionTitle,String source)throws SQLException{
+        String id=UUID.randomUUID().toString();
+        execute("INSERT INTO backlog_tasks(id,project_id,title,prompt,priority,min_quota,min_free_cpu,target,session_id,session_title,source_id,state,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,'waiting',?)",id,project,title,prompt,priority,minQuota,minFreeCpu,target,session,sessionTitle,source,System.currentTimeMillis());
+        return id;
+    }
+    public synchronized void backlogUpdate(String id,String title,String prompt,int priority,Integer minQuota,Integer minFreeCpu,String target,String session,String sessionTitle)throws SQLException{
+        execute("UPDATE backlog_tasks SET title=?,prompt=?,priority=?,min_quota=?,min_free_cpu=?,target=?,session_id=?,session_title=?,state='waiting',job_id=NULL WHERE id=?",title,prompt,priority,minQuota,minFreeCpu,target,session,sessionTitle,id);
+    }
+    /** From here on the task belongs to this session, so a repeat after a failure goes on where it stopped. */
+    public synchronized void backlogStarted(String id,String session,String job)throws SQLException{execute("UPDATE backlog_tasks SET state='running',target='session',session_id=?,job_id=? WHERE id=?",session,job,id);}
+    public synchronized void backlogFailed(String id)throws SQLException{execute("UPDATE backlog_tasks SET state='failed',job_id=NULL WHERE id=?",id);}
+    public synchronized void backlogRemove(String id)throws SQLException{execute("DELETE FROM backlog_tasks WHERE id=?",id);}
+    public synchronized Map<String,Integer> backlogWaiting()throws SQLException{
+        var counts=new HashMap<String,Integer>();
+        try(var q=connection.createStatement();var r=q.executeQuery("SELECT project_id,COUNT(*) FROM backlog_tasks WHERE state<>'running' GROUP BY 1")){while(r.next())counts.put(r.getString(1),r.getInt(2));}
+        return counts;
+    }
+    public synchronized JsonNode backlogSettings()throws SQLException{
+        try(var q=connection.createStatement();var r=q.executeQuery("SELECT * FROM backlog_settings WHERE id=1")){
+            if(r.next())return Json.object("maxRunning",r.getInt("max_running"),"minQuota",r.getInt("min_quota"),"minFreeCpu",r.getInt("min_free_cpu"),"paused",r.getBoolean("paused"));
+        }
+        return Json.object("maxRunning",3,"minQuota",80,"minFreeCpu",40,"paused",false);
+    }
+    public synchronized void backlogSettings(int maxRunning,int minQuota,int minFreeCpu,boolean paused)throws SQLException{
+        execute("INSERT INTO backlog_settings VALUES(1,?,?,?,?) ON CONFLICT(id) DO UPDATE SET max_running=excluded.max_running,min_quota=excluded.min_quota,min_free_cpu=excluded.min_free_cpu,paused=excluded.paused",maxRunning,minQuota,minFreeCpu,paused);
+    }
+    public synchronized String jobState(String id)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT status FROM jobs WHERE id=?")){q.setString(1,id);try(var r=q.executeQuery()){return r.next()?r.getString(1):null;}}
+    }
+    public synchronized boolean has(String session)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT 1 FROM sessions WHERE id=?")){q.setString(1,session);try(var r=q.executeQuery()){return r.next();}}
+    }
     /** A technical session serves a program: it lights no indicators, never waits for a person, and works even when listed as inactive. */
     public synchronized boolean technical(String id)throws SQLException{
         try(var q=connection.prepareStatement("SELECT enabled FROM session_technical WHERE session_id=?")){q.setString(1,id);try(var r=q.executeQuery()){return r.next()&&r.getBoolean(1);}}
@@ -133,6 +176,7 @@ public final class SessionStore implements AutoCloseable {
             execute("UPDATE sessions SET parent_id=NULL WHERE parent_id=?",id);execute("UPDATE jobs SET source_id=NULL WHERE source_id=?",id);
             execute("DELETE FROM worker_replies WHERE run_id IN (SELECT run_id FROM worker_runs WHERE session_id=?)",id);
             execute("DELETE FROM worker_runs WHERE session_id=?",id);
+            execute("DELETE FROM backlog_tasks WHERE session_id=? AND state='running'",id);execute("UPDATE backlog_tasks SET target='new',session_id=NULL WHERE session_id=?",id);execute("UPDATE backlog_tasks SET source_id=NULL WHERE source_id=?",id);
             for(String table:List.of("autonomy_jobs","queue_merges","queue_interruptions"))execute("DELETE FROM "+table+" WHERE job_id IN (SELECT id FROM jobs WHERE session_id=?)",id);
             execute("DELETE FROM imported_messages WHERE source_key IN (SELECT source_key FROM imports WHERE session_id=?)",id);
             for(String table:List.of("imports","messages","run_messages","media_jobs","session_media","bindings","run_progress","events","runs","jobs","preferences","queue_state","queue_returns","queue_operations","session_seen","session_marks","cpu_claims","session_files","session_autonomy","artifacts","session_trash"))execute("DELETE FROM "+table+" WHERE session_id=?",id);

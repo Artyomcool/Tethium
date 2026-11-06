@@ -110,9 +110,9 @@ public final class WorkspaceFrame extends JFrame {
     private JsonNode pendingTake;
     private final Runnable onClose;
     private final javax.swing.Timer draftTimer;
-    private record Node(String id, String title, boolean project, boolean running, String status, String path, String attention,boolean file,int pausedQueued) {
-        Node(String id,String title,boolean project,boolean running,String status,String path,String attention){this(id,title,project,running,status,path,attention,false,0);}
-        Node(String id,String title,boolean project,boolean running,String status,String path,String attention,boolean file){this(id,title,project,running,status,path,attention,file,0);}
+    private record Node(String id, String title, boolean project, boolean running, String status, String path, String attention,boolean file,int pausedQueued,int backlog) {
+        Node(String id,String title,boolean project,boolean running,String status,String path,String attention){this(id,title,project,running,status,path,attention,false,0,0);}
+        Node(String id,String title,boolean project,boolean running,String status,String path,String attention,boolean file){this(id,title,project,running,status,path,attention,file,0,0);}
         public String toString() { return title; }
     }
     private record Artifact(String title, Path path) { public String toString() { return title; } }
@@ -161,11 +161,12 @@ public final class WorkspaceFrame extends JFrame {
                     label.setForeground(n.running ? Theme.ACCENT : n.status.equals("FAILED") ? Theme.RED : Theme.TEXT);
                     label.setToolTipText(n.path); label.setBorder(new EmptyBorder(0, (n.project?Theme.UNIT/2:Theme.UNIT)+22+Theme.GAP, 0, Theme.UNIT));
                     rowPanel.removeAll(); rowPanel.setBackground(selected?Theme.SELECTED:Theme.SIDEBAR); rowPanel.add(label);
-                    rowPanel.add(Box.createHorizontalStrut((n.pausedQueued>0?Theme.GUTTER*2:n.project?Theme.GAP:Theme.GUTTER)+(n.project&&expanded&&projectWidgets.available(projects.get(n.id),"right")?rightWidgetWidth(projects.get(n.id))+2+(n.pausedQueued==0&&!n.attention.isEmpty()?12:0):0)),BorderLayout.EAST);
+                    rowPanel.add(Box.createHorizontalStrut(backlogWidth(label,n)+(n.pausedQueued>0?Theme.GUTTER*2:n.project?Theme.GAP:Theme.GUTTER)+(n.project&&expanded&&projectWidgets.available(projects.get(n.id),"right")?rightWidgetWidth(projects.get(n.id))+2+(n.pausedQueued==0&&!n.attention.isEmpty()?12:0):0)),BorderLayout.EAST);
                     // One line per fact: path, attention, paused queue, then each project widget with its error (if any).
                     var hint=new StringBuilder("<html>").append(escapeHtml(n.path));
                     if(!n.attention.isEmpty())hint.append("<br>").append(n.attention.equals("question")?"Ждёт ответа":n.attention.equals("manual")?"Отмечено: требует внимания":"Работа завершена · новый результат");
                     if(n.pausedQueued>0)hint.append("<br>Очередь на паузе: ").append(n.pausedQueued);
+                    if(n.backlog>0)hint.append("<br>Отложено задач: ").append(n.backlog);
                     if(n.project){var widget=projects.get(n.id);if(widget!=null){var w=widget.path("widget");for(String slot:List.of("bottom","right")){var v=w.path(slot);if(!v.isObject())continue;
                         String description=v.path("description").asText().strip(),error=v.path("error").asText().strip();
                         if(!description.isEmpty())hint.append("<br>").append(escapeHtml(description));
@@ -255,8 +256,9 @@ public final class WorkspaceFrame extends JFrame {
             var path=tree.getPathForRow(row);var value=((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject();
             if(!(value instanceof Node n))continue;var icon=n.file?Theme.icon("attachment"):n.project?IdentityIcons.ofProject(n.id,n.title,n.path):IdentityIcons.of(false,n.title,n.path);icon.paintIcon(tree,g,bounds.x+(n.project?Theme.UNIT/2:Theme.UNIT)+(22-icon.getIconWidth())/2,bounds.y+(bounds.height-icon.getIconHeight())/2);if(n.file)continue;
             if(!n.project||!tree.isExpanded(path))ResourceBars.paint(g,x,bounds.y+bounds.height,Math.max(0,right-x),ResourceBars.share(resourceUsage,machineUsage,resourceControl,n.id,n.project));
+            if(n.backlog>0){var label=backlogBounds(tree,n,bounds);var fm=tree.getFontMetrics(tree.getFont());g.setFont(tree.getFont());g.setColor(Theme.MUTED);g.drawString("["+n.backlog+"]",label.x,bounds.y+(bounds.height+fm.getAscent()-fm.getDescent())/2-3);}
             if(n.project&&tree.isExpanded(path)&&projectWidgets.available(projects.get(n.id))){
-                var project=projects.get(n.id);int start=bounds.x+Theme.UNIT/2+22+Theme.GAP,edge=right-(n.pausedQueued>0?28:!n.attention.isEmpty()?12:0);
+                var project=projects.get(n.id);int start=bounds.x+Theme.UNIT/2+22+Theme.GAP,edge=right-(n.pausedQueued>0?28:!n.attention.isEmpty()?12:0)-backlogWidth(tree,n);
                 if(projectWidgets.available(project,"right")){
                     int textWidth=tree.getFontMetrics(projectFont(tree)).stringWidth(n.title),widgetWidth=rightWidgetWidth(project);
                     int contentWidth=Math.max(textWidth,projectWidgets.preferredWidth(project,"bottom",13));
@@ -306,6 +308,10 @@ public final class WorkspaceFrame extends JFrame {
                 if (n.project) selectedProject = n.id; else if(n.file)selectDocument(n.id);else selectSession(n.id);
             });
             tree.addMouseListener(new MouseAdapter() {
+                @Override public void mouseClicked(MouseEvent e) {
+                    if(!SwingUtilities.isLeftMouseButton(e))return;int row=tree.getClosestRowForLocation(e.getX(),e.getY());var bounds=tree.getRowBounds(row);if(bounds==null)return;
+                    if(((DefaultMutableTreeNode)tree.getPathForRow(row).getLastPathComponent()).getUserObject() instanceof Node n&&n.backlog>0&&backlogBounds(tree,n,bounds).contains(e.getPoint()))openBacklog(n.id,sessionIn(n.id));
+                }
                 @Override public void mousePressed(MouseEvent e) { popup(e, tree); }
                 @Override public void mouseReleased(MouseEvent e) { popup(e, tree); }
             });
@@ -397,6 +403,13 @@ public final class WorkspaceFrame extends JFrame {
         var split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, sidebar, workspace); split.setDividerLocation(260); split.setDividerSize(4); split.setBorder(null); setContentPane(split);
         model.sessionEnabled(false); access.setEnabled(false); send.setEnabled(false); stop.setEnabled(false);
     }
+    private static int backlogWidth(JComponent c,Node n){return n.backlog>0?c.getFontMetrics(c.getFont()).stringWidth("["+n.backlog+"]")+Theme.GAP:0;}
+    private static Rectangle backlogBounds(JTree tree,Node n,Rectangle row){
+        int right=tree.getWidth()-tree.getInsets().right-Theme.GAP,edge=right-(n.pausedQueued>0?28:!n.attention.isEmpty()?12:0),width=backlogWidth(tree,n);
+        return new Rectangle(edge-width+Theme.GAP,row.y,width,row.height);
+    }
+    private String sessionIn(String project){var s=selected==null?null:sessions.get(selected);return s!=null&&s.path("projectId").asText().equals(project)?selected:null;}
+    private void openBacklog(String project,String session){BacklogDialog.open(this,host,projects,sessions,project,session);}
     private void popup(MouseEvent event, JTree tree) {
         if (!event.isPopupTrigger()) return;
         var path = tree.getPathForLocation(event.getX(), event.getY()); if (path == null) return;
@@ -420,6 +433,7 @@ public final class WorkspaceFrame extends JFrame {
         if(n.project){var pin=new JMenuItem("Закрепить файл в проекте…");pin.addActionListener(e->choosePinnedFile(true));menu.add(pin);}
         if(n.project&&!host.remote()){var settings=new JMenuItem("Настройки проекта и GitHub…");settings.addActionListener(e->ProjectDialog.open(this,host,projects.get(n.id),value->{}));menu.add(settings);}
         var cpuItem=new JMenuItem("CPU: лимит и приоритет…");cpuItem.addActionListener(e->configureCpu(n.project?"project":"session",n.id,n.title));menu.add(cpuItem);
+        var backlogItem=new JMenuItem("Отложенные задачи…");backlogItem.addActionListener(e->openBacklog(n.project?n.id:sessions.get(n.id).path("projectId").asText(),n.project?null:n.id));menu.add(backlogItem);
         var usageItem=new JMenuItem("Токены и CPU…");usageItem.addActionListener(e->UsageDialog.open(this,host,projects,sessions,n.project?n.id:sessions.get(n.id).path("projectId").asText(),n.project?null:n.id));menu.add(usageItem);
         menu.show(tree, event.getX(), event.getY());
     }
@@ -441,7 +455,7 @@ public final class WorkspaceFrame extends JFrame {
         }); if(!host.remote())menu.add(quit);else{var reconnect=new JMenuItem("Подключить другой ноутбук…");reconnect.addActionListener(e->{saveDraft();RemoteMain.restartPairing(this);});menu.add(reconnect);} menu.show(heading, Math.max(0, heading.getWidth() - 100), heading.getHeight());
     }
     private void workspaceSettings(){
-        var menu=new JPopupMenu();var cpu=new JMenuItem("CPU: общий лимит и приоритет…");cpu.addActionListener(e->configureCpu("global","","Все исполнения"));menu.add(cpu);var trash=new JMenuItem("Корзина сессий…");trash.addActionListener(e->TrashDialog.open(this,host,()->poller.execute(this::poll)));menu.add(trash);menu.show(active,0,0);
+        var menu=new JPopupMenu();var allBacklog=new JMenuItem("Отложенные задачи…");allBacklog.addActionListener(e->openBacklog("",null));menu.add(allBacklog);var cpu=new JMenuItem("CPU: общий лимит и приоритет…");cpu.addActionListener(e->configureCpu("global","","Все исполнения"));menu.add(cpu);var trash=new JMenuItem("Корзина сессий…");trash.addActionListener(e->TrashDialog.open(this,host,()->poller.execute(this::poll)));menu.add(trash);menu.show(active,0,0);
     }
     private void configureCpu(String scope,String id,String title){
         action(()->{var state=host.get("/resources");var row=scope.equals("global")?state.path("global"):state.path(scope+"s").path(id);SwingUtilities.invokeLater(()->{var settings=CpuSettingsDialog.show(this,scope,title,state,row);if(settings!=null)action(()->host.post("/resources",Json.object("scope",scope,"target",id,"settings",settings)));});});
@@ -567,7 +581,7 @@ public final class WorkspaceFrame extends JFrame {
         projectWidgets.update(projects.values());active.repaint();inactive.repaint();
         sessions.clear(); for (var s : state.path("sessions")) sessions.put(s.path("id").asText(), s);
         documents.clear();for(var d:state.path("files"))documents.put(d.path("id").asText(),d);
-        String signature = state.path("files").toString()+state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("sessions").findValues("active") + state.path("sessions").findValues("technical") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
+        String signature = state.path("files").toString()+state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("projects").findValues("backlog") + state.path("sessions").findValues("active") + state.path("sessions").findValues("technical") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
         signature+=state.path("sessions").findValues("queuePaused").toString()+state.path("sessions").findValues("queued");
         if (!signature.equals(treeSignature)) { rebuildTrees(state); treeSignature = signature; }
         if (selectedProject == null && !projects.isEmpty()) selectedProject = projects.keySet().iterator().next();
@@ -646,7 +660,7 @@ public final class WorkspaceFrame extends JFrame {
                     boolean running=noticed.stream().anyMatch(s->s.path("running").asBoolean());
                     String attention=noticed.stream().anyMatch(s->s.path("attention").path("kind").asText().equals("question"))?"question":noticed.stream().anyMatch(s->s.path("attention").path("manual").asBoolean())?"manual":noticed.stream().anyMatch(s->!s.path("attention").path("kind").asText().isEmpty())?"finished":"";
                     int pausedQueued=noticed.stream().filter(s->s.path("queuePaused").asBoolean()).mapToInt(s->Math.max(0,s.path("queued").asInt())).sum();
-                    var projectNode = new DefaultMutableTreeNode(new Node(pid, project.path("title").asText(), true, running, "", project.path("root").asText(),attention,false,pausedQueued)); root.add(projectNode);
+                    var projectNode = new DefaultMutableTreeNode(new Node(pid, project.path("title").asText(), true, running, "", project.path("root").asText(),attention,false,pausedQueued,project.path("backlog").asInt())); root.add(projectNode);
                     if(archived==projectArchived)for(var document:documents.values())if(document.path("projectId").asText().equals(pid)){var node=new DefaultMutableTreeNode(new Node(document.path("id").asText(),document.path("title").asText(),false,false,"",document.path("path").asText(),"",true));projectNode.add(node);if(document.path("id").asText().equals(selectedFile))selection=new TreePath(node.getPath());}
                     var nodes = new LinkedHashMap<String, DefaultMutableTreeNode>();
                     for (var s : matching) nodes.put(s.path("id").asText(), new DefaultMutableTreeNode(new Node(s.path("id").asText(), s.path("title").asText(), false, s.path("running").asBoolean()&&!s.path("technical").asBoolean(), s.path("technical").asBoolean()?"":s.path("status").asText(), s.path("directory").asText(),s.path("attention").path("kind").asText())));
