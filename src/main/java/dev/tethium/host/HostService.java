@@ -56,8 +56,7 @@ public final class HostService implements AutoCloseable {
         Running(long startedAt){activity=new RunActivity(startedAt);}
         volatile boolean stopping, quotaBlocked;
         /** Characters of the open thought already shown in the live text; -1 when no thought is open. */
-        int thoughtChars = -1;
-        boolean thoughtPending, actionsOpen;
+        final dev.tethium.core.Narrator narrator = new dev.tethium.core.Narrator();
         volatile boolean inProcessStarted;
         volatile AgentAdapter.Provider provider;
         volatile SessionStore.WorkerRun workerRun;
@@ -519,36 +518,9 @@ public final class HostService implements AutoCloseable {
         }
     }
     private static boolean quotaError(String text){return text!=null&&(text.contains("usageLimitExceeded")||text.toLowerCase(Locale.ROOT).contains("usage limit")||text.toLowerCase(Locale.ROOT).contains("weekly limit"));}
-    private static final int THOUGHT_CAP = 1500;
-    /**
-     * The live answer narrates what the agent does: consecutive tool calls form one compact block of "▸" lines, and for Claude the
-     * start of each thought is shown muted (opened only when thought text actually arrives). The stored message keeps the text and these lines, not the thoughts.
-     */
     private static void narrate(Running run, AgentAdapter.Event event) {
-        synchronized (run.text) {
-            switch (event.type()) {
-                case "text" -> { closeThought(run); endActions(run); run.text.append(event.text()); }
-                case "thinking" -> {
-                    if (!run.thoughtPending || event.text() == null || event.text().isBlank() && run.thoughtChars <= 0) return;
-                    if (run.thoughtChars < 0) { endActions(run); run.text.append("\n\n```thought\n"); run.thoughtChars = 0; }
-                    int left = THOUGHT_CAP - run.thoughtChars; if (left <= 0) return;
-                    String chunk = event.text();
-                    if (chunk.length() > left) { run.text.append(chunk, 0, left).append("…"); run.thoughtChars = THOUGHT_CAP; } else { run.text.append(chunk); run.thoughtChars += chunk.length(); }
-                }
-                case "item/started" -> {
-                    var item = event.raw().path("params").path("item");
-                    if (item.path("type").asText().equals("reasoning")) { closeThought(run); run.thoughtPending = true; return; }
-                    String label = RunActivity.label(item); if (label.isEmpty()) return;
-                    closeThought(run);
-                    run.text.append(dev.tethium.core.ActionLines.piece(run.actionsOpen, label)); run.actionsOpen = true;
-                }
-                case "item/completed" -> { if (event.raw().path("params").path("item").path("type").asText().equals("reasoning")) { closeThought(run); run.thoughtPending = false; } }
-                default -> { }
-            }
-        }
+        synchronized (run.text) { run.text.append(run.narrator.piece(event)); }
     }
-    private static void closeThought(Running run) { if (run.thoughtChars < 0) return; run.text.append("\n```\n\n"); run.thoughtChars = -1; }
-    private static void endActions(Running run) { if (!run.actionsOpen) return; run.text.append("\n\n"); run.actionsOpen = false; }
     /** Only the Codex account quota is observed by the host; other executors report limit errors as ordinary failures. */
     private static boolean codexQuota(Running run){return run.provider==null||run.provider==AgentAdapter.Provider.CODEX;}
     private void observe(String id,Running run,AgentAdapter.Event event){

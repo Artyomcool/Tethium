@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 /** The live answer narrates tool calls and shows a capped start of each thought; the stored message keeps only the text. */
 class LiveNarrationTest {
     @TempDir Path root;
-    @Test void liveTextCarriesActionsAndCappedThoughtsAndTheMessageKeepsOnlyTheActions() throws Exception {
+    @Test void liveTextCarriesActionsAndCappedThoughtsAndTheMessageKeepsThem() throws Exception {
         var adapter = new AgentAdapter() {
             public Provider provider() { return Provider.CODEX; }
             public Result run(Request r, Consumer<Event> events, Cancellation cancel) throws Exception {
@@ -50,8 +50,7 @@ class LiveNarrationTest {
             for (int i = 0; i < 100 && client.get("/state?session=" + s).path("sessions").get(0).path("running").asBoolean(); i++) Thread.sleep(50);
             var messages = client.get("/state?session=" + s).path("conversation").path("messages");
             String last = messages.get(messages.size() - 1).path("text").asText();
-            assertFalse(last.contains("thought") || last.contains("x".repeat(50)), "thoughts are not kept: " + last);
-            assertEquals(dev.tethium.core.ActionLines.MARK + "Команда: Запускает тесты шлюза  \n" + dev.tethium.core.ActionLines.MARK + "Файлы: C:/x/A.java\n\nТесты прошли.", last, "reports stay after Stop");
+            assertEquals(live.strip(), last, "the message keeps what was seen live: thoughts and reports");
         }
     }
 }

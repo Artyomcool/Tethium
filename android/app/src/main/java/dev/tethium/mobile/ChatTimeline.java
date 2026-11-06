@@ -30,7 +30,7 @@ final class ChatTimeline extends FrameLayout {
     boolean more;
     static volatile boolean showThoughts=true;
     private static final String ACTION="\u2014\u2063 ";
-    /** Reports of commands are shown muted and without the mark; they are not part of what a message says when copied. */
+    /** Reports of commands are shown muted and without the mark; they and thoughts are not part of what a message says when copied. */
     private void render(TextView view,String text){
         var shown=new android.text.SpannableStringBuilder(markdown.toMarkdown(text));
         for(int at=shown.toString().lastIndexOf(ACTION);at>=0;at=at==0?-1:shown.toString().lastIndexOf(ACTION,at-1)){
@@ -41,8 +41,8 @@ final class ChatTimeline extends FrameLayout {
         markdown.setParsedMarkdown(view,shown);
     }
     static String withoutActions(String text){
-        if(!text.contains(ACTION))return text;
-        return text.replaceAll("(?m)^"+ACTION+".*(\\R|\\z)","").replaceAll("\n{3,}","\n\n").strip();
+        if(!text.contains(ACTION)&&!text.contains("```thought"))return text;
+        return text.replaceAll("(?ms)^```thought\\R.*?(^```[ \\t]*(\\R|\\z)|\\z)","").replaceAll("(?m)^"+ACTION+".*(\\R|\\z)","").replaceAll("\n{3,}","\n\n").strip();
     }
     /** Thought blocks become quotes (or vanish when hidden). */
     static String narration(String text){
@@ -86,7 +86,7 @@ final class ChatTimeline extends FrameLayout {
         if(rebuild){start=nextStart;rendered.clear();anchors.clear();userTitles.clear();messages.removeAllViews();if(start>0||more){messages.addView(ui.button("Загрузить предыдущие сообщения",()->{if(start>0){int before=scroll.getChildAt(0).getHeight(),y=scroll.getScrollY();limit+=100;start=-1;render(history,lastLive,true);scroll.post(()->scroll.scrollTo(0,y+scroll.getChildAt(0).getHeight()-before));}else loadEarlier.run();}));ui.gap(messages,16);}}
         for(int i=start;i<array.length();i++){var m=array.optJSONObject(i);long key=m.optLong("sequence");if(rendered.containsKey(key))continue;rendered.put(key,m.toString());String role=m.optString("role"),text=m.optString("text");boolean user=role.equals("user"),assistant=role.equals("assistant");
             var card=ui.col();if(user){card.setBackground(ui.shape(Ui.PANEL,18));ui.pad(card,14,6);}var header=ui.row();var name=ui.label(user?"ВЫ":assistant?m.optString("provider","Codex").toUpperCase(Locale.ROOT):"СОБЫТИЕ",11,user?Ui.ACCENT:Ui.MUTED);name.setTypeface(Typeface.DEFAULT_BOLD);header.addView(name,new LinearLayout.LayoutParams(0,-2,1));header.addView(ui.icon("copy","Копировать сообщение",()->ui.copy(withoutActions(text))),new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));card.addView(header);
-            var t=body();if(user)t.setText(text);else render(t,text);if(!assistant&&!user){t.setMaxLines(3);t.setEllipsize(TextUtils.TruncateAt.END);t.setTextColor(Ui.MUTED);t.setOnClickListener(v->{var detail=ui.col();ui.pad(detail,16,12);var full=body();render(full,text);var sc=new ScrollView(getContext());sc.addView(full);detail.addView(sc,new LinearLayout.LayoutParams(-1,-1));ui.sheet("Событие",detail);});}card.addView(t);ui.gap(card,user?14:4);messages.addView(card);anchors.put(key,card);if(user)userTitles.put(key,text.replace('\n',' '));ui.gap(messages,20);
+            var t=body();if(user)t.setText(text);else render(t,narration(text));if(!assistant&&!user){t.setMaxLines(3);t.setEllipsize(TextUtils.TruncateAt.END);t.setTextColor(Ui.MUTED);t.setOnClickListener(v->{var detail=ui.col();ui.pad(detail,16,12);var full=body();render(full,narration(text));var sc=new ScrollView(getContext());sc.addView(full);detail.addView(sc,new LinearLayout.LayoutParams(-1,-1));ui.sheet("Событие",detail);});}card.addView(t);ui.gap(card,user?14:4);messages.addView(card);anchors.put(key,card);if(user)userTitles.put(key,text.replace('\n',' '));ui.gap(messages,20);
         }
         if(!streaming.equals(lastLive)){lastLive=streaming;render(liveText,narration(streaming));}live.setVisibility(streaming.isEmpty()?GONE:VISIBLE);
         if(array.length()==0&&streaming.isEmpty()&&messages.getChildCount()==0){var empty=ui.col();ui.pad(empty,8,36);empty.addView(ui.title("Начнём с задачи"));ui.gap(empty,12);empty.addView(ui.label("Все действия выполняются на ноутбуке. Здесь — тот же разговор, очередь и результаты.",16,Ui.MUTED));messages.addView(empty);start=-1;}

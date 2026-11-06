@@ -65,6 +65,24 @@ class ActionLinesTest {
             assertEquals("Итог", lastAssistant(store, s.id()));
         }
     }
+    private static Event reasoning(String method) { return new Event(method, "", Json.object("method", method, "params", Json.object("item", Json.object("id", "t", "type", "reasoning")))); }
+    private static Event thought(String value) { return new Event("thinking", value, Json.object()); }
+    @Test void thoughtsStayLikeReportsAndNeverGoBackToAnAgent() throws Exception {
+        try (var store = new SessionStore(dir.resolve("t.db"))) {
+            Path root = Files.createDirectories(dir.resolve("r")); var s = store.create(store.project(root), null, "s", root);
+            new SessionRunner(store).run(s.id(), agent(Provider.CLAUDE, r -> new Result("c", Status.COMPLETED, "Готово."), reasoning("item/started"), thought("Думаю про тесты"), reasoning("item/completed"), started("a"), text("Готово.")), "go", null, null, e -> {}, new Cancellation());
+            String kept = lastAssistant(store, s.id());
+            assertEquals("```thought\nДумаю про тесты\n```\n\n\n\n" + M + "Команда: a\n\nГотово.", kept);
+            new SessionRunner(store).run(s.id(), agent(Provider.CLAUDE, r -> new Result("c", Status.CANCELLED, ""), reasoning("item/started"), thought("Оборванная мысль")), "go", null, null, e -> {}, new Cancellation());
+            assertEquals("```thought\nОборванная мысль\n```", lastAssistant(store, s.id()), "a thought cut off by an interruption is closed");
+            new SessionRunner(store).run(s.id(), agent(Provider.CLAUDE, r -> new Result("c", Status.COMPLETED, "Текст"), reasoning("item/started"), thought("   "), reasoning("item/completed"), text("Текст")), "go", null, null, e -> {}, new Cancellation());
+            assertEquals("Текст", lastAssistant(store, s.id()), "an empty thought leaves nothing");
+            String[] prompt = {""};
+            new SessionRunner(store).run(s.id(), agent(Provider.CODEX, r -> { prompt[0] = r.prompt(); return new Result("x", Status.COMPLETED, "ok"); }), "next", null, null, e -> {}, new Cancellation());
+            assertTrue(prompt[0].contains("Готово."), prompt[0]);
+            assertFalse(prompt[0].contains("Думаю про тесты") || prompt[0].contains("Оборванная") || prompt[0].contains("thought"), prompt[0]);
+        }
+    }
     @Test void mergingAndStripping() {
         String shown = "Смотрю.\n\n" + M + "Команда: a  \n" + M + "Команда: b\n\nГотово.";
         assertEquals("Смотрю.\n\nГотово.", ActionLines.strip(shown));
@@ -73,5 +91,7 @@ class ActionLinesTest {
         assertEquals("\n\n" + M + "x", ActionLines.piece(false, "x")); assertEquals("  \n" + M + "x", ActionLines.piece(true, "x"));
         assertEquals(M + "Команда: a\n\nИтог", ActionLines.merge("\n\n" + M + "Команда: a", "Итог"), "a result the output lacks is added");
         assertEquals("Итог", ActionLines.merge("Комментарий", "Итог"));
+        assertEquals("До\n\nПосле", ActionLines.strip("До\n\n```thought\nмысль\n```\n\nПосле"));
+        assertEquals("До", ActionLines.strip("До\n\n```thought\nбез конца"));
     }
 }
