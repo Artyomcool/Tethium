@@ -22,6 +22,24 @@ class BacklogHostTest {
     private void until(java.util.concurrent.Callable<Boolean> test, String what) throws Exception { for (int i = 0; i < 200; i++) { if (test.call()) return; Thread.sleep(50); } fail("Timed out: " + what); }
     private static JsonNode session(HostClient c, String id) throws Exception { for (var x : c.get("/state").path("sessions")) if (x.path("id").asText().equals(id)) return x; throw new AssertionError(id); }
     private static JsonNode project(HostClient c) throws Exception { return c.get("/state").path("projects").get(0); }
+    @Test void alternateExecutorRunsTheJobButTheNextUserMessageKeepsSessionExecutor() throws Exception {
+        var received=new CopyOnWriteArrayList<String>();
+        var codex=new AgentAdapter(){public Provider provider(){return Provider.CODEX;}public Result run(Request r,Consumer<Event> e,Cancellation c){received.add("CODEX:"+r.model());return new Result("codex",Status.COMPLETED,"done");}};
+        var claude=new AgentAdapter(){public Provider provider(){return Provider.CLAUDE;}public Result run(Request r,Consumer<Event> e,Cancellation c){received.add("CLAUDE:"+r.model());return new Result("claude",Status.COMPLETED,"done");}};
+        var quota=new CodexQuotaService(()->Json.object("rateLimits",Json.object("limitId","codex","primary",Json.object("usedPercent",0,"windowDurationMins",10080))),0);
+        try(var h=new HostService(root,List.of(codex,claude),quota,false,null);var c=new HostClient(h.descriptor())){
+            until(()->quota.snapshot().path("updatedAt").asLong()>0,"quota");
+            String p=c.post("/projects",Json.object("path",root.toString())).path("id").asText();
+            String s=c.post("/sessions",Json.object("projectId",p)).path("id").asText();
+            c.post("/sessions/"+s+"/settings",Json.object("provider","CLAUDE","model","opus"));
+            c.post("/backlog",Json.object("projectId",p,"sessionId",s,"title","work","minFreeCpu",0));
+            h.observeBacklog();until(()->received.size()==1&&!session(c,s).path("running").asBoolean(),"alternate finished");
+            assertEquals(List.of("CODEX:gpt-6.1-sol"),received);
+            assertEquals("CLAUDE",session(c,s).path("preferences").path("provider").asText());
+            c.post("/sessions/"+s+"/run",Json.object("prompt","normal message"));
+            until(()->received.size()==2,"normal request");assertEquals("CLAUDE:opus",received.get(1));
+        }
+    }
     @Test void aTaskStartsRunsAndLeavesTheList() throws Exception {
         try (var h = new HostService(root, adapter); var c = new HostClient(h.descriptor())) {
             String p = c.post("/projects", Json.object("path", root.toString())).path("id").asText();

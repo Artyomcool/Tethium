@@ -121,7 +121,7 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
         });
     }
     private java.net.URI remoteUrl;
-    public void openRemote(java.net.URI url){if(closed||url.equals(remoteUrl))return;current=null;shownSignature=null;remoteUrl=url;imagePanel=null;rendererRecoveries=0;cancelPending();long expected=generation.incrementAndGet();if(browser==null||!attached())message("Открываем результат с ноутбука…");loader.submit(()->{try{showBrowser(url,url.resolve(".").toString(),expected,null);}catch(Exception e){SwingUtilities.invokeLater(()->{if(generation.get()==expected){detach();message("Не удалось открыть: "+e.getMessage());}});}});}
+    public void openRemote(java.net.URI url){if(closed)return;if(url.equals(remoteUrl)){attach();return;}current=null;shownSignature=null;remoteUrl=url;imagePanel=null;rendererRecoveries=0;cancelPending();long expected=generation.incrementAndGet();if(browser==null||!attached())message("Открываем результат с ноутбука…");loader.submit(()->{try{showBrowser(url,url.resolve(".").toString(),expected,null);}catch(Exception e){SwingUtilities.invokeLater(()->{if(generation.get()==expected){detach();message("Не удалось открыть: "+e.getMessage());}});}});}
     private void ensureApp() throws Exception {
         if (app != null) return;
         var builder = new CefAppBuilder();

@@ -93,6 +93,8 @@ public final class SessionStore implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS project_cross_project(project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,enabled INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS session_technical(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,enabled INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS backlog_tasks(id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,title TEXT NOT NULL,prompt TEXT NOT NULL,priority INTEGER NOT NULL,min_quota INTEGER,min_free_cpu INTEGER,target TEXT NOT NULL,session_id TEXT,session_title TEXT,source_id TEXT,state TEXT NOT NULL,job_id TEXT,created_at INTEGER NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS backlog_execution(task_id TEXT PRIMARY KEY REFERENCES backlog_tasks(id) ON DELETE CASCADE,auto_switch INTEGER NOT NULL DEFAULT 1,provider TEXT,model TEXT)");
+            s.execute("CREATE TABLE IF NOT EXISTS job_execution(job_id TEXT PRIMARY KEY REFERENCES jobs(id) ON DELETE CASCADE,provider TEXT NOT NULL,model TEXT,effort TEXT)");
             s.execute("CREATE TABLE IF NOT EXISTS backlog_settings(id INTEGER PRIMARY KEY CHECK(id=1),max_running INTEGER NOT NULL,min_quota INTEGER NOT NULL,min_free_cpu INTEGER NOT NULL,paused INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS project_order(project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,position INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS session_order(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,position INTEGER NOT NULL)");
@@ -102,9 +104,9 @@ public final class SessionStore implements AutoCloseable {
     /** Tasks put off for better times, most important first; the rules for starting them are in host.Backlog. */
     public synchronized List<JsonNode> backlog()throws SQLException{
         var rows=new ArrayList<JsonNode>();
-        try(var q=connection.createStatement();var r=q.executeQuery("SELECT * FROM backlog_tasks ORDER BY priority,created_at,rowid")){while(r.next()){
+        try(var q=connection.createStatement();var r=q.executeQuery("SELECT b.*,COALESCE(e.auto_switch,1) auto_switch,e.provider pinned_provider,e.model pinned_model FROM backlog_tasks b LEFT JOIN backlog_execution e ON e.task_id=b.id ORDER BY b.priority,b.created_at,b.rowid")){while(r.next()){
             Integer quota=r.getInt("min_quota");if(r.wasNull())quota=null;Integer cpu=r.getInt("min_free_cpu");if(r.wasNull())cpu=null;
-            rows.add(Json.object("id",r.getString("id"),"projectId",r.getString("project_id"),"title",r.getString("title"),"prompt",r.getString("prompt"),"priority",switch(r.getInt("priority")){case 0->"high";case 2->"low";default->"normal";},"minQuota",quota,"minFreeCpu",cpu,"target",r.getString("target"),"sessionId",r.getString("session_id"),"sessionTitle",r.getString("session_title"),"sourceId",r.getString("source_id"),"state",r.getString("state"),"jobId",r.getString("job_id"),"createdAt",r.getLong("created_at")));
+            rows.add(Json.object("id",r.getString("id"),"projectId",r.getString("project_id"),"title",r.getString("title"),"prompt",r.getString("prompt"),"priority",switch(r.getInt("priority")){case 0->"high";case 2->"low";default->"normal";},"minQuota",quota,"minFreeCpu",cpu,"target",r.getString("target"),"sessionId",r.getString("session_id"),"sessionTitle",r.getString("session_title"),"sourceId",r.getString("source_id"),"state",r.getString("state"),"jobId",r.getString("job_id"),"createdAt",r.getLong("created_at"),"autoSwitch",r.getBoolean("auto_switch"),"pinnedProvider",r.getString("pinned_provider"),"pinnedModel",r.getString("pinned_model")));
         }}
         return rows;
     }
@@ -139,6 +141,18 @@ public final class SessionStore implements AutoCloseable {
     }
     public synchronized void backlogSettings(int maxRunning,int minQuota,int minFreeCpu,boolean paused)throws SQLException{
         execute("INSERT INTO backlog_settings VALUES(1,?,?,?,?) ON CONFLICT(id) DO UPDATE SET max_running=excluded.max_running,min_quota=excluded.min_quota,min_free_cpu=excluded.min_free_cpu,paused=excluded.paused",maxRunning,minQuota,minFreeCpu,paused);
+    }
+    public synchronized void backlogExecution(String id,boolean autoSwitch,String provider,String model)throws SQLException{
+        execute("INSERT INTO backlog_execution VALUES(?,?,?,?) ON CONFLICT(task_id) DO UPDATE SET auto_switch=excluded.auto_switch,provider=excluded.provider,model=excluded.model",id,autoSwitch,provider,model);
+    }
+    public synchronized void jobExecution(String job,String provider,String model,String effort)throws SQLException{
+        execute("INSERT INTO job_execution VALUES(?,?,?,?) ON CONFLICT(job_id) DO UPDATE SET provider=excluded.provider,model=excluded.model,effort=excluded.effort",job,provider,model,effort);
+    }
+    /** A deferred task's choice belongs to its job, never to the user's session preferences. */
+    public synchronized JsonNode executionPreferences(String session,String job)throws SQLException{
+        var prefs=(com.fasterxml.jackson.databind.node.ObjectNode)preferences(session).deepCopy();
+        try(var q=connection.prepareStatement("SELECT * FROM job_execution WHERE job_id=?")){q.setString(1,job);try(var r=q.executeQuery()){if(r.next()){prefs.put("provider",r.getString("provider"));prefs.put("model",r.getString("model"));prefs.put("reasoningEffort",r.getString("effort"));}}}
+        return prefs;
     }
     public synchronized String jobState(String id)throws SQLException{
         try(var q=connection.prepareStatement("SELECT status FROM jobs WHERE id=?")){q.setString(1,id);try(var r=q.executeQuery()){return r.next()?r.getString(1):null;}}

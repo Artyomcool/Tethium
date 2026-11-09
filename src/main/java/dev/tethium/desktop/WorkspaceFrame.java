@@ -71,6 +71,7 @@ public final class WorkspaceFrame extends JFrame {
     private boolean catalogLoading;
     private final Map<String, JsonNode> sessions = new HashMap<>();
     private final Map<String,JsonNode> documents=new LinkedHashMap<>();
+    private String panelReturnSession;
     private String selectedFile,initialDocument,documentSignature="",pinnedSignature="";
     private final JButton pinPreview=Theme.iconButton("attachment","Закрепить этот файл у сессии",this::togglePinnedPreview);
     private final JButton closePreview=Theme.iconButton("close","Закрыть просмотр",this::closePreview);
@@ -449,6 +450,7 @@ public final class WorkspaceFrame extends JFrame {
             var trash=new JMenuItem("Удалить сессию…");trash.addActionListener(e->trashSession(n.id));menu.add(trash);
         }
         if(n.file){
+            if(documents.get(n.id).path("panel").asBoolean()){var reload=new JMenuItem("Обновить панель");reload.addActionListener(e->viewer.reload());menu.add(reload);menu.show(tree,event.getX(),event.getY());return;}
             var rename=new JMenuItem("Переименовать пункт…");rename.addActionListener(e->{String title=JOptionPane.showInputDialog(this,"Название",n.title);if(title!=null&&!title.isBlank())action(()->host.post("/files/"+n.id+"/rename",Json.object("title",title)));});menu.add(rename);
             var remove=new JMenuItem("Открепить файл");remove.addActionListener(e->unpinDocument(n.id));menu.add(remove);menu.show(tree,event.getX(),event.getY());return;
         }
@@ -462,7 +464,7 @@ public final class WorkspaceFrame extends JFrame {
         menu.show(tree, event.getX(), event.getY());
     }
     private void sessionMenu() {
-        if(selectedFile!=null){var doc=documents.get(selectedFile);if(doc==null)return;var menu=new JPopupMenu();var unpin=new JMenuItem("Открепить файл от проекта");String id=selectedFile;unpin.addActionListener(e->unpinDocument(id));menu.add(unpin);menu.show(heading,0,heading.getHeight());return;}
+        if(selectedFile!=null){var doc=documents.get(selectedFile);if(doc==null)return;if(doc.path("panel").asBoolean()){viewer.reload();return;}var menu=new JPopupMenu();var unpin=new JMenuItem("Открепить файл от проекта");String id=selectedFile;unpin.addActionListener(e->unpinDocument(id));menu.add(unpin);menu.show(heading,0,heading.getHeight());return;}
         var menu = new JPopupMenu();
         var accessInfo = new JMenuItem("Полный доступ"); accessInfo.setEnabled(false); menu.add(accessInfo); menu.addSeparator();
         for (var entry : List.<Map.Entry<String, Runnable>>of(Map.entry("Новая сессия", this::newSession), Map.entry("Переименовать", this::rename),
@@ -509,10 +511,10 @@ public final class WorkspaceFrame extends JFrame {
     }
     private void updatePinButton(){
         boolean pinned=selected!=null&&sessions.containsKey(selected)&&artifacts.getSelectedItem() instanceof Artifact a&&a.path.toString().equals(sessions.get(selected).path("pinnedFile").asText());
-        pinPreview.setSelected(pinned);pinPreview.setEnabled(selected!=null&&artifacts.getSelectedItem()!=null);pinPreview.setForeground(pinned?Theme.ACCENT:Theme.MUTED);pinPreview.setToolTipText(pinned?"Открепить файл от сессии":"Всегда открывать этот файл справа у сессии");
+        pinPreview.setSelected(pinned);pinPreview.setEnabled(selected!=null&&artifacts.getSelectedItem()!=null&&selectedPanel()==null);pinPreview.setForeground(pinned?Theme.ACCENT:Theme.MUTED);pinPreview.setToolTipText(pinned?"Открепить файл от сессии":"Всегда открывать этот файл справа у сессии");
     }
     public void selectDocument(String id){
-        if(!documents.containsKey(id))return;saveDraft();rememberPreview();exitFullScreen();selected=null;selectedFile=id;restoreViewFor=null;documentSignature="";input.setEnabled(false);sessionViews.put("$document",Json.MAPPER.getNodeFactory().textNode(id));persistViews();renderDocument();selectTreeEntry(id);treeSignature="";poller.execute(this::poll);
+        if(!documents.containsKey(id))return;if(documents.get(id).path("panel").asBoolean()&&selected!=null)panelReturnSession=selected;saveDraft();rememberPreview();exitFullScreen();selected=null;selectedFile=id;restoreViewFor=null;documentSignature="";input.setEnabled(false);sessionViews.put("$document",Json.MAPPER.getNodeFactory().textNode(id));persistViews();renderDocument();selectTreeEntry(id);treeSignature="";poller.execute(this::poll);
     }
     private void renderDocument(){
         var document=documents.get(selectedFile);if(document==null)return;selectedProject=document.path("projectId").asText();
@@ -543,6 +545,7 @@ public final class WorkspaceFrame extends JFrame {
         try{for(var tree:List.of(active,inactive)){var nodes=((DefaultMutableTreeNode)tree.getModel().getRoot()).depthFirstEnumeration();while(nodes.hasMoreElements()){var node=nodes.nextElement();if(node instanceof DefaultMutableTreeNode value&&value.getUserObject() instanceof Node n&&n.id.equals(id)){tree.setSelectionPath(new TreePath(value.getPath()));return;}}}}finally{changingTree=previous;}
     }
     private String executorTitle(JsonNode session) {
+        if(session.path("running").asBoolean()&&!session.path("runProvider").asText("").isBlank())return session.path("runProvider").asText().equals("CLAUDE")?"Claude":"Codex";
         var draft = settingsDrafts.get(session.path("id").asText());
         String provider = (draft != null ? draft : session.path("preferences")).path("provider").asText("");
         return provider.equalsIgnoreCase("CLAUDE") ? "Claude" : "Codex";
@@ -605,6 +608,10 @@ public final class WorkspaceFrame extends JFrame {
         projectWidgets.update(projects.values());active.repaint();inactive.repaint();
         sessions.clear(); for (var s : state.path("sessions")) sessions.put(s.path("id").asText(), s);
         documents.clear();for(var d:state.path("files"))documents.put(d.path("id").asText(),d);
+        if(!host.remote())for(var project:projects.values())if(project.path("panel").isObject()){
+            var panel=project.path("panel");String pid=project.path("id").asText(),id="panel-"+pid;
+            documents.put(id,Json.object("id",id,"projectId",pid,"title",panel.path("title"),"path",panel.path("path"),"panel",true,"config",panel));
+        }
         String signature = state.path("files").toString()+state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("projects").findValues("backlog") + state.path("sessions").findValues("backlog") + state.path("sessions").findValues("active") + state.path("sessions").findValues("technical") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
         signature+=state.path("sessions").findValues("queuePaused").toString()+state.path("sessions").findValues("queued");
         if (!signature.equals(treeSignature)) { rebuildTrees(state); treeSignature = signature; }
@@ -740,7 +747,7 @@ public final class WorkspaceFrame extends JFrame {
             if (role.equals("user")) html.append(" id='").append(tasks.get(taskIndex++).anchor()).append("'");
             html.append("><p class='label'>").append(who).append(ChatTime.label(message.path("timestamp").asLong())).append("</p>").append(markdown(message.path("text").asText())).append("</div>");
         }
-        String live = conversation.path("live").asText(); if (!live.isEmpty()) html.append("<div class='message'><p class='label'><span class='live'>"+ChatTheme.executorLabel(sessions.getOrDefault(selected,Json.object()).path("preferences").path("provider").asText())+" · РАБОТАЕТ</span>"+ChatTime.label(conversation.path("liveTimestamp").asLong())+"</p>").append(markdown(live)).append("</div>");
+        String live = conversation.path("live").asText(); if (!live.isEmpty()) html.append("<div class='message'><p class='label'><span class='live'>"+executorTitle(sessions.getOrDefault(selected,Json.object()))+" · РАБОТАЕТ</span>"+ChatTime.label(conversation.path("liveTimestamp").asLong())+"</p>").append(markdown(live)).append("</div>");
         if (html.isEmpty()) html.append("<h2>Новая сессия</h2><p class='muted'>Опишите задачу. Агент увидит файлы проекта и соседние сессии.</p>");
         var position = chatNavigation.beforeChange(scrollToLatest);
         scrollToLatest = false; long render = ++chatRender;
@@ -816,8 +823,9 @@ public final class WorkspaceFrame extends JFrame {
     }
     private void answer(JsonNode request, JsonNode response) { action(() -> host.post("/answer", Json.object("id", request.path("id").asText(), "answer", response))); }
     private void renderArtifacts() {
-        String signature = conversation.path("artifacts").toString(); if (signature.equals(artifactSignature)) return; artifactSignature = signature;
+        String signature = conversation.path("artifacts").toString()+projects.getOrDefault(selectedProject,Json.object()).path("panel"); if (signature.equals(artifactSignature)) return; artifactSignature = signature;
         applying = true; Object previous = artifacts.getSelectedItem(); artifacts.removeAllItems();
+        if(!host.remote()){var panel=projects.getOrDefault(selectedProject,Json.object()).path("panel");if(panel.isObject())artifacts.addItem(new Artifact(panel.path("title").asText(),Path.of(panel.path("path").asText())));}
         for (var a : conversation.path("artifacts")) artifacts.addItem(new Artifact(a.path("title").asText(), Path.of(a.path("path").asText())));
         if (previous instanceof Artifact old) for (int i = 0; i < artifacts.getItemCount(); i++) {
             if (artifacts.getItemAt(i).path.equals(old.path)) { artifacts.setSelectedIndex(i); break; }
@@ -1017,7 +1025,18 @@ public final class WorkspaceFrame extends JFrame {
     private boolean viewingPinnedFile(){return selectedFile!=null||(selected!=null&&sessions.containsKey(selected)&&artifacts.getSelectedItem() instanceof Artifact a&&a.path.toString().equals(sessions.get(selected).path("pinnedFile").asText()));}
     private boolean confirmUnpin(){return JOptionPane.showConfirmDialog(this,"Закрыть и открепить файл? Сам файл останется на диске.","Закреплённый файл",JOptionPane.YES_NO_OPTION,JOptionPane.QUESTION_MESSAGE)==JOptionPane.YES_OPTION;}
     private void unpinDocument(String id){if(confirmUnpin())action(()->host.post("/files/"+id+"/remove",Json.object()));}
+    private JsonNode selectedPanel(){
+        if(artifacts.getSelectedItem() instanceof Artifact a)for(var project:projects.values()){
+            var panel=project.path("panel");if(panel.isObject()&&a.path.toString().equals(panel.path("path").asText()))return panel;
+        }
+        return null;
+    }
     private void closePreview(){
+        if(selectedFile!=null&&documents.getOrDefault(selectedFile,Json.object()).path("panel").asBoolean()){
+            String back=panelReturnSession;
+            if(back==null||!sessions.containsKey(back))back=sessions.values().stream().filter(s->s.path("projectId").asText().equals(selectedProject)).map(s->s.path("id").asText()).findFirst().orElse(null);
+            if(back!=null)selectSession(back);return;
+        }
         if(selectedFile!=null){unpinDocument(selectedFile);return;}
         if(selected!=null&&sessions.containsKey(selected)&&artifacts.getSelectedItem() instanceof Artifact a&&a.path.toString().equals(sessions.get(selected).path("pinnedFile").asText())){
             if(!confirmUnpin())return;String id=selected;action(()->{host.post("/sessions/"+id+"/pinned-file",Json.object("path",""));SwingUtilities.invokeLater(()->{if(id.equals(selected))showPreview(false);});});
@@ -1045,6 +1064,14 @@ public final class WorkspaceFrame extends JFrame {
         rememberPreview();updatePinButton();
         if (artifacts.getSelectedItem() instanceof Artifact a) {
             artifacts.setToolTipText(a.title + " — " + a.path);
+            var panel=selectedPanel();
+            if(panel!=null){
+                getBuild.setVisible(false);runBuild.setVisible(false);fitPreview.setVisible(false);actualPreview.setVisible(false);expandPreview.setEnabled(true);
+                if(panel.hasNonNull("error"))viewer.showNotice("Панель проекта: "+panel.path("error").asText());
+                else if(panel.hasNonNull("url"))viewer.openRemote(URI.create(panel.path("url").asText()));
+                else viewer.open(Path.of(panel.path("entry").asText()));
+                return;
+            }
             String filename=a.path.getFileName().toString().toLowerCase(Locale.ROOT);boolean runnable=filename.matches(".*\\.(jar|exe|zip)$");runBuild.setVisible(host.remote()&&runnable);getBuild.setVisible(host.remote());
             if(runnable&&host.remote())viewer.showNotice("Опубликованная сборка · "+a.path.getFileName()+"\nПолучите её или запустите на этом компьютере.");
             else if(host instanceof dev.tethium.remote.RemoteClient remote&&selectedFile!=null){String id=selectedFile;action(()->{var url=remote.previewDocument(id);SwingUtilities.invokeLater(()->{if(Objects.equals(selectedFile,id))viewer.openRemote(url);});});}

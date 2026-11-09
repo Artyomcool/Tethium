@@ -17,7 +17,7 @@ final class BacklogDialog {
     private static final List<Choice> PRIORITIES=List.of(new Choice("high","Высокий"),new Choice("normal","Обычный"),new Choice("low","Низкий"));
     private final JDialog dialog;private final HostClient host;private final Map<String,JsonNode> projects,sessions;private final String currentSession;
     private final JComboBox<Choice> projectPicker=new JComboBox<>();
-    private final DefaultTableModel model=new DefaultTableModel(new Object[]{"Приоритет","Задача","Проект","Сессия","Условия","Состояние"},0){public boolean isCellEditable(int r,int c){return false;}};
+    private final DefaultTableModel model=new DefaultTableModel(new Object[]{"Приоритет","Задача","Проект","Сессия","Исполнитель","Условия","Состояние"},0){public boolean isCellEditable(int r,int c){return false;}};
     private final JTable table=new JTable(model);
     private final JSpinner maxRunning=new JSpinner(new SpinnerNumberModel(3,1,32,1)),minQuota=new JSpinner(new SpinnerNumberModel(80,0,100,5)),minFreeCpu=new JSpinner(new SpinnerNumberModel(40,0,100,5));
     private final JCheckBox paused=new JCheckBox("Пауза автозапуска");
@@ -44,7 +44,7 @@ final class BacklogDialog {
         panel.add(rules,BorderLayout.SOUTH);
         for(var spinner:List.of(maxRunning,minQuota,minFreeCpu))spinner.addChangeListener(e->saveSettings());
         paused.addActionListener(e->saveSettings());
-        dialog.setContentPane(panel);dialog.setSize(980,480);dialog.setLocationRelativeTo(owner);dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);dialog.setVisible(true);
+        dialog.setContentPane(panel);dialog.setSize(1100,480);dialog.setLocationRelativeTo(owner);dialog.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);dialog.setVisible(true);
         load();
         var refresh=new javax.swing.Timer(5000,e->load());refresh.start();
         dialog.addWindowListener(new WindowAdapter(){@Override public void windowClosed(WindowEvent e){refresh.stop();}});
@@ -62,7 +62,7 @@ final class BacklogDialog {
         for(var t:tasks){
             if(!project.isEmpty()&&!project.equals(t.path("projectId").asText()))continue;
             visible.add(t);var owner=projects.get(t.path("projectId").asText());
-            model.addRow(new Object[]{label(t.path("priority").asText()),t.path("title").asText(),owner==null?"":owner.path("title").asText(),t.path("sessionName").asText(),conditions(t),t.path("why").asText()});
+            model.addRow(new Object[]{label(t.path("priority").asText()),t.path("title").asText(),owner==null?"":owner.path("title").asText(),t.path("sessionName").asText(),t.path("executorLabel").asText()+(t.path("executorSwitched").asBoolean()?" ↔":""),conditions(t),t.path("why").asText()});
         }
         for(int i=0;i<visible.size();i++)if(visible.get(i).path("id").asText().equals(keep))table.setRowSelectionInterval(i,i);
     }
@@ -101,16 +101,27 @@ final class BacklogDialog {
         var own=new JCheckBox("Свои условия запуска",task!=null&&(task.path("minQuota").isNumber()||task.path("minFreeCpu").isNumber()));
         JSpinner quota=new JSpinner(new SpinnerNumberModel(task==null?((Number)minQuota.getValue()).intValue():task.path("effectiveMinQuota").asInt(),0,100,5)),cpu=new JSpinner(new SpinnerNumberModel(task==null?((Number)minFreeCpu.getValue()).intValue():task.path("effectiveMinFreeCpu").asInt(),0,100,5));
         Runnable sync=()->{quota.setEnabled(own.isSelected());cpu.setEnabled(own.isSelected());};own.addActionListener(e->sync.run());sync.run();
+        var automatic=new JCheckBox("Автоматически менять исполнителя по квоте · Astra ↔ Fable, Sol ↔ Opus",task==null||task.path("autoSwitch").asBoolean(true));
+        var executor=new JComboBox<>(new Choice[]{new Choice("","Из выбранной сессии"),new Choice("CODEX|gpt-6-astra","Закрепить Codex · Astra"),new Choice("CLAUDE|fable","Закрепить Claude · Fable"),new Choice("CODEX|gpt-6.1-sol","Закрепить Codex · Sol"),new Choice("CLAUDE|opus","Закрепить Claude · Opus")});
+        if(task!=null&&!task.path("pinnedProvider").asText("").isBlank()){
+            String fixed=task.path("pinnedProvider").asText()+"|"+task.path("pinnedModel").asText("");boolean found=false;
+            for(int i=0;i<executor.getItemCount();i++)if(executor.getItemAt(i).id.equals(fixed)){executor.setSelectedIndex(i);found=true;}
+            if(!found){var custom=new Choice(fixed,"Закрепить "+fixed.replace('|',' '));executor.addItem(custom);executor.setSelectedItem(custom);}
+        }
+        Runnable syncExecutor=()->{boolean inherited=((Choice)executor.getSelectedItem()).id.isEmpty();automatic.setEnabled(inherited);if(!inherited)automatic.setSelected(false);};executor.addActionListener(e->syncExecutor.run());syncExecutor.run();
         var form=new JPanel();form.setLayout(new BoxLayout(form,BoxLayout.Y_AXIS));
         form.add(line(new JLabel("Название:"),title));form.add(Box.createVerticalStrut(6));form.add(line(new JLabel("Что сделать (агент не помнит разговор):")));form.add(new JScrollPane(prompt));form.add(Box.createVerticalStrut(6));
         form.add(line(new JLabel("Приоритет:"),priority));form.add(Box.createVerticalStrut(6));
         form.add(line(inSession,sessionPicker));form.add(line(named,sessionName));form.add(line(fresh));form.add(Box.createVerticalStrut(6));
+        form.add(line(new JLabel("Исполнитель:"),executor));form.add(line(automatic));form.add(Box.createVerticalStrut(6));
         form.add(line(own,new JLabel("квота от, %:"),quota,new JLabel("свободно CPU от, %:"),cpu));
         if(JOptionPane.showConfirmDialog(dialog,form,task==null?"Отложить задачу":"Изменить задачу",JOptionPane.OK_CANCEL_OPTION,JOptionPane.PLAIN_MESSAGE)!=JOptionPane.OK_OPTION)return;
         var body=Json.object("projectId",project,"title",title.getText(),"prompt",prompt.getText(),"priority",((Choice)priority.getSelectedItem()).id(),"target",named.isSelected()?"named":fresh.isSelected()?"new":"session");
         if(inSession.isSelected()&&sessionPicker.getSelectedItem() instanceof Choice c)body.put("sessionId",c.id());
         if(named.isSelected())body.put("sessionTitle",sessionName.getText());
         if(own.isSelected()){body.put("minQuota",((Number)quota.getValue()).intValue());body.put("minFreeCpu",((Number)cpu.getValue()).intValue());}
+        String fixed=((Choice)executor.getSelectedItem()).id;body.put("autoSwitch",automatic.isSelected());
+        body.put("pinnedProvider",fixed.isEmpty()?null:fixed.split("\\|",-1)[0]);body.put("pinnedModel",fixed.isEmpty()?null:fixed.split("\\|",-1)[1]);
         if(task==null&&currentSession!=null)body.put("sourceId",currentSession);
         act(()->host.post(task==null?"/backlog":"/backlog/"+task.path("id").asText()+"/update",body));
     }

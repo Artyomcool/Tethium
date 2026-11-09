@@ -22,6 +22,7 @@ public final class HostService implements AutoCloseable {
     private final UsageLedger usage;
     private CpuSampler cpu;
     private final ProjectWidgets projectWidgets=new ProjectWidgets();
+    private final ProjectPanels projectPanels=new ProjectPanels();
     private final ResourceController resources;
     private final MediaCapture media;
     private AwakeGuard awake;
@@ -100,12 +101,17 @@ public final class HostService implements AutoCloseable {
             workers.submit(()->observeRestoredWorker(saved.sessionId(),run));
         }
         for (var project : store.projects()) for (var session : store.list(project.id())) schedule(session.id());
-        backlog=new Backlog(store,quota::snapshot,()->cpu==null?Json.object():cpu.machineUsage(),this::sessionBusy,this::bump);
+        backlog=new Backlog(store,quota::snapshot,()->cpu==null?Json.object():cpu.machineUsage(),this::sessionBusy,this::bump,adapters.keySet(),id->modelsForBacklog(id));
         quotaMonitor.scheduleWithFixedDelay(this::observeQuota,0,15,TimeUnit.SECONDS);
         quotaMonitor.scheduleWithFixedDelay(this::observeBacklog,15,15,TimeUnit.SECONDS);
         scheduleMonitor.scheduleWithFixedDelay(()->observeSchedules(System.currentTimeMillis()),1,1,TimeUnit.SECONDS);
         if(detachedEnabled)awake=new AwakeGuard(()->{try{return !closed&&store.autonomousWorkPending();}catch(Exception e){return false;}});
         if(detachedEnabled)cpu=new CpuSampler(usage,()->{var roots=new ArrayList<CpuSampler.Root>();for(var entry:running.entrySet())try{var worker=entry.getValue().worker;if(worker!=null){var root=worker.cpuRoot(store.get(entry.getKey()).projectId());if(root!=null)roots.add(root);}}catch(Exception ignored){}try{for(var p:store.claimedProcesses())roots.add(new CpuSampler.Root(p.path("pid").asLong(),p.path("started").asLong(),new CpuSampler.Owner(p.path("session").asText(),p.path("project").asText())));}catch(Exception ignored){}return roots;},store,resources);
+    }
+    private String modelsForBacklog(String id){
+        try { var catalog=models.get(store.get(id).directory());String configured=catalog.path("configuredModel").asText("");if(!configured.isBlank())return configured;
+            for(var m:catalog.path("data"))if(m.path("isDefault").asBoolean())return m.path("model").asText(null);
+        }catch(Exception ignored){}return null;
     }
     private boolean sessionBusy(String id){
         try{return running.containsKey(id)||!store.queued(id).isEmpty()||store.queuePaused(id)||usage.waitState(id).path("waiting").asBoolean();}catch(Exception e){return true;}
@@ -397,13 +403,13 @@ public final class HostService implements AutoCloseable {
         return Json.object("id", s.id(), "projectId", s.projectId(), "parentId", s.parentId(), "title", s.title(), "backlog", store.backlogWaiting(s), "active", s.active(), "technical", technical, "directory", s.directory().toString(),
                 "running", run != null, "phase", run == null ? "" : run.phase, "stopping", run != null && run.stopping,
                 "progress", run == null ? null : run.activity.snapshot(), "queuePaused", store.queuePaused(s.id()),
-                "pinnedFile",store.pinnedFile(s.id()),"autonomy",store.autonomy(s.id()),"schedule",store.periodicSchedule(s.id()),"quotaWait",usage.waitState(s.id()),"status", store.lastStatus(s.id()), "queued", queue.size(), "preferences", store.preferences(s.id()),"attention",attention,"hold",hold);
+                "pinnedFile",store.pinnedFile(s.id()),"autonomy",store.autonomy(s.id()),"schedule",store.periodicSchedule(s.id()),"quotaWait",usage.waitState(s.id()),"runProvider",run==null||run.provider==null?null:run.provider.name(),"status", store.lastStatus(s.id()), "queued", queue.size(), "preferences", store.preferences(s.id()),"attention",attention,"hold",hold);
     }
     private Object snapshot(String selected,boolean window) throws Exception {
         var sessions = new ArrayList<JsonNode>();
         var projects = store.projects();
         for (var project : projects) for (var session : store.list(project.id())) if(store.trashedAt(session.id())==0)sessions.add(sessionJson(session));
-        var backlogWaiting=store.backlogWaiting();var projectValues=new ArrayList<JsonNode>();for(var p:projects)projectValues.add(Json.object("backlog",backlogWaiting.getOrDefault(p.id(),0),"id",p.id(),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"crossProject",store.crossProject(p.id()),"icon",ProjectIcons.version(Path.of(p.root())),"widget",projectWidgets.read(Path.of(p.root()))));
+        var backlogWaiting=store.backlogWaiting();var projectValues=new ArrayList<JsonNode>();for(var p:projects)projectValues.add(Json.object("backlog",backlogWaiting.getOrDefault(p.id(),0),"id",p.id(),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"crossProject",store.crossProject(p.id()),"icon",ProjectIcons.version(Path.of(p.root())),"panel",projectPanels.read(Path.of(p.root())),"widget",projectWidgets.read(Path.of(p.root()))));
         var result = Json.object("machineUsage",cpu==null?Json.object():cpu.machineUsage(),"resources",resources.snapshot(),"files",store.projectFiles(),"resourceUsage",usage.sidebar(),"revision", revision.get(), "projects", projectValues, "sessions", sessions, "quota", quota.snapshot(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
         if (selected != null && sessions.stream().anyMatch(s -> s.path("id").asText().equals(selected))) {
             var messages = new ArrayList<SessionStore.Message>(); long cursor = 0;
@@ -479,14 +485,14 @@ public final class HostService implements AutoCloseable {
                 var queue = store.queued(id);
                 if (closed || draining || run.stopping || run.cancellation.isCancelled() || !store.acceptsWork(id) || queue.isEmpty() || store.queuePaused(id) && !queue.getFirst().urgent() || store.interruptionBlocks(id,queue.getFirst().id())) return;
                 job = queue.getFirst();
-                var provider=AgentAdapter.Provider.of(store.preferences(id).path("provider").asText(null));
+                var provider=AgentAdapter.Provider.of(store.executionPreferences(id,job.id()).path("provider").asText(null));
                 executor=adapters.get(provider);
                 if(executor==null){store.jobStatus(job.id(),"FAILED");store.append(id,"system","TETHIUM","Исполнитель "+provider.title+" недоступен в этой сборке. Выберите другого исполнителя в шапке сессии.");return;}
                 run.provider=provider;
                 if(detachedEnabled){
                     final var selected=job;final var chosen=executor;
                     run.workerRun=store.transaction(()->{
-                        var prefs=store.preferences(id);
+                        var prefs=store.executionPreferences(id,selected.id());
                         var prepared=new SessionRunner(store).prepareWorker(id,provider,selected.prompt(),prefs.path("model").asText(null),prefs.path("access").asText(),prefs.path("reasoningEffort").asText(null));
                         resources.refresh();
                         var spec=Json.object("resources",resources.spec(id),"protocol",dev.tethium.worker.WorkerJournal.PROTOCOL,"startedAt",run.activity.snapshot().path("startedAt").asLong(),"request",dev.tethium.worker.WorkerMain.requestJson(prepared.request()),"provider",provider.name(),"executable",chosen.executable(),"tools",SessionToolsServer.catalog(tools(id,run)));
@@ -498,7 +504,7 @@ public final class HostService implements AutoCloseable {
             }
             if(run.workerRun!=null){observeWorker(id,run);return;}
             try (var tools = new SessionToolsServer(store, id, tools(id,run))) {
-                var preferences = store.preferences(id);
+                var preferences = store.executionPreferences(id,job.id());
                 var result = new SessionRunner(store).run(id, executor, job.prompt(), tools.uri(), tools.token(), event -> observe(id, run, event), run.cancellation, preferences.path("model").asText(null), preferences.path("access").asText(), (method, params, cancel) -> request(id, run, method, params, cancel), preferences.path("reasoningEffort").asText(null));
                 if(!run.stopping&&!run.cancellation.isCancelled()&&result.status()==AgentAdapter.Status.FAILED&&codexQuota(run)&&(run.quotaBlocked||quotaError(result.text()))){usage.waiting(id,true);store.jobStatus(job.id(),"QUEUED");quota.refresh();return;}
                 store.jobStatus(job.id(), result.status().name());
@@ -706,7 +712,7 @@ public final class HostService implements AutoCloseable {
                         if (count >= 20) throw new IllegalStateException("У сессии уже 20 подсессий");
                         String prompt = args.path("prompt").asText(); if (prompt.isBlank()) throw new IllegalArgumentException("Укажите поручение");
                         var child = store.create(source.projectId(), caller, args.path("title").asText("Подсессия"), source.directory());
-                        var prefs = store.preferences(caller); store.preferences(child.id(), prefs.path("model").asText(null), prefs.path("access").asText(), prefs.path("reasoningEffort").asText(null));
+                        var parentJob=store.runningJob(caller);var prefs = parentJob==null?store.preferences(caller):store.executionPreferences(caller,parentJob.id()); store.preferences(child.id(), prefs.path("model").asText(null), prefs.path("access").asText(), prefs.path("reasoningEffort").asText(null),prefs.path("provider").asText(null));
                         store.enqueue(child.id(), caller, prompt); schedule(child.id()); response = Json.object("session_id", child.id());
                     }
                     case "cross_project_sessions" -> {

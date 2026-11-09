@@ -45,6 +45,7 @@ final class BacklogSheet {
             row.addView(ui.label(task.optString("title"),15,Ui.TEXT));ui.gap(row,4);
             String where=(project.isEmpty()?projectTitle(task.optString("projectId"))+" · ":"")+priorityName(task.optString("priority"))+" · "+task.optString("sessionName");
             row.addView(ui.label(where,12,Ui.MUTED));ui.gap(row,2);
+            row.addView(ui.label(task.optString("executorLabel")+(task.optBoolean("executorSwitched")?" · замена по квоте":""),12,Ui.MUTED));
             row.addView(ui.label(task.optString("why"),12,task.optString("state").equals("running")?Ui.ACCENT:Ui.AMBER));
             var params=new LinearLayout.LayoutParams(-1,-2);params.bottomMargin=ui.dp(6);rows.addView(row,params);
         }
@@ -54,6 +55,7 @@ final class BacklogSheet {
         String id=task.optString("id");boolean running=task.optString("state").equals("running");
         var names=new ArrayList<String>();var work=new ArrayList<Runnable>();
         if(!running){
+            names.add("Исполнитель…");work.add(()->editExecutor(task));
             names.add("Запустить сейчас");work.add(()->post("backlog-start:"+id,"Запускаем…","/backlog/"+id+"/start",new JSONObject()));
             for(int i=0;i<PRIORITY_IDS.length;i++){String priority=PRIORITY_IDS[i];if(priority.equals(task.optString("priority")))continue;names.add("Приоритет: "+PRIORITY_NAMES[i].toLowerCase(Locale.ROOT));work.add(()->{try{post("backlog-update:"+id,"Сохраняем…","/backlog/"+id+"/update",new JSONObject(task.toString()).put("priority",priority));}catch(JSONException e){throw new IllegalStateException(e);}});}
         }
@@ -65,6 +67,29 @@ final class BacklogSheet {
     private void spinner(Spinner spinner,List<String> values){spinner.setAdapter(new ArrayAdapter<>(activity,android.R.layout.simple_spinner_dropdown_item,values));}
     private EditText number(String hint){var e=ui.edit(hint);e.setInputType(InputType.TYPE_CLASS_NUMBER);return e;}
     private static Integer percent(EditText field){String text=field.getText().toString().strip();if(text.isEmpty())return null;try{return Math.max(0,Math.min(100,Integer.parseInt(text)));}catch(NumberFormatException e){return null;}}
+    private final class ExecutorFields {
+        final CheckBox automatic=new CheckBox(activity);
+        final Spinner model=new Spinner(activity);
+        final List<String> ids=new ArrayList<>(List.of("","CODEX|gpt-6-astra","CLAUDE|fable","CODEX|gpt-6.1-sol","CLAUDE|opus"));
+        ExecutorFields(LinearLayout form,JSONObject task){
+            var names=new ArrayList<>(List.of("Из выбранной сессии","Закрепить Codex · Astra","Закрепить Claude · Fable","Закрепить Codex · Sol","Закрепить Claude · Opus"));
+            String provider=task==null||task.isNull("pinnedProvider")?"":task.optString("pinnedProvider");
+            String fixed=provider.isEmpty()?"":provider+"|"+(task.isNull("pinnedModel")?"":task.optString("pinnedModel"));
+            if(!ids.contains(fixed)){ids.add(fixed);names.add("Закрепить "+fixed.replace('|',' '));}
+            form.addView(ui.label("Исполнитель задачи",13,Ui.MUTED));spinner(model,names);model.setSelection(ids.indexOf(fixed));form.addView(model,new LinearLayout.LayoutParams(-1,ui.dp(48)));
+            automatic.setText("Автозамена по квоте: Astra ↔ Fable, Sol ↔ Opus");automatic.setTextColor(Ui.TEXT);automatic.setChecked(task==null||task.optBoolean("autoSwitch",true));form.addView(automatic);
+            automatic.setEnabled(fixed.isEmpty());if(!fixed.isEmpty())automatic.setChecked(false);
+            model.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){public void onItemSelected(AdapterView<?> p,View v,int position,long id){automatic.setEnabled(ids.get(position).isEmpty());if(!ids.get(position).isEmpty())automatic.setChecked(false);}public void onNothingSelected(AdapterView<?> p){}});
+        }
+        void apply(JSONObject body)throws JSONException{
+            String fixed=ids.get(model.getSelectedItemPosition());String[] parts=fixed.split("\\|",-1);
+            body.put("autoSwitch",automatic.isChecked()).put("pinnedProvider",fixed.isEmpty()?JSONObject.NULL:parts[0]).put("pinnedModel",fixed.isEmpty()?JSONObject.NULL:parts[1]);
+        }
+    }
+    private void editExecutor(JSONObject task){
+        var form=ui.col();ui.pad(form,16,8);var fields=new ExecutorFields(form,task);var sheet=ui.sheet("Исполнитель · "+task.optString("title"),form);
+        form.addView(ui.primary("Сохранить",()->{try{var body=new JSONObject(task.toString());fields.apply(body);ui.async("backlog-executor:"+task.optString("id"),"Сохраняем…",io,()->connection.request("/backlog/"+task.optString("id")+"/update",body),result->{sheet.dismiss();load();});}catch(JSONException e){throw new IllegalStateException(e);}}));
+    }
     private void add(){
         String target=!project.isEmpty()?project:sessionProject(current);
         if(target.isEmpty()){Toast.makeText(activity,"Откройте сессию проекта",Toast.LENGTH_SHORT).show();return;}
@@ -80,6 +105,7 @@ final class BacklogSheet {
         ui.gap(inner,8);
         var quota=number("Квота от, %: по умолчанию "+settings.optInt("minQuota"));inner.addView(quota);ui.gap(inner,8);
         var cpu=number("Свободно CPU от, %: по умолчанию "+settings.optInt("minFreeCpu"));inner.addView(cpu);ui.gap(inner,8);
+        var execution=new ExecutorFields(inner,null);
         var sheet=ui.sheet("Отложить задачу",form);
         form.addView(ui.primary("Отложить",()->{
             if(title.getText().toString().isBlank()){title.requestFocus();return;}
@@ -91,6 +117,7 @@ final class BacklogSheet {
                 if(percent(quota)!=null)body.put("minQuota",percent(quota));
                 if(percent(cpu)!=null)body.put("minFreeCpu",percent(cpu));
                 if(!current.isEmpty())body.put("sourceId",current);
+                execution.apply(body);
                 ui.async("backlog-add","Сохраняем…",io,()->connection.request("/backlog",body),result->{sheet.dismiss();load();});
             }catch(JSONException e){throw new IllegalStateException(e);}
         }));
