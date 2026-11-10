@@ -20,6 +20,15 @@ import static org.junit.jupiter.api.Assertions.*;
 class FileManagerTest {
     @TempDir Path temp;
     private static final AgentAdapter NONE=new AgentAdapter(){public Provider provider(){return Provider.CODEX;}public Result run(Request r,Consumer<Event> e,Cancellation c){throw new AssertionError("No agents in file transfers");}};
+    @Test void wholeLaptopRootsAllowBrowsingOutsideAnyProject()throws Exception{
+        Path outside=Files.createDirectory(temp.resolve("outside-projects"));Files.writeString(outside.resolve("visible.txt"),"not in a project");
+        var manager=new FileManager(temp.resolve("data"),()->Json.MAPPER.createArrayNode());JsonNode disk=null;
+        for(var item:manager.api("GET",URI.create("/file-manager/roots"),null).path("roots"))if(item.path("id").asText().startsWith("drive-")&&outside.toRealPath().startsWith(Path.of(item.path("path").asText())))disk=item;
+        assertNotNull(disk,"the filesystem volume is available without adding a project or shared folder");
+        String relative=Path.of(disk.path("path").asText()).relativize(outside.toRealPath()).toString().replace('\\','/');
+        var listing=manager.api("GET",URI.create("/file-manager/list?root="+FileTransfers.encode(disk.path("id").asText())+"&path="+FileTransfers.encode(relative)),null);
+        assertEquals("visible.txt",listing.path("entries").get(0).path("name").asText());assertTrue(listing.path("entries").get(0).path("accessible").asBoolean());
+    }
     private String token(MobileGateway gateway)throws Exception{
         String qr=gateway.pairInfo().path("pairing").asText(),code=FileManager.query(URI.create(qr),"code");
         return new LanConnection("127.0.0.1:"+gateway.httpPort(),null).json("/pair",Json.object("code",code,"name","file test")).path("token").asText();

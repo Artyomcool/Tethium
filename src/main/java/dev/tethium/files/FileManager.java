@@ -28,7 +28,14 @@ public final class FileManager {
     }
     private record Root(String id,String title,Path path){}
     private List<Root> roots()throws IOException{
-        var result=new ArrayList<Root>();result.add(new Root("received","Полученные файлы",received.toRealPath()));
+        var result=new ArrayList<Root>();
+        // A paired device has the same filesystem scope as the laptop's Tethium user.
+        for(Path drive:FileSystems.getDefault().getRootDirectories())try{
+            Path real=drive.toRealPath();String id="drive-"+Base64.getUrlEncoder().withoutPadding().encodeToString(real.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            result.add(new Root(id,"Диск "+drive.toString().replace("\\",""),real));
+        }catch(IOException ignored){}
+        try{result.add(new Root("home","Папка пользователя",Path.of(System.getProperty("user.home")).toRealPath()));}catch(IOException ignored){}
+        result.add(new Root("received","Полученные файлы",received.toRealPath()));
         for(var p:projects.get())try{result.add(new Root("project-"+p.path("id").asText(),p.path("title").asText(),Path.of(p.path("root").asText()).toRealPath()));}catch(IOException ignored){}
         Path file=state.resolve("folders.json");if(Files.exists(file))for(var p:Json.MAPPER.readTree(file.toFile()))try{result.add(new Root(p.path("id").asText(),p.path("title").asText(),Path.of(p.path("path").asText()).toRealPath()));}catch(IOException ignored){}
         return result;
