@@ -81,6 +81,7 @@ final class Ui {
                 case "chevron"->{path(c,9,5,16,12,9,19);}
                 case "search"->{c.drawCircle(10,10,6,p);path(c,15,15,21,21);}
                 case "plus"->{path(c,5,12,19,12);path(c,12,5,12,19);}
+                case "grip"->{for(int y=5;y<=19;y+=7){c.drawCircle(9,y,1,p);c.drawCircle(15,y,1,p);}}
                 case "stop"->c.drawRoundRect(5,5,19,19,2,2,p);
                 case "bolt"->path(c,13,2,5,14,11,14,10,22,19,9,13,9,13,2);
                 case "image"->{c.drawRoundRect(3,3,21,21,3,3,p);c.drawCircle(9,8,2,p);path(c,3,18,9,12,13,16,17,12,21,16);}

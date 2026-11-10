@@ -20,6 +20,34 @@ import static org.junit.jupiter.api.Assertions.*;
 class MobileGatewayTest {
     @TempDir Path root;
     private static final AgentAdapter ADAPTER=new AgentAdapter(){public Provider provider(){return Provider.CODEX;}public Result run(Request r,Consumer<Event> events,Cancellation c){throw new AssertionError("No model calls");}};
+    @Test void pairedPhoneReordersProjectsAndSessionsAndReceivesOrderOnlyPushes()throws Exception{
+        Path data=root.resolve("data");
+        try(var h=new HostService(data,ADAPTER);var local=new HostClient(h.descriptor());var m=new MobileGateway(data,h.feed(),0,0)){
+            String p1=local.post("/projects",Json.object("path",root.resolve("one").toString())).path("id").asText();
+            String p2=local.post("/projects",Json.object("path",root.resolve("two").toString())).path("id").asText();
+            String a=local.post("/sessions",Json.object("projectId",p1,"title","A")).path("id").asText();
+            String b=local.post("/sessions",Json.object("projectId",p1,"title","B")).path("id").asText();
+            String other=local.post("/sessions",Json.object("projectId",p2,"title","Other")).path("id").asText();
+            String token=pairOverLink(m);
+            try(var phone=hello(m,token)){
+                var full=phone.expect(Frames.STATE,f->f.path("full").asBoolean());assertEquals(Json.MAPPER.valueToTree(List.of(a,b,other)),full.path("sessionOrder"));
+                assertEquals(200,phone.request("/projects/order",Json.object("ids",List.of(p2,p1))).path("status").asInt());
+                phone.expect(Frames.STATE,f->f.has("projects")&&f.path("projects").get(0).path("id").asText().equals(p2));
+                assertEquals(p2,local.get("/state").path("projects").get(0).path("id").asText());
+                assertEquals(200,phone.request("/projects/"+p1+"/sessions-order",Json.object("ids",List.of(b,a))).path("status").asInt());
+                var delta=phone.expect(Frames.STATE,f->f.path("sessionOrder").equals(Json.MAPPER.valueToTree(List.of(other,b,a))));
+                assertFalse(delta.has("sessions"),"Reordering must not resend unchanged session objects");
+                assertEquals(b,local.get("/state").path("sessions").get(1).path("id").asText());
+                assertEquals(400,phone.request("/projects/"+p1+"/sessions-order",Json.object("ids",List.of(other))).path("status").asInt());
+                local.post("/projects/"+p1+"/sessions-order",Json.object("ids",List.of(a,b)));
+                phone.expect(Frames.STATE,f->f.path("sessionOrder").equals(Json.MAPPER.valueToTree(List.of(other,a,b))));
+            }
+            try(var phone=hello(m,token)){
+                var full=phone.expect(Frames.STATE,f->f.path("full").asBoolean());assertEquals(Json.MAPPER.valueToTree(List.of(other,a,b)),full.path("sessionOrder"));
+                assertEquals(other,full.path("sessions").get(0).path("id").asText());
+            }
+        }
+    }
     @Test void pairedPhoneCreatesProjectAndInitialSessionWithoutStartingAnAgent()throws Exception{
         Path data=root.resolve("data"),directory=root.resolve("new-project");
         try(var h=new HostService(data,ADAPTER);var m=new MobileGateway(data,h.feed(),0,0);var local=new HostClient(h.descriptor())){

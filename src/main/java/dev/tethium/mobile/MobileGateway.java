@@ -192,6 +192,7 @@ public final class MobileGateway implements AutoCloseable {
         }
         private void pushCatalog()throws Exception{
             var catalog=(ObjectNode)feed.catalog().deepCopy();var sessions=catalog.remove("sessions");
+            var sessionOrder=Json.MAPPER.createArrayNode();if(sessions!=null)for(var session:sessions)sessionOrder.add(session.path("id").asText());catalog.set("sessionOrder",sessionOrder);
             var delta=Json.object();boolean any=!catalogSent;
             for(var e:catalog.properties()){String text=e.getValue().toString();if(!text.equals(sentCatalog.get(e.getKey()))){sentCatalog.put(e.getKey(),text);delta.set(e.getKey(),e.getValue());if(!e.getKey().equals("revision"))any=true;}}
             var changed=Json.MAPPER.createArrayNode();var seen=new HashSet<String>();
@@ -302,7 +303,7 @@ public final class MobileGateway implements AutoCloseable {
         }
         throw new NoSuchElementException("Unknown endpoint");
     }
-    private static boolean allowed(String path){return path.equals("/projects")||path.equals("/backlog")||path.equals("/backlog-settings")||path.matches("/backlog/[a-zA-Z0-9-]+/(update|remove|start)")||path.equals("/resources")||path.equals("/quota/refresh")||path.equals("/quota/reset")||path.equals("/sessions")||path.equals("/answer")||path.matches("/projects/[a-zA-Z0-9-]+/(files|active)")||path.matches("/files/[a-zA-Z0-9-]+/(rename|remove)")||path.matches("/sessions/[a-zA-Z0-9-]+/(run|interrupt|stop|queue-pause|queue-resume|queue-remove|queue-move|queue-take|queue-merge|queue-split|active|rename|settings|seen|attention|quota-auto|autonomy|schedule|pinned-file|trash|restore|purge)");}
+    private static boolean allowed(String path){return path.equals("/projects")||path.equals("/projects/order")||path.equals("/backlog")||path.equals("/backlog-settings")||path.matches("/backlog/[a-zA-Z0-9-]+/(update|remove|start)")||path.equals("/resources")||path.equals("/quota/refresh")||path.equals("/quota/reset")||path.equals("/sessions")||path.equals("/answer")||path.matches("/projects/[a-zA-Z0-9-]+/(files|active|sessions-order)")||path.matches("/files/[a-zA-Z0-9-]+/(rename|remove)")||path.matches("/sessions/[a-zA-Z0-9-]+/(run|interrupt|stop|queue-pause|queue-resume|queue-remove|queue-move|queue-take|queue-merge|queue-split|active|rename|settings|seen|attention|quota-auto|autonomy|schedule|pinned-file|trash|restore|purge)");}
     private static int status(Exception e){return e instanceof SecurityException?401:e instanceof NoSuchElementException?404:400;}
     private static String message(Exception e){return Objects.toString(e.getMessage(),"Ошибка подключения");}
     private JsonNode upload(JsonNode body)throws Exception{
