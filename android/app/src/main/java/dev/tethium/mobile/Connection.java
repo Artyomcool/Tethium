@@ -113,6 +113,7 @@ final class Connection {
     JSONObject post(String path,JSONObject body)throws Exception{
         var c=open(path);try{
             if(path.startsWith("/file-manager/"))c.setReadTimeout(300_000);
+            else if(path.equals("/projects"))c.setReadTimeout(120_000);
             if(body!=null){c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");
             try(var o=c.getOutputStream()){o.write(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}}
             int status=c.getResponseCode();var stream=status<400?c.getInputStream():c.getErrorStream();

@@ -20,6 +20,18 @@ import static org.junit.jupiter.api.Assertions.*;
 class MobileGatewayTest {
     @TempDir Path root;
     private static final AgentAdapter ADAPTER=new AgentAdapter(){public Provider provider(){return Provider.CODEX;}public Result run(Request r,Consumer<Event> events,Cancellation c){throw new AssertionError("No model calls");}};
+    @Test void pairedPhoneCreatesProjectAndInitialSessionWithoutStartingAnAgent()throws Exception{
+        Path data=root.resolve("data"),directory=root.resolve("new-project");
+        try(var h=new HostService(data,ADAPTER);var m=new MobileGateway(data,h.feed(),0,0);var local=new HostClient(h.descriptor())){
+            String token=pairOverLink(m);var phone=new dev.tethium.remote.LanConnection("127.0.0.1:"+m.httpPort(),token);
+            var body=Json.object("path",directory.toString(),"initialSession","Разработка");
+            var made=phone.json("/projects",body);assertFalse(made.path("id").asText().isBlank());assertFalse(made.path("sessionId").asText().isBlank());assertTrue(Files.isDirectory(directory));
+            assertEquals(made,phone.json("/projects",body),"retry reuses the project and initial session");
+            var state=local.get("/state");assertEquals(1,state.path("projects").size());assertEquals(1,state.path("sessions").size());assertEquals("Разработка",state.path("sessions").get(0).path("title").asText());assertFalse(state.path("sessions").get(0).path("running").asBoolean());
+            assertThrows(HostClient.ApiException.class,()->phone.json("/projects",Json.object("path"," ")));
+            var plain=phone.json("/projects",Json.object("path",root.resolve("without-session").toString()));assertTrue(plain.path("sessionId").isNull());
+        }
+    }
     /** Streams a few words, then waits for Stop: enough to observe live text and its completion over the link. */
     private static final AgentAdapter STREAMING=new AgentAdapter(){public Provider provider(){return Provider.CODEX;}public Result run(Request r,Consumer<Event> events,Cancellation cancel)throws Exception{
         events.accept(new Event("text","Работаю",Json.object()));Thread.sleep(150);events.accept(new Event("text"," над задачей…",Json.object()));

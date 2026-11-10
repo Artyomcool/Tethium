@@ -286,7 +286,7 @@ public final class MobileGateway implements AutoCloseable {
         if(!post&&(path.equals("/state")||path.equals("/backlog")||path.equals("/models")||path.equals("/resources")||path.equals("/usage")||path.equals("/history/index")||path.equals("/history/page")||path.equals("/messages")||path.equals("/trash")))return feed.get(target);
         if(post&&allowed(path)){
             var b=body instanceof ObjectNode object?object:Json.object();
-            // A phone can control sessions, not supply paths to arbitrary laptop files.
+            // Chat attachments use validated uploads, separate from file-manager/project paths.
             if(b.has("images")&&!b.path("images").isEmpty())throw new IllegalArgumentException("Используйте загруженные вложения");
             var images=Json.MAPPER.createArrayNode();
             if(b.path("attachments").size()>12)throw new IllegalArgumentException("Не больше 12 изображений в сообщении");
@@ -302,7 +302,7 @@ public final class MobileGateway implements AutoCloseable {
         }
         throw new NoSuchElementException("Unknown endpoint");
     }
-    private static boolean allowed(String path){return path.equals("/backlog")||path.equals("/backlog-settings")||path.matches("/backlog/[a-zA-Z0-9-]+/(update|remove|start)")||path.equals("/resources")||path.equals("/quota/refresh")||path.equals("/quota/reset")||path.equals("/sessions")||path.equals("/answer")||path.matches("/projects/[a-zA-Z0-9-]+/(files|active)")||path.matches("/files/[a-zA-Z0-9-]+/(rename|remove)")||path.matches("/sessions/[a-zA-Z0-9-]+/(run|interrupt|stop|queue-pause|queue-resume|queue-remove|queue-move|queue-take|queue-merge|queue-split|active|rename|settings|seen|attention|quota-auto|autonomy|schedule|pinned-file|trash|restore|purge)");}
+    private static boolean allowed(String path){return path.equals("/projects")||path.equals("/backlog")||path.equals("/backlog-settings")||path.matches("/backlog/[a-zA-Z0-9-]+/(update|remove|start)")||path.equals("/resources")||path.equals("/quota/refresh")||path.equals("/quota/reset")||path.equals("/sessions")||path.equals("/answer")||path.matches("/projects/[a-zA-Z0-9-]+/(files|active)")||path.matches("/files/[a-zA-Z0-9-]+/(rename|remove)")||path.matches("/sessions/[a-zA-Z0-9-]+/(run|interrupt|stop|queue-pause|queue-resume|queue-remove|queue-move|queue-take|queue-merge|queue-split|active|rename|settings|seen|attention|quota-auto|autonomy|schedule|pinned-file|trash|restore|purge)");}
     private static int status(Exception e){return e instanceof SecurityException?401:e instanceof NoSuchElementException?404:400;}
     private static String message(Exception e){return Objects.toString(e.getMessage(),"Ошибка подключения");}
     private JsonNode upload(JsonNode body)throws Exception{

@@ -254,10 +254,15 @@ public final class HostService implements AutoCloseable {
         }
         if (path.equals("/quota/refresh")) { quota.refresh(); return quota.snapshot(); }
         if (path.equals("/projects")) {
-            Path directory = ProjectPaths.root(Files.createDirectories(Path.of(body.path("path").asText())).toRealPath());
+            String requestedPath=body.path("path").asText().strip();if(requestedPath.isEmpty())throw new IllegalArgumentException("Укажите папку проекта");
+            Path directory = ProjectPaths.root(Files.createDirectories(Path.of(requestedPath)).toRealPath());
             if (!Files.isDirectory(directory)) throw new IllegalArgumentException("Выберите каталог проекта");
             if(body.has("frequentPush")||body.path("createRepository").asBoolean())GitHubProjects.configure(directory,body);
-            String id=store.project(directory);resources.refresh();return Json.object("id",id);
+            String initial=body.path("initialSession").asText("").strip();
+            var created=store.transaction(()->{String id=store.project(directory),session=null;
+                if(!initial.isBlank()){for(var s:store.list(id))if(store.trashedAt(s.id())==0&&s.parentId()==null&&s.title().equals(initial)){session=s.id();break;}if(session==null)session=store.create(id,null,initial,directory).id();}
+                return Json.object("id",id,"sessionId",session);
+            });resources.refresh();return created;
         }
         if(path.equals("/projects/order")){var ids=new ArrayList<String>();for(var id:body.path("ids"))ids.add(id.asText());store.reorderProjects(ids);return Json.object("ok",true);}
         if(path.matches("/projects/[a-zA-Z0-9-]+/sessions-order")){var ids=new ArrayList<String>();for(var id:body.path("ids"))ids.add(id.asText());store.reorderSessions(path.split("/")[2],ids);return Json.object("ok",true);}
