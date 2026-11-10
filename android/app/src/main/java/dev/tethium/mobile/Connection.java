@@ -112,8 +112,9 @@ final class Connection {
     /** One authorized POST over plain HTTP for callers that do not hold the link open. */
     JSONObject post(String path,JSONObject body)throws Exception{
         var c=open(path);try{
-            c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");
-            try(var o=c.getOutputStream()){o.write(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}
+            if(path.startsWith("/file-manager/"))c.setReadTimeout(300_000);
+            if(body!=null){c.setRequestMethod("POST");c.setDoOutput(true);c.setRequestProperty("Content-Type","application/json");
+            try(var o=c.getOutputStream()){o.write(body.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));}}
             int status=c.getResponseCode();var stream=status<400?c.getInputStream():c.getErrorStream();
             var result=new JSONObject(stream==null?"{}":new String(read(stream),java.nio.charset.StandardCharsets.UTF_8));
             if(status!=200)throw new ApiException(status,result.optString("error","Ошибка "+status));return result;

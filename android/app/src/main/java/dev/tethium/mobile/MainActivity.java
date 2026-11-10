@@ -289,6 +289,7 @@ public final class MainActivity extends Activity {
             .toggle("bolt","Автономная работа",autonomous()?"Агент продолжает поставленную цель":"Работа от сообщения к сообщению",autonomous(),this::autonomy)
             .toggle("edit","Мысли Claude в ответе",ChatTimeline.showThoughts?"Показываются приглушённо":"Скрыты",ChatTimeline.showThoughts,()->{ChatTimeline.showThoughts=!ChatTimeline.showThoughts;prefs.edit().putBoolean("showThoughts",ChatTimeline.showThoughts).apply();if(timeline!=null)timeline.render(history,"",true);scheduleRender();})
             .group("Ноутбук и приложения")
+            .action("folder","Файлы","Обмен между телефоном и ноутбуком",()->startActivity(new Intent(this,FileManagerActivity.class)))
             .action("gauge","Квота",null,this::quota)
             .action("chart","Расход токенов","Проекты и сессии",()->UsageSheet.show(this,ui,connection,snapshot))
             .action("store","Магазин приложений","Установка и обновление наших APK",()->AppUpdates.show(this,ui,connection))

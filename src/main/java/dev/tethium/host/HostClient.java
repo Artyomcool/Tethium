@@ -54,6 +54,11 @@ public class HostClient implements AutoCloseable {
     }
     public JsonNode get(String path) throws Exception { return call(path, null); }
     public JsonNode post(String path, Object body) throws Exception { return call(path, Json.MAPPER.valueToTree(body)); }
+    public HttpURLConnection fileConnection(String path)throws Exception{
+        if(!path.startsWith("/file-manager/"))throw new IOException("Некорректный путь передачи");
+        reconnect();var endpoint=descriptor;var c=(HttpURLConnection)URI.create("http://127.0.0.1:"+endpoint.path("port").asInt()+path).toURL().openConnection();
+        c.setConnectTimeout(5000);c.setReadTimeout(30_000);c.setInstanceFollowRedirects(false);c.setRequestProperty("Authorization","Bearer "+endpoint.path("token").asText());return c;
+    }
     private JsonNode call(String path, JsonNode body) throws Exception {
         reconnect();
         var endpoint = descriptor;
@@ -67,7 +72,7 @@ public class HostClient implements AutoCloseable {
     }
     private JsonNode request(JsonNode endpoint, String path, JsonNode body) throws Exception {
         String base = "http://127.0.0.1:" + endpoint.path("port").asInt();
-        long timeout=path.equals("/quota/reset")?65:path.startsWith("/project")?90:10;
+        long timeout=path.startsWith("/file-manager/")?300:path.equals("/quota/reset")?65:path.startsWith("/project")?90:10;
         var builder = HttpRequest.newBuilder(URI.create(base + path)).timeout(Duration.ofSeconds(timeout)).header("Authorization", "Bearer " + endpoint.path("token").asText());
         if (body != null) builder.header("Content-Type", "application/json").POST(HttpRequest.BodyPublishers.ofString(body.toString()));
         var response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString());

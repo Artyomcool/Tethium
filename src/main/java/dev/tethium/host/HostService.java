@@ -25,6 +25,7 @@ public final class HostService implements AutoCloseable {
     private final ProjectPanels projectPanels=new ProjectPanels();
     private final ResourceController resources;
     private final MediaCapture media;
+    private final dev.tethium.files.FileManager fileManager;
     private AwakeGuard awake;
     private final ScheduledExecutorService quotaMonitor=Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
     private final ScheduledExecutorService scheduleMonitor=Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().name("session-schedules-",0).factory());
@@ -86,6 +87,7 @@ public final class HostService implements AutoCloseable {
         this.adapter = adapter; this.quota = quota; this.draining = standby; this.models = models; this.data = data;
         detachedEnabled=adapter instanceof CodexAdapter&&!Boolean.getBoolean("tethium.probe");
         store = new SessionStore(data.resolve("tethium.db"));
+        fileManager=new dev.tethium.files.FileManager(data,()->{try{return Json.MAPPER.valueToTree(store.projects());}catch(Exception e){throw new IllegalStateException(e);}});
         store.recoverInterruptedRuns();
         usage=new UsageLedger(data.resolve("tethium.db"));
         resources=new ResourceController(store,data,detachedEnabled);
@@ -128,6 +130,8 @@ public final class HostService implements AutoCloseable {
             var auth = exchange.getRequestHeaders().getFirst("Authorization");
             if (auth == null || !MessageDigest.isEqual(("Bearer " + token).getBytes(StandardCharsets.UTF_8), auth.getBytes(StandardCharsets.UTF_8))) { send(exchange, 401, Json.object("error", "Unauthorized")); return; }
             if (exchange.getRequestHeaders().containsKey("Origin")) { send(exchange, 403, Json.object("error", "Browser origins are not allowed")); return; }
+            try { if(fileManager.binary(exchange))return; }
+            catch(Exception e){send(exchange,400,Json.object("error",Objects.toString(e.getMessage(),"Ошибка передачи")));return;}
             String method = exchange.getRequestMethod();
             if (!method.equals("GET") && !method.equals("POST")) { send(exchange, 405, Json.object("error", "Method not allowed")); return; }
             JsonNode body = null;
@@ -143,6 +147,8 @@ public final class HostService implements AutoCloseable {
     /** One entry point for loopback HTTP and the in-process mobile gateway; callers are already authenticated. */
     Object dispatch(String method, URI uri, JsonNode body) throws Exception {
         String path = uri.getPath();
+        if(path.equals("/file-manager/share")&&method.equals("POST"))return fileManager.share(Path.of(body.path("path").asText()));
+        if(path.startsWith(dev.tethium.files.FileManager.PREFIX+"/"))return fileManager.api(method,uri,body);
         if (method.equals("GET")) return switch (path) {
             case "/health" -> health();
             case "/resources" -> resources.snapshot();
@@ -172,6 +178,7 @@ public final class HostService implements AutoCloseable {
     /** Push feed for the LAN gateway: change signal, catalog, conversation tails and live text, all in-process. */
     public dev.tethium.mobile.MobileGateway.Feed feed() {
         return new dev.tethium.mobile.MobileGateway.Feed() {
+            public dev.tethium.files.FileManager files(){return fileManager;}
             public long revision() { return revision.get(); }
             public void addListener(Runnable listener) { changeListeners.add(listener); }
             public void removeListener(Runnable listener) { changeListeners.remove(listener); }

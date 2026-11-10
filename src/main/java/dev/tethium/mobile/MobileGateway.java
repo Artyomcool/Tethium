@@ -23,6 +23,7 @@ import java.util.concurrent.*;
 public final class MobileGateway implements AutoCloseable {
     /** In-process access to the host: change signal plus the pieces the link streams. */
     public interface Feed {
+        default dev.tethium.files.FileManager files(){return null;}
         long revision();
         void addListener(Runnable listener);
         void removeListener(Runnable listener);
@@ -233,6 +234,12 @@ public final class MobileGateway implements AutoCloseable {
 
     // ---- shared API surface: link requests and HTTP JSON for the Windows remote ----
     private JsonNode api(String method,String target,JsonNode body)throws Exception{
+        var fileUri=URI.create(target);
+        if(fileUri.getPath().startsWith(dev.tethium.files.FileManager.PREFIX+"/")){
+            if(fileUri.getPath().equals("/file-manager/share"))throw new SecurityException("Общую папку добавляют на рабочем ноутбуке");
+            if(feed.files()==null)throw new IOException("Обновите ядро Tethium");
+            return feed.files().api(method,fileUri,body);
+        }
         if(target==null||!target.startsWith("/")||target.startsWith("//"))throw new IllegalArgumentException("Некорректный путь");
         String path=target.split("\\?",2)[0];boolean post=method.equals("POST");
         if(path.equals("/apps")&&!post){
@@ -333,6 +340,7 @@ public final class MobileGateway implements AutoCloseable {
             if(path.equals("/pair")&&method.equals("POST")){json(e,200,pair(body(e)));return;}
             String auth=e.getRequestHeaders().getFirst("Authorization");
             if(auth==null||!auth.startsWith("Bearer ")||!authorized(auth.substring(7)))throw new SecurityException("Подключите телефон по QR на ноутбуке");
+            if(feed.files()!=null&&feed.files().binary(e))return;
             if(method.equals("GET")){
                 if(path.matches("/apps/[a-f0-9]{64}\\.apk")){Path apk=appCatalog.file(path.substring(6,70));e.getResponseHeaders().set("Content-Type","application/vnd.android.package-archive");e.sendResponseHeaders(200,Files.size(apk));Files.copy(apk,e.getResponseBody());return;}
                 if(path.equals("/update")){resource(e,"/mobile/release.json","application/json");return;}
