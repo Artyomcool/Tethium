@@ -133,7 +133,7 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
                         detach(); imagePanel = new ImagePanel(image); removeAll(); add(imagePanel); revalidate(); repaint();
                     });
                 }
-            } catch (Exception e) { SwingUtilities.invokeLater(() -> { if (!closed && generation.get() == expected) { detach(); message("Не удалось открыть: " + e.getMessage()); } }); }
+            } catch (Exception | Error e) { SwingUtilities.invokeLater(() -> { if (!closed && generation.get() == expected) { detach(); message("Не удалось открыть: " + e.getMessage()); } }); }
         });
     }
     private java.net.URI remoteUrl;
@@ -150,7 +150,8 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
             String html;try(var in=url.toURL().openStream()){html=new String(in.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);}
             JComponent view;
             try{view=DocumentView.create(html,url,link->SwingUtilities.invokeLater(()->follow(link,url,resources)),Math.max(400,getWidth()));}
-            catch(RuntimeException error){System.err.println("Document view: "+error);return false;}
+            // LinkageError included: a runtime without a module the renderer needs must fall back to the browser, not hang.
+            catch(RuntimeException|LinkageError error){System.err.println("Document view: "+error);return false;}
             SwingUtilities.invokeAndWait(()->{
                 if(closed||generation.get()!=expected){if(resources!=null)resources.close();return;}
                 int position=key.equals(documentKey)&&documentPanel!=null?scrollOf(documentPanel):0;
