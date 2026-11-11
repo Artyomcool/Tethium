@@ -137,7 +137,7 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
             SwingUtilities.invokeLater(()->{
                 if(closed||generation.get()!=expected)return;
                 var pane=new ChatTranscript();pane.setText(ChatTheme.page(content));pane.setCaretPosition(0);
-                var note=new JLabel("Упрощённый вид: "+browserFailure);note.setForeground(Theme.MUTED);note.setBorder(BorderFactory.createEmptyBorder(4,8,4,8));
+                var note=new JLabel("<html><body style='width:520px'>Упрощённый вид. "+Theme.escape(browserFailure).replace("\n","<br>")+"</body></html>");note.setForeground(Theme.MUTED);note.setBorder(BorderFactory.createEmptyBorder(4,8,4,8));
                 var panel=new JPanel(new java.awt.BorderLayout());panel.add(note,java.awt.BorderLayout.NORTH);var scroll=new JScrollPane(pane);scroll.setBorder(null);panel.add(scroll);
                 detach();removeAll();add(panel);revalidate();repaint();
             });
@@ -151,21 +151,58 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
     /** Why the embedded browser cannot start on this machine, once known; it is not retried. */
     private static volatile String browserFailure;
     /** A missing system library is named with the package that provides it, instead of failing silently. */
-    static String describe(Throwable failure){
+    /** Ubuntu/Debian packages of the libraries Chromium needs that a desktop may lack; names on 24.04 first. */
+    private static final java.util.Map<String,String> PACKAGES=java.util.Map.ofEntries(
+        java.util.Map.entry("libgbm.so.1","libgbm1"),java.util.Map.entry("libxkbcommon.so.0","libxkbcommon0"),java.util.Map.entry("libnss3.so","libnss3"),java.util.Map.entry("libnssutil3.so","libnss3"),
+        java.util.Map.entry("libsmime3.so","libnss3"),java.util.Map.entry("libnspr4.so","libnspr4"),java.util.Map.entry("libasound.so.2","libasound2t64"),java.util.Map.entry("libatk-1.0.so.0","libatk1.0-0t64"),
+        java.util.Map.entry("libatk-bridge-2.0.so.0","libatk-bridge2.0-0t64"),java.util.Map.entry("libatspi.so.0","libatspi2.0-0t64"),java.util.Map.entry("libcups.so.2","libcups2t64"),java.util.Map.entry("libdrm.so.2","libdrm2"),
+        java.util.Map.entry("libXcomposite.so.1","libxcomposite1"),java.util.Map.entry("libXdamage.so.1","libxdamage1"),java.util.Map.entry("libXrandr.so.2","libxrandr2"),java.util.Map.entry("libXfixes.so.3","libxfixes3"),
+        java.util.Map.entry("libpango-1.0.so.0","libpango-1.0-0"),java.util.Map.entry("libcairo.so.2","libcairo2"),java.util.Map.entry("libxshmfence.so.1","libxshmfence1"),java.util.Map.entry("libdbus-1.so.3","libdbus-1-3"),
+        java.util.Map.entry("libexpat.so.1","libexpat1"),java.util.Map.entry("libgtk-3.so.0","libgtk-3-0t64"),java.util.Map.entry("libglib-2.0.so.0","libglib2.0-0t64"),java.util.Map.entry("libxcb.so.1","libxcb1"));
+    /** Every library the downloaded Chromium cannot find on this system, as ldd reports them; libjawt comes with Java itself. */
+    static java.util.List<String> missingLibraries(java.nio.file.Path installDir){
+        var missing=new java.util.TreeSet<String>();
+        try{
+            var files=new java.util.ArrayList<String>(java.util.List.of("ldd"));
+            for(String name:java.util.List.of("libcef.so","libjcef.so","jcef_helper"))if(java.nio.file.Files.isRegularFile(installDir.resolve(name)))files.add(installDir.resolve(name).toString());
+            if(files.size()==1)return java.util.List.of();
+            var builder=new ProcessBuilder(files).redirectErrorStream(true);builder.environment().put("LD_LIBRARY_PATH",installDir.toString());
+            var process=builder.start();String output=new String(process.getInputStream().readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);process.waitFor(10,java.util.concurrent.TimeUnit.SECONDS);
+            var line=java.util.regex.Pattern.compile("(?m)^\\s*(\\S+) => not found").matcher(output);
+            while(line.find())if(!line.group(1).startsWith("libjawt"))missing.add(line.group(1));
+        }catch(Exception ignored){}
+        return java.util.List.copyOf(missing);
+    }
+    static String describe(Throwable failure){return describe(failure,null);}
+    /** Names every missing system library with the command that installs them, or says that the browser itself could not be downloaded. */
+    static String describe(Throwable failure,java.nio.file.Path installDir){
         String message=String.valueOf(failure.getMessage());
         var library=java.util.regex.Pattern.compile("(lib[\\w.+-]+\\.so[\\w.]*): cannot open").matcher(message);
-        if(failure instanceof UnsatisfiedLinkError&&library.find())return "встроенному браузеру не хватает системной библиотеки "+library.group(1)+". В Debian/Ubuntu: sudo apt install libgbm1 libxkbcommon0 libnss3 libasound2";
+        if(failure instanceof UnsatisfiedLinkError&&library.find()){
+            var missing=new java.util.TreeSet<String>(installDir==null?java.util.List.of():missingLibraries(installDir));missing.add(library.group(1));
+            var packages=new java.util.TreeSet<String>();var unknown=new java.util.ArrayList<String>();
+            for(String name:missing){String pkg=PACKAGES.get(name);if(pkg!=null)packages.add(pkg);else unknown.add(name);}
+            return "Встроенному браузеру не хватает системных библиотек: "+String.join(", ",missing)+"."
+                +(packages.isEmpty()?"":"\nУстановите: sudo apt install "+String.join(" ",packages))
+                +(unknown.isEmpty()?"":"\nПакеты для "+String.join(", ",unknown)+" подскажет apt-file search.");
+        }
+        for(Throwable cause=failure;cause!=null;cause=cause.getCause())
+            if(cause instanceof java.net.UnknownHostException||cause instanceof java.net.ConnectException)
+                return "Встроенный браузер скачивается из интернета при первом запуске, а интернета на этом компьютере нет: "+cause.getMessage();
         return message;
     }
     private void ensureApp() throws Exception {
         if (app != null) return;
         if (browserFailure != null) throw new IllegalStateException(browserFailure);
-        try { buildApp(); } catch (Throwable failure) { browserFailure = describe(failure); throw new IllegalStateException(browserFailure, failure); }
+        try { buildApp(); } catch (Throwable failure) { browserFailure = describe(failure, installDir()); throw new IllegalStateException(browserFailure, failure); }
+    }
+    private static Path installDir() {
+        Path cache = Path.of(".local", "preview", "jcef").toAbsolutePath();
+        return Files.isDirectory(cache) ? cache : AppPaths.data().resolve("jcef");
     }
     private void buildApp() throws Exception {
         var builder = new CefAppBuilder();
-        Path cache = Path.of(".local", "preview", "jcef").toAbsolutePath();
-        if (!Files.isDirectory(cache)) cache = AppPaths.data().resolve("jcef");
+        Path cache = installDir();
         builder.setInstallDir(cache.toFile()); builder.getCefSettings().windowless_rendering_enabled = true;
         // Chromium's process singleton must not redirect a new GUI/probe into the old GUI during reload.
         builder.getCefSettings().root_cache_path = Files.createDirectories(AppPaths.data().resolve("browser-profiles").resolve(Long.toString(ProcessHandle.current().pid()))).toString();
