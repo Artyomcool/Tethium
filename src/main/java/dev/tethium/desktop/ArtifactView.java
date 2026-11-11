@@ -123,9 +123,29 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
         });
     }
     private java.net.URI remoteUrl;
-    public void openRemote(java.net.URI url){if(closed)return;if(url.equals(remoteUrl)){attach();return;}current=null;shownSignature=null;remoteUrl=url;imagePanel=null;rendererRecoveries=0;cancelPending();long expected=generation.incrementAndGet();if(browser==null||!attached())message("Открываем результат с ноутбука…");loader.submit(()->{try{showBrowser(url,url.resolve(".").toString(),expected,null);}catch(Exception e){SwingUtilities.invokeLater(()->{if(generation.get()==expected){detach();message("Не удалось открыть: "+e.getMessage());}});}});}
+    public void openRemote(java.net.URI url){if(closed)return;if(url.equals(remoteUrl)){attach();return;}current=null;shownSignature=null;remoteUrl=url;imagePanel=null;rendererRecoveries=0;cancelPending();long expected=generation.incrementAndGet();if(browser==null||!attached())message("Открываем результат с ноутбука…");loader.submit(()->{try{showBrowser(url,url.resolve(".").toString(),expected,null);}catch(Exception e){
+            // Without the embedded browser the page still opens: the laptop's file is served locally, any browser can show it.
+            boolean outside=browserFailure!=null&&openOutside(url);
+            SwingUtilities.invokeLater(()->{if(generation.get()==expected){detach();message(outside?"Открыто в браузере системы: "+browserFailure:"Не удалось открыть: "+e.getMessage());}});}});}
+    private static boolean openOutside(java.net.URI url){
+        try{if(java.awt.Desktop.isDesktopSupported()&&java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.BROWSE)){java.awt.Desktop.getDesktop().browse(url);return true;}}catch(Exception ignored){}
+        try{new ProcessBuilder("xdg-open",url.toString()).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();return true;}catch(Exception ignored){return false;}
+    }
+    /** Why the embedded browser cannot start on this machine, once known; it is not retried. */
+    private static volatile String browserFailure;
+    /** A missing system library is named with the package that provides it, instead of failing silently. */
+    static String describe(Throwable failure){
+        String message=String.valueOf(failure.getMessage());
+        var library=java.util.regex.Pattern.compile("(lib[\\w.+-]+\\.so[\\w.]*): cannot open").matcher(message);
+        if(failure instanceof UnsatisfiedLinkError&&library.find())return "встроенному браузеру не хватает системной библиотеки "+library.group(1)+". В Debian/Ubuntu: sudo apt install libgbm1 libxkbcommon0 libnss3 libasound2";
+        return message;
+    }
     private void ensureApp() throws Exception {
         if (app != null) return;
+        if (browserFailure != null) throw new IllegalStateException(browserFailure);
+        try { buildApp(); } catch (Throwable failure) { browserFailure = describe(failure); throw new IllegalStateException(browserFailure, failure); }
+    }
+    private void buildApp() throws Exception {
         var builder = new CefAppBuilder();
         Path cache = Path.of(".local", "preview", "jcef").toAbsolutePath();
         if (!Files.isDirectory(cache)) cache = AppPaths.data().resolve("jcef");
