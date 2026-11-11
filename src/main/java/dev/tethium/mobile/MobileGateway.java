@@ -250,6 +250,7 @@ public final class MobileGateway implements AutoCloseable {
             }
             return catalog;
         }
+        if(path.equals("/remote/version")&&!post)return remoteVersion();
         if(path.equals("/attachment")&&post)return upload(body);
         if(path.equals("/service-token")&&post)return services.mint(body);
         if(path.equals("/artifact/download")&&post){
@@ -337,6 +338,7 @@ public final class MobileGateway implements AutoCloseable {
                 if(path.equals("/")){page(e);return;}
                 if(path.equals("/tethium.apk")){resource(e,"/mobile/tethium.apk","application/vnd.android.package-archive");return;}
                 if(path.equals("/tethium-remote.zip")){Path zip=data.getParent().resolve("releases/tethium-remote.zip");if(!Files.isRegularFile(zip)){e.sendResponseHeaders(404,-1);return;}e.getResponseHeaders().set("Content-Type","application/zip");e.getResponseHeaders().set("Content-Disposition","attachment; filename=Tethium-Remote.zip");e.sendResponseHeaders(200,Files.size(zip));Files.copy(zip,e.getResponseBody());return;}
+                if(path.equals("/tethium-remote-jvm.sha256")){byte[] sha=(remoteVersion().path("jvm").asText()+"\n").getBytes(StandardCharsets.UTF_8);e.getResponseHeaders().set("Content-Type","text/plain");e.sendResponseHeaders(200,sha.length);e.getResponseBody().write(sha);return;}
                 if(path.equals("/tethium-remote-jvm.zip")){Path zip=data.getParent().resolve("releases/tethium-remote-jvm.zip");if(!Files.isRegularFile(zip)){e.sendResponseHeaders(404,-1);return;}e.getResponseHeaders().set("Content-Type","application/zip");e.getResponseHeaders().set("Content-Disposition","attachment; filename=tethium-remote-jvm.zip");e.sendResponseHeaders(200,Files.size(zip));Files.copy(zip,e.getResponseBody());return;}
             }
             if(path.equals("/pair")&&method.equals("POST")){json(e,200,pair(body(e)));return;}
@@ -356,6 +358,14 @@ public final class MobileGateway implements AutoCloseable {
         }catch(Exception error){json(e,status(error),Json.object("error",message(error)));}}
     }
     /** Screenshots sent with messages and images the agent made are kept by Tethium, outside the project. */
+    private volatile String remoteVersionKey="",remoteVersionSha="";
+    /** The SHA-256 of the plain-jar Remote archive this laptop serves; Remote compares it with its own to offer an update. */
+    private JsonNode remoteVersion()throws Exception{
+        Path zip=data.getParent().resolve("releases/tethium-remote-jvm.zip");if(!Files.isRegularFile(zip))return Json.object("jvm","");
+        String key=Files.size(zip)+":"+Files.getLastModifiedTime(zip).toMillis();
+        if(!key.equals(remoteVersionKey)){var digest=java.security.MessageDigest.getInstance("SHA-256");try(var in=Files.newInputStream(zip)){byte[] buffer=new byte[1<<16];for(int n;(n=in.read(buffer))>0;)digest.update(buffer,0,n);}remoteVersionSha=java.util.HexFormat.of().formatHex(digest.digest());remoteVersionKey=key;}
+        return Json.object("jvm",remoteVersionSha);
+    }
     private boolean ownedMedia(Path file,String session)throws IOException{
         for(Path root:List.of(data.resolve("attachments"),data.getParent().resolve("attachments").resolve(session),data.getParent().resolve("chat-media").resolve(session)))
             if(Files.isDirectory(root)&&file.startsWith(root.toRealPath()))return true;
