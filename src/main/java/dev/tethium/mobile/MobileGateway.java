@@ -277,7 +277,7 @@ public final class MobileGateway implements AutoCloseable {
                 Path rawPath=link.startsWith("file:")?Path.of(URI.create(link)):Path.of(URLDecoder.decode(link.replace("+","%2B"),StandardCharsets.UTF_8));
                 Path directory=Path.of(session.path("directory").asText()).toRealPath();file=directory.resolve(rawPath).normalize().toRealPath();
                 Path project=directory;for(var value:snapshot.path("projects"))if(value.path("id").asText().equals(session.path("projectId").asText()))project=Path.of(value.path("root").asText()).toRealPath();
-                if(!file.startsWith(project)&&!file.startsWith(directory))throw new IllegalArgumentException("Файл вне проекта");
+                if(!file.startsWith(project)&&!file.startsWith(directory)&&!ownedMedia(file,session.path("id").asText()))throw new IllegalArgumentException("Файл вне проекта");
                 if(!file.getFileName().toString().toLowerCase(Locale.ROOT).matches(".*\\.(md|markdown|html?|svg|png|jpe?g|gif|webp)$"))throw new IllegalArgumentException("Этот формат не поддерживается в просмотре");
             }
             String key=random();
@@ -353,6 +353,12 @@ public final class MobileGateway implements AutoCloseable {
             if(!method.equals("GET")&&!method.equals("POST")){e.sendResponseHeaders(405,-1);return;}
             json(e,200,api(method,target,method.equals("POST")?body(e,path.equals("/attachment")?17_000_000:2_000_000):null));
         }catch(Exception error){json(e,status(error),Json.object("error",message(error)));}}
+    }
+    /** Screenshots sent with messages and images the agent made are kept by Tethium, outside the project. */
+    private boolean ownedMedia(Path file,String session)throws IOException{
+        for(Path root:List.of(data.resolve("attachments"),data.getParent().resolve("attachments").resolve(session),data.getParent().resolve("chat-media").resolve(session)))
+            if(Files.isDirectory(root)&&file.startsWith(root.toRealPath()))return true;
+        return false;
     }
     private void previewFile(HttpExchange e,String path)throws Exception{
         String[] parts=path.split("/",4);var preview=parts.length==4?previews.get(parts[2]):null;

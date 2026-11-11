@@ -13,6 +13,8 @@ import io.noties.markwon.ext.tasklist.TaskListPlugin;
 import org.json.*;
 import java.util.*;
 import java.util.function.*;
+import java.util.regex.Pattern;
+import java.io.File;
 
 /** Stable message views: polling updates the streaming tail, never replaces the whole transcript. */
 final class ChatTimeline extends FrameLayout {
@@ -68,7 +70,38 @@ final class ChatTimeline extends FrameLayout {
         end=ui.button("В конец ↓",this::toEnd);end.setElevation(ui.dp(6));var ep=new LayoutParams(-2,ui.dp(48),Gravity.BOTTOM|Gravity.RIGHT);ep.setMargins(0,0,ui.dp(16),ui.dp(8));addView(end,ep);end.setVisibility(GONE);
         scroll.setOnScrollChangeListener((v,x,y,ox,oy)->{end.setVisibility(bottom()?GONE:VISIBLE);String current="Запросы в разговоре";for(var e:anchors.entrySet())if(e.getValue().getTop()<=y+ui.dp(24)&&userTitles.containsKey(e.getKey()))current=userTitles.get(e.getKey());currentRequest.accept(current);if(bottom())atEnd.run();});
     }
+    BiConsumer<String,Consumer<File>> loadImage=(link,done)->{};
+    private static final Pattern IMAGE_LINK=Pattern.compile("!?\\[([^\\]]*)\\]\\(<?([^)>\\s]+\\.(?:png|jpe?g|gif|webp|bmp))>?\\)",Pattern.CASE_INSENSITIVE);
+    /** Images a message links to are shown under its text; a tap opens them full screen. */
+    private void images(LinearLayout card,String text){
+        var matcher=IMAGE_LINK.matcher(text);int count=0;
+        while(matcher.find()&&count++<6){
+            String link=matcher.group(2);var image=new ImageView(getContext());image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_START);image.setBackground(ui.shape(Ui.PANEL,12));image.setContentDescription(matcher.group(1).isBlank()?"Изображение":matcher.group(1));
+            var params=new LinearLayout.LayoutParams(-1,ui.dp(120));params.topMargin=ui.dp(8);card.addView(image,params);
+            loadImage.accept(link,file->{
+                var bounds=new android.graphics.BitmapFactory.Options();bounds.inJustDecodeBounds=true;android.graphics.BitmapFactory.decodeFile(file.toString(),bounds);
+                var options=new android.graphics.BitmapFactory.Options();options.inSampleSize=1;while(bounds.outWidth/options.inSampleSize>1400)options.inSampleSize*=2;
+                var bitmap=android.graphics.BitmapFactory.decodeFile(file.toString(),options);if(bitmap==null)return;
+                image.setBackground(null);image.setImageBitmap(bitmap);image.setMaxHeight(ui.dp(320));image.setLayoutParams(new LinearLayout.LayoutParams(-1,-2){{topMargin=ui.dp(8);}});
+                image.setOnClickListener(v->ImagePreview.show((Activity)getContext(),ui,file));
+            });
+        }
+    }
     private TextView body(){var t=ui.label("",16,Ui.TEXT);t.setTextIsSelectable(true);t.setLineSpacing(ui.dp(5),1);
+        // Selectable text takes taps for itself, so links are opened here; a long press still selects.
+        var taps=new GestureDetector(getContext(),new GestureDetector.SimpleOnGestureListener(){
+            @Override public boolean onSingleTapUp(MotionEvent e){
+                var layout=t.getLayout();if(layout==null||!(t.getText() instanceof android.text.Spanned spanned))return false;
+                int x=(int)e.getX()-t.getTotalPaddingLeft()+t.getScrollX(),y=(int)e.getY()-t.getTotalPaddingTop()+t.getScrollY();
+                int line=layout.getLineForVertical(y);if(x<layout.getLineLeft(line)||x>layout.getLineRight(line))return false;
+                int offset=layout.getOffsetForHorizontal(line,x);var links=spanned.getSpans(offset,offset,android.text.style.ClickableSpan.class);
+                if(links.length==0)return false;links[0].onClick(t);return true;
+            }
+        });
+        t.setOnTouchListener((v,e)->{
+            if(!taps.onTouchEvent(e))return false;
+            var cancel=MotionEvent.obtain(e);cancel.setAction(MotionEvent.ACTION_CANCEL);t.onTouchEvent(cancel);cancel.recycle();return true;
+        });
         t.setCustomSelectionActionModeCallback(new ActionMode.Callback(){
             public boolean onCreateActionMode(ActionMode mode,Menu menu){menu.add(0,9127,0,"Цитировать").setShowAsAction(MenuItem.SHOW_AS_ACTION_IF_ROOM);return true;}
             public boolean onPrepareActionMode(ActionMode mode,Menu menu){return false;}
@@ -86,7 +119,7 @@ final class ChatTimeline extends FrameLayout {
         if(rebuild){start=nextStart;rendered.clear();anchors.clear();userTitles.clear();messages.removeAllViews();if(start>0||more){messages.addView(ui.button("Загрузить предыдущие сообщения",()->{if(start>0){int before=scroll.getChildAt(0).getHeight(),y=scroll.getScrollY();limit+=100;start=-1;render(history,lastLive,true);scroll.post(()->scroll.scrollTo(0,y+scroll.getChildAt(0).getHeight()-before));}else loadEarlier.run();}));ui.gap(messages,16);}}
         for(int i=start;i<array.length();i++){var m=array.optJSONObject(i);long key=m.optLong("sequence");if(rendered.containsKey(key))continue;rendered.put(key,m.toString());String role=m.optString("role"),text=m.optString("text");boolean user=role.equals("user"),assistant=role.equals("assistant");
             var card=ui.col();if(user){card.setBackground(ui.shape(Ui.PANEL,18));ui.pad(card,14,6);}var header=ui.row();var name=ui.label(user?"ВЫ":assistant?m.optString("provider","Codex").toUpperCase(Locale.ROOT):"СОБЫТИЕ",11,user?Ui.ACCENT:Ui.MUTED);name.setTypeface(Typeface.DEFAULT_BOLD);header.addView(name,new LinearLayout.LayoutParams(0,-2,1));header.addView(ui.icon("copy","Копировать сообщение",()->ui.copy(withoutActions(text))),new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));card.addView(header);
-            var t=body();if(user)t.setText(text);else render(t,narration(text));if(!assistant&&!user){t.setMaxLines(3);t.setEllipsize(TextUtils.TruncateAt.END);t.setTextColor(Ui.MUTED);t.setOnClickListener(v->{var detail=ui.col();ui.pad(detail,16,12);var full=body();render(full,narration(text));var sc=new ScrollView(getContext());sc.addView(full);detail.addView(sc,new LinearLayout.LayoutParams(-1,-1));ui.sheet("Событие",detail);});}card.addView(t);ui.gap(card,user?14:4);messages.addView(card);anchors.put(key,card);if(user)userTitles.put(key,text.replace('\n',' '));ui.gap(messages,20);
+            var t=body();if(user)t.setText(IMAGE_LINK.matcher(text).replaceAll("").strip());else render(t,narration(text));if(!assistant&&!user){t.setMaxLines(3);t.setEllipsize(TextUtils.TruncateAt.END);t.setTextColor(Ui.MUTED);t.setOnClickListener(v->{var detail=ui.col();ui.pad(detail,16,12);var full=body();render(full,narration(text));var sc=new ScrollView(getContext());sc.addView(full);detail.addView(sc,new LinearLayout.LayoutParams(-1,-1));ui.sheet("Событие",detail);});}card.addView(t);images(card,text);ui.gap(card,user?14:4);messages.addView(card);anchors.put(key,card);if(user)userTitles.put(key,text.replace('\n',' '));ui.gap(messages,20);
         }
         if(!streaming.equals(lastLive)){lastLive=streaming;render(liveText,narration(streaming));}live.setVisibility(streaming.isEmpty()?GONE:VISIBLE);
         if(array.length()==0&&streaming.isEmpty()&&messages.getChildCount()==0){var empty=ui.col();ui.pad(empty,8,36);empty.addView(ui.title("Начнём с задачи"));ui.gap(empty,12);empty.addView(ui.label("Все действия выполняются на ноутбуке. Здесь — тот же разговор, очередь и результаты.",16,Ui.MUTED));messages.addView(empty);start=-1;}
