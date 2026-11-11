@@ -123,11 +123,30 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
         });
     }
     private java.net.URI remoteUrl;
-    public void openRemote(java.net.URI url){if(closed)return;if(url.equals(remoteUrl)){attach();return;}current=null;shownSignature=null;remoteUrl=url;imagePanel=null;rendererRecoveries=0;cancelPending();long expected=generation.incrementAndGet();if(browser==null||!attached())message("Открываем результат с ноутбука…");loader.submit(()->{try{showBrowser(url,url.resolve(".").toString(),expected,null);}catch(Exception e){
+    public void openRemote(java.net.URI url){if(closed)return;if(url.equals(remoteUrl)){attach();return;}current=null;shownSignature=null;remoteUrl=url;imagePanel=null;rendererRecoveries=0;cancelPending();long expected=generation.incrementAndGet();if(browser==null||!attached())message("Открываем результат с ноутбука…");loader.submit(()->{if(isDocument(url)&&showDocument(url,expected,null))return;try{showBrowser(url,url.resolve(".").toString(),expected,null);}catch(Exception e){
             // Without the embedded browser the page still opens: the laptop's file is served locally, any browser can show it.
-            if(browserFailure!=null&&url.getPath().toLowerCase(java.util.Locale.ROOT).matches(".*\\.(md|markdown|html?)$")&&showSimple(url,expected))return;
+            if(browserFailure!=null&&url.getPath().toLowerCase(java.util.Locale.ROOT).matches(".*\\.(md|markdown|html?)$")&&(showDocument(url,expected,browserFailure)||showSimple(url,expected)))return;
             boolean outside=browserFailure!=null&&openOutside(url);
             SwingUtilities.invokeLater(()->{if(generation.get()==expected){detach();message(outside?"Открыто в браузере системы: "+browserFailure:"Не удалось открыть: "+e.getMessage());}});}});}
+    /** Markdown never needs a browser; an HTML page may need its scripts, so it goes to Chromium first. */
+    private static boolean isDocument(java.net.URI url){return url.getPath().toLowerCase(java.util.Locale.ROOT).matches(".*\\.(md|markdown)$");}
+    /** A document drawn in pure Java: the same page the laptop renders, styles and images included. */
+    private boolean showDocument(java.net.URI url,long expected,String note){
+        try{
+            String html;try(var in=url.toURL().openStream()){html=new String(in.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);}
+            var failure=new boolean[1];
+            SwingUtilities.invokeAndWait(()->{
+                if(closed||generation.get()!=expected)return;
+                try{
+                    var view=DocumentView.create(html,url,link->{if(link.getScheme()!=null&&link.getScheme().startsWith("http")&&!"127.0.0.1".equals(link.getHost()))openOutside(link);});
+                    var panel=new JPanel(new java.awt.BorderLayout());
+                    if(note!=null){var label=new JLabel("<html><body style='width:520px'>"+Theme.escape(note).replace("\n","<br>")+"</body></html>");label.setForeground(Theme.MUTED);label.setBorder(BorderFactory.createEmptyBorder(4,8,4,8));panel.add(label,java.awt.BorderLayout.NORTH);}
+                    panel.add(view);detach();removeAll();add(panel);revalidate();repaint();
+                }catch(RuntimeException error){failure[0]=true;System.err.println("Document view: "+error);}
+            });
+            return !failure[0];
+        }catch(Exception failure){return false;}
+    }
     /** Without the embedded browser a document is still readable: its HTML is shown the way the chat is, scripts and inline images aside. */
     private boolean showSimple(java.net.URI url,long expected){
         try{
