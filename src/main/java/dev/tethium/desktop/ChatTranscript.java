@@ -71,16 +71,29 @@ final class ChatTranscript extends JEditorPane {
     }
 
     // A command line or a code block offers a copy button while the pointer is over it.
-    private final JButton copy=new JButton("Копировать");
+    private final JButton copy=new JButton(new CopyIcon(false));
     private Element hovered;
-    private final Timer copied=new Timer(1200,e->copy.setText("Копировать"));
+    private final Timer copied=new Timer(1200,e->copy.setIcon(new CopyIcon(false)));
     private void installCopyButton(){
-        setLayout(null);copy.setFocusable(false);copy.setName("chat.copyBlock");copy.setFont(copy.getFont().deriveFont(11f));copy.putClientProperty("JButton.buttonType","roundRect");copy.setMargin(new java.awt.Insets(1,8,1,8));
+        setLayout(null);copy.setFocusable(false);copy.setName("chat.copyBlock");copy.putClientProperty("JButton.buttonType","roundRect");copy.setMargin(new java.awt.Insets(3,3,3,3));
         copy.setToolTipText("Скопировать в буфер обмена");copy.setVisible(false);copied.setRepeats(false);add(copy);
         copy.addActionListener(e->{if(hovered==null)return;String text=copyText(hovered);if(text.isEmpty())return;
-            java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new java.awt.datatransfer.StringSelection(text),null);copy.setText("Скопировано");copied.restart();});
+            java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new java.awt.datatransfer.StringSelection(text),null);copy.setIcon(new CopyIcon(true));copied.restart();});
         addMouseMotionListener(new java.awt.event.MouseMotionAdapter(){@Override public void mouseMoved(java.awt.event.MouseEvent e){hover(e.getPoint());}});
         addMouseListener(new java.awt.event.MouseAdapter(){@Override public void mouseExited(java.awt.event.MouseEvent e){if(!copy.getBounds().contains(e.getPoint()))hideCopy();}});
+    }
+    /** Two overlapping sheets; a check mark for a moment after copying. */
+    private record CopyIcon(boolean done) implements Icon {
+        public int getIconWidth(){return 14;}
+        public int getIconHeight(){return 14;}
+        public void paintIcon(java.awt.Component c,java.awt.Graphics graphics,int x,int y){
+            var g=(java.awt.Graphics2D)graphics.create();
+            g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,java.awt.RenderingHints.VALUE_ANTIALIAS_ON);g.translate(x,y);
+            g.setStroke(new java.awt.BasicStroke(1.4f,java.awt.BasicStroke.CAP_ROUND,java.awt.BasicStroke.JOIN_ROUND));
+            if(done){g.setColor(Theme.ACCENT);g.drawPolyline(new int[]{2,6,12},new int[]{7,11,3},3);}
+            else{g.setColor(Theme.MUTED);g.drawPolyline(new int[]{3,1,1,9,9},new int[]{9,9,1,1,3},5);g.setColor(Theme.TEXT);g.drawRoundRect(5,5,8,8,2,2);}
+            g.dispose();
+        }
     }
     private void hideCopy(){hovered=null;copy.setVisible(false);}
     private void hover(java.awt.Point point){
@@ -90,7 +103,7 @@ final class ChatTranscript extends JEditorPane {
         if(area==null||point.y<area.y||point.y>area.y+area.height){hideCopy();return;}
         hovered=block;var size=copy.getPreferredSize();var insets=getInsets();
         int x=getWidth()-insets.right-size.width-6,y=Math.max(area.y,area.y+(Math.min(area.height,28)-size.height)/2);
-        copy.setBounds(x,y,size.width,size.height);if(!copy.isVisible()){copy.setText("Копировать");copy.setVisible(true);}
+        copy.setBounds(x,y,size.width,size.height);if(!copy.isVisible()){copy.setIcon(new CopyIcon(false));copy.setVisible(true);}
     }
     /** A command line of the agent, or a block of code; null for ordinary text. */
     static Element copyable(Element element){
