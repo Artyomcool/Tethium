@@ -145,6 +145,7 @@ tasks.register('packageRemoteJvm', Zip) {
     into('tethium-remote') {
         from(layout.buildDirectory.dir('remote-libs')) { into 'lib' }
         from('src/main/remote') { filePermissions { unix('rwxr-xr-x') } }
+        from('src/main/resources/dev/tethium/desktop/branding/client') { include 'tethium-256.png'; rename { 'tethium.png' } }
     }
 }
 tasks.register('packageRemote', Exec) {
