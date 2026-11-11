@@ -13,7 +13,7 @@ public final class UsageLedger implements AutoCloseable {
         db=DriverManager.getConnection("jdbc:sqlite:"+database.toAbsolutePath());
         try(var s=db.createStatement()){
             s.execute("PRAGMA journal_mode=WAL");
-            s.execute("PRAGMA busy_timeout=5000");
+            s.execute("PRAGMA busy_timeout=15000");
             s.execute("CREATE TABLE IF NOT EXISTS token_executors(thread TEXT PRIMARY KEY,executor TEXT NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS usage_windows(id TEXT PRIMARY KEY,bucket TEXT NOT NULL,kind TEXT NOT NULL,label TEXT NOT NULL,start INTEGER NOT NULL,end INTEGER NOT NULL,observed INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS quota_wait(session_id TEXT PRIMARY KEY,auto_resume INTEGER NOT NULL DEFAULT 0,waiting INTEGER NOT NULL DEFAULT 0,blocked_at INTEGER NOT NULL DEFAULT 0)");

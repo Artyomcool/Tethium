@@ -17,7 +17,9 @@ public final class LegacyUpdateBridge {
             statement.execute("PRAGMA busy_timeout=10000");
             if (args[0].equals("backup")) {
                 if (Files.exists(destination)) throw new IllegalArgumentException("Backup destination already exists");
-                int result = connection.unwrap(SQLiteConnection.class).getDatabase().backup("main", destination.toString(), null);
+                // One step: a stepwise backup starts over whenever the running core writes, and the usage ledger writes every few
+                // seconds, so on a large database it never finished. In WAL a single read snapshot does not hold up writers.
+                int result = connection.unwrap(SQLiteConnection.class).getDatabase().backup("main", destination.toString(), null, 100, 100, -1);
                 if (result != 0) throw new SQLException("SQLite backup failed: " + result);
                 System.out.println("{\"ok\":true}"); return;
             }

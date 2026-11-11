@@ -30,11 +30,14 @@ public final class SessionStore implements AutoCloseable {
 
     public SessionStore(Path database) throws Exception {
         Files.createDirectories(database.toAbsolutePath().getParent());
-        connection = DriverManager.getConnection("jdbc:sqlite:" + database.toAbsolutePath());
+        // Transactions take the write lock at BEGIN. A deferred one reads first and, if the usage ledger's own connection wrote in
+        // between, fails to upgrade with SQLITE_BUSY at once: WAL cannot wait there, so busy_timeout never helps.
+        var config = new org.sqlite.SQLiteConfig(); config.setTransactionMode(org.sqlite.SQLiteConfig.TransactionMode.IMMEDIATE);
+        connection = DriverManager.getConnection("jdbc:sqlite:" + database.toAbsolutePath(), config.toProperties());
         try (var s = connection.createStatement()) {
             s.execute("PRAGMA foreign_keys=ON");
             s.execute("PRAGMA journal_mode=WAL");
-            s.execute("PRAGMA busy_timeout=5000");
+            s.execute("PRAGMA busy_timeout=15000");
             s.execute("CREATE TABLE IF NOT EXISTS projects(id TEXT PRIMARY KEY, root TEXT NOT NULL UNIQUE)");
             s.execute("CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), parent_id TEXT REFERENCES sessions(id), title TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1, directory TEXT NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS messages(sequence INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id), role TEXT NOT NULL, provider TEXT NOT NULL, text TEXT NOT NULL)");
