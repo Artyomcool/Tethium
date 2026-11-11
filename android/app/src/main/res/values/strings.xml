@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="reminders_widget_description">Ближайшие напоминания по дням; сработавшие — сверху</string>
+</resources>

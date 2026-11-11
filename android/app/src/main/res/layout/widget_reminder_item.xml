@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/item_root" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical">
+    <TextView android:id="@+id/item_day" android:layout_width="match_parent" android:layout_height="wrap_content" android:paddingTop="10dp" android:paddingBottom="4dp"
+        android:textColor="#FFB8ADFF" android:textSize="12sp" android:fontFamily="sans-serif-medium"/>
+    <LinearLayout android:id="@+id/item_row" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal"
+        android:minHeight="40dp" android:gravity="center_vertical" android:paddingTop="4dp" android:paddingBottom="4dp">
+        <View android:id="@+id/item_bar" android:layout_width="3dp" android:layout_height="28dp" android:layout_marginEnd="10dp" android:background="#FFB8ADFF"/>
+        <TextView android:id="@+id/item_time" android:layout_width="52dp" android:layout_height="wrap_content" android:textColor="#FFA4ADBF" android:textSize="13sp"/>
+        <TextView android:id="@+id/item_text" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:maxLines="2" android:ellipsize="end"
+            android:textColor="#FFEDF0F7" android:textSize="14sp"/>
+    </LinearLayout>
+</LinearLayout>

@@ -500,7 +500,7 @@ public final class WorkspaceFrame extends JFrame {
         }); if(!host.remote())menu.add(quit);else{var reconnect=new JMenuItem("Подключить другой ноутбук…");reconnect.addActionListener(e->{saveDraft();RemoteMain.restartPairing(this);});menu.add(reconnect);var update=new JMenuItem("Обновить Tethium Remote…");update.addActionListener(e->updateRemote(true));menu.add(update);} menu.show(heading, Math.max(0, heading.getWidth() - 100), heading.getHeight());
     }
     private void workspaceSettings(){
-        var menu=new JPopupMenu();var files=new JMenuItem("Файлы…");files.addActionListener(e->FileManagerDialog.open(this,host,selectedProject));menu.add(files);var allBacklog=new JMenuItem("Отложенные задачи…");allBacklog.addActionListener(e->openBacklog("",null));menu.add(allBacklog);var cpu=new JMenuItem("CPU: общий лимит и приоритет…");cpu.addActionListener(e->configureCpu("global","","Все исполнения"));menu.add(cpu);var trash=new JMenuItem("Корзина сессий…");trash.addActionListener(e->TrashDialog.open(this,host,()->poller.execute(this::poll)));menu.add(trash);menu.show(active,0,0);
+        var menu=new JPopupMenu();var files=new JMenuItem("Файлы…");files.addActionListener(e->FileManagerDialog.open(this,host,selectedProject));menu.add(files);var allBacklog=new JMenuItem("Отложенные задачи…");allBacklog.addActionListener(e->openBacklog("",null));menu.add(allBacklog);var reminderList=new JMenuItem("Напоминания…");reminderList.addActionListener(e->{if(reminderWindow!=null)reminderWindow.openList();});menu.add(reminderList);var cpu=new JMenuItem("CPU: общий лимит и приоритет…");cpu.addActionListener(e->configureCpu("global","","Все исполнения"));menu.add(cpu);var trash=new JMenuItem("Корзина сессий…");trash.addActionListener(e->TrashDialog.open(this,host,()->poller.execute(this::poll)));menu.add(trash);menu.show(active,0,0);
     }
     private void configureCpu(String scope,String id,String title){
         action(()->{var state=host.get("/resources");var row=scope.equals("global")?state.path("global"):state.path(scope+"s").path(id);SwingUtilities.invokeLater(()->{var settings=CpuSettingsDialog.show(this,scope,title,state,row);if(settings!=null)action(()->host.post("/resources",Json.object("scope",scope,"target",id,"settings",settings)));});});
@@ -611,8 +611,10 @@ public final class WorkspaceFrame extends JFrame {
         try { var state = host.get("/state" + (target == null ? "" : "?session=" + target+"&history=window")); SwingUtilities.invokeLater(() -> apply(state, target)); }
         catch (Exception e) { SwingUtilities.invokeLater(() -> { if (!disposed) { status.setText("Нет связи с ядром"); status.setToolTipText(e.getMessage()); } }); }
     }
+    private ReminderWindow reminderWindow;
     private void apply(JsonNode state, String target) {
         if (disposed) return;
+        if(reminderWindow==null)reminderWindow=new ReminderWindow(this,host);reminderWindow.update(state.path("reminders"));
         quota.update(state.path("quota"));
         quota.machineUsage(state.path("machineUsage"));
         if(!machineUsage.equals(state.path("machineUsage"))){machineUsage=state.path("machineUsage");active.repaint();inactive.repaint();}
@@ -1180,7 +1182,7 @@ public final class WorkspaceFrame extends JFrame {
     public void setUpdating(boolean value) { externalUpdate = value; poller.execute(this::poll); }
     public void closeWindow() {closeWindow(true);}
     private void closeWindow(boolean notify) {
-        if (disposed) return; saveDraft();rememberPreview(); disposed = true; exitFullScreen(); draftTimer.stop(); poller.shutdownNow();for(var view:chatViews.values())view.close();if(chatView!=null&&!chatViews.containsValue(chatView))chatView.close(); viewer.close(); io.shutdown(); dispose();
+        if (disposed) return; saveDraft();rememberPreview(); disposed = true;if(reminderWindow!=null)reminderWindow.close(); exitFullScreen(); draftTimer.stop(); poller.shutdownNow();for(var view:chatViews.values())view.close();if(chatView!=null&&!chatViews.containsValue(chatView))chatView.close(); viewer.close(); io.shutdown(); dispose();
         Thread.ofVirtual().start(() -> { try { io.awaitTermination(20, TimeUnit.SECONDS); } catch (InterruptedException ignored) {} host.close(); if(notify)onClose.run(); });
     }
 }

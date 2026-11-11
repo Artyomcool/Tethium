@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_root" android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="vertical" android:background="@drawable/widget_background" android:padding="12dp">
+    <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical">
+        <LinearLayout android:id="@+id/widget_header" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1" android:orientation="vertical">
+            <TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="Напоминания" android:textColor="#FFEDF0F7" android:textSize="16sp" android:fontFamily="sans-serif-medium"/>
+            <TextView android:id="@+id/widget_summary" android:layout_width="wrap_content" android:layout_height="wrap_content" android:textColor="#FFA4ADBF" android:textSize="12sp" android:singleLine="true"/>
+        </LinearLayout>
+        <TextView android:id="@+id/widget_add" android:layout_width="40dp" android:layout_height="40dp" android:gravity="center" android:text="+" android:textSize="24sp" android:textColor="#FFB8ADFF" android:contentDescription="Написать напоминание в чате"/>
+    </LinearLayout>
+    <ListView android:id="@+id/widget_list" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:layout_marginTop="6dp" android:divider="@null" android:dividerHeight="0dp"/>
+    <TextView android:id="@+id/widget_empty" android:layout_width="match_parent" android:layout_height="0dp" android:layout_weight="1" android:gravity="center"
+        android:text="Нет напоминаний.\nНапишите в чате: «напомни через 2 часа…»" android:textColor="#FFA4ADBF" android:textSize="13sp"/>
+</LinearLayout>
