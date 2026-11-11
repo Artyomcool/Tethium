@@ -39,6 +39,11 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
     private int rendererRecoveries;
     private Runnable pendingBrowserOpen;
     private ArtifactServer pendingResources;
+    /** A document drawn without the browser, and the local server its images and styles come from. */
+    private JComponent documentPanel;
+    private ArtifactServer documentServer;
+    private void dropDocument(){documentPanel=null;if(documentServer!=null){documentServer.close();documentServer=null;}}
+    private void showPanel(JComponent panel){detach();removeAll();add(panel);revalidate();repaint();}
     private void cancelPending(){pendingBrowserOpen=null;if(pendingResources!=null){pendingResources.close();pendingResources=null;}}
     public int browserResourceCount(){return closingBrowsers.size()+(browser==null?0:1);}
     /** True while a warm browser is kept for the next document. */
@@ -79,7 +84,7 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
     private void detach(){if(attached()){removeAll();revalidate();repaint();}}
     public void showNotice(String text){clear();message(text);}
     /** An image fetched from the laptop, shown like a local one: no browser is needed for it. */
-    public void showImage(java.awt.image.BufferedImage image){if(closed)return;remoteUrl=null;current=null;shownSignature=null;cancelPending();generation.incrementAndGet();detach();imagePanel=new ImagePanel(image);removeAll();add(imagePanel);revalidate();repaint();}
+    public void showImage(java.awt.image.BufferedImage image){if(closed)return;remoteUrl=null;current=null;shownSignature=null;cancelPending();dropDocument();generation.incrementAndGet();detach();imagePanel=new ImagePanel(image);removeAll();add(imagePanel);revalidate();repaint();}
     private static String signature(Path path){try{var attributes=Files.readAttributes(path,java.nio.file.attribute.BasicFileAttributes.class);return path+"|"+attributes.size()+"|"+attributes.lastModifiedTime().toMillis();}catch(Exception e){return path+"|missing";}}
     /** Initializes Chromium and opens a blank page in the background so the first document appears without the startup cost. */
     public void warmUp(){
@@ -97,18 +102,23 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
         if (closed) return;
         if (path.equals(current) && remoteUrl == null) {
             // Same file: reuse the rendered page unless the file changed on disk.
-            if (shownSignature != null && shownSignature.equals(signature(path))) { if (imagePanel != null) { removeAll(); add(imagePanel); revalidate(); repaint(); } else attach(); return; }
+            if (shownSignature != null && shownSignature.equals(signature(path))) { if (imagePanel != null) { removeAll(); add(imagePanel); revalidate(); repaint(); } else if (documentPanel != null) showPanel(documentPanel); else attach(); return; }
         }
         load(path);
     }
     private void load(Path path) {
         if (closed) return;
-        remoteUrl=null;cancelPending(); current = path; shownSignature = signature(path); imagePanel = null; rendererRecoveries=0; long expected = generation.incrementAndGet();
+        remoteUrl=null;cancelPending();dropDocument(); current = path; shownSignature = signature(path); imagePanel = null; rendererRecoveries=0; long expected = generation.incrementAndGet();
         if (browser == null || !attached()) message("Открываем " + path.getFileName() + "…");
         loader.submit(() -> {
             try {
                 String name = path.getFileName().toString().toLowerCase(java.util.Locale.ROOT);
-                if (dev.tethium.artifact.MarkdownPreview.supports(path)||name.endsWith(".html") || name.endsWith(".htm") || name.endsWith(".svg")) {
+                if (dev.tethium.artifact.MarkdownPreview.supports(path)) {
+                    // Markdown needs no browser: the page is drawn in Java, Chromium starts only if that fails.
+                    var resources=new ArtifactServer(path.getParent());
+                    if(showDocument(resources.uri(path.getFileName().toString()),expected,null,resources))return;
+                    try{showBrowser(resources.uri(path.getFileName().toString()),resources.baseUri().toString(),expected,resources);}catch(Exception error){resources.close();throw error;}
+                } else if (name.endsWith(".html") || name.endsWith(".htm") || name.endsWith(".svg")) {
                     var resources=new ArtifactServer(path.getParent());
                     try{showBrowser(resources.uri(path.getFileName().toString()),resources.baseUri().toString(),expected,resources);}catch(Exception error){resources.close();throw error;}
                 } else {
@@ -123,25 +133,25 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
         });
     }
     private java.net.URI remoteUrl;
-    public void openRemote(java.net.URI url){if(closed)return;if(url.equals(remoteUrl)){attach();return;}current=null;shownSignature=null;remoteUrl=url;imagePanel=null;rendererRecoveries=0;cancelPending();long expected=generation.incrementAndGet();if(browser==null||!attached())message("Открываем результат с ноутбука…");loader.submit(()->{if(isDocument(url)&&showDocument(url,expected,null))return;try{showBrowser(url,url.resolve(".").toString(),expected,null);}catch(Exception e){
+    public void openRemote(java.net.URI url){if(closed)return;if(url.equals(remoteUrl)){if(documentPanel!=null)showPanel(documentPanel);else attach();return;}dropDocument();current=null;shownSignature=null;remoteUrl=url;imagePanel=null;rendererRecoveries=0;cancelPending();long expected=generation.incrementAndGet();if(browser==null||!attached())message("Открываем результат с ноутбука…");loader.submit(()->{if(isDocument(url)&&showDocument(url,expected,null,null))return;try{showBrowser(url,url.resolve(".").toString(),expected,null);}catch(Exception e){
             // Without the embedded browser the page still opens: the laptop's file is served locally, any browser can show it.
-            if(browserFailure!=null&&url.getPath().toLowerCase(java.util.Locale.ROOT).matches(".*\\.(md|markdown|html?)$")&&(showDocument(url,expected,browserFailure)||showSimple(url,expected)))return;
+            if(browserFailure!=null&&url.getPath().toLowerCase(java.util.Locale.ROOT).matches(".*\\.(md|markdown|html?)$")&&(showDocument(url,expected,browserFailure,null)||showSimple(url,expected)))return;
             boolean outside=browserFailure!=null&&openOutside(url);
             SwingUtilities.invokeLater(()->{if(generation.get()==expected){detach();message(outside?"Открыто в браузере системы: "+browserFailure:"Не удалось открыть: "+e.getMessage());}});}});}
     /** Markdown never needs a browser; an HTML page may need its scripts, so it goes to Chromium first. */
     private static boolean isDocument(java.net.URI url){return url.getPath().toLowerCase(java.util.Locale.ROOT).matches(".*\\.(md|markdown)$");}
     /** A document drawn in pure Java: the same page the laptop renders, styles and images included. */
-    private boolean showDocument(java.net.URI url,long expected,String note){
+    private boolean showDocument(java.net.URI url,long expected,String note,ArtifactServer resources){
         try{
             String html;try(var in=url.toURL().openStream()){html=new String(in.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);}
             var failure=new boolean[1];
             SwingUtilities.invokeAndWait(()->{
-                if(closed||generation.get()!=expected)return;
+                if(closed||generation.get()!=expected){if(resources!=null)resources.close();return;}
                 try{
                     var view=DocumentView.create(html,url,link->{if(link.getScheme()!=null&&link.getScheme().startsWith("http")&&!"127.0.0.1".equals(link.getHost()))openOutside(link);});
                     var panel=new JPanel(new java.awt.BorderLayout());
                     if(note!=null){var label=new JLabel("<html><body style='width:520px'>"+Theme.escape(note).replace("\n","<br>")+"</body></html>");label.setForeground(Theme.MUTED);label.setBorder(BorderFactory.createEmptyBorder(4,8,4,8));panel.add(label,java.awt.BorderLayout.NORTH);}
-                    panel.add(view);detach();removeAll();add(panel);revalidate();repaint();
+                    panel.add(view);dropDocument();documentPanel=panel;documentServer=resources;showPanel(panel);
                 }catch(RuntimeException error){failure[0]=true;System.err.println("Document view: "+error);}
             });
             return !failure[0];
@@ -344,7 +354,7 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
         if (server != null) { server.close(); server = null; }
     }
     private void detachComponent(CefBrowser old){if(getComponentCount()==1&&getComponent(0)==old.getUIComponent()){removeAll();revalidate();repaint();}}
-    @Override public void close() { closed = true; KeyboardFocusManager.getCurrentKeyboardFocusManager().removePropertyChangeListener("permanentFocusOwner", focusListener); generation.incrementAndGet();cancelPending(); disposeBrowser(); loader.shutdownNow(); if (app != null&&closingBrowsers.isEmpty()) app.dispose(); }
+    @Override public void close() { closed = true; dropDocument(); KeyboardFocusManager.getCurrentKeyboardFocusManager().removePropertyChangeListener("permanentFocusOwner", focusListener); generation.incrementAndGet();cancelPending(); disposeBrowser(); loader.shutdownNow(); if (app != null&&closingBrowsers.isEmpty()) app.dispose(); }
     private final class ImagePanel extends JPanel {
         private final BufferedImage image;
         private double zoom = 1, panX, panY;
