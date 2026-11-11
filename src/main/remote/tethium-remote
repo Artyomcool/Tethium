@@ -1,0 +1,6 @@
+#!/bin/sh
+# Tethium Remote for any OS with Java 25 or newer: JAVA=/path/to/java ./tethium-remote
+DIR=$(cd "$(dirname "$0")" && pwd)
+JAVA=${JAVA:-java}
+exec "$JAVA" --enable-native-access=ALL-UNNAMED --add-exports=java.desktop/sun.awt=ALL-UNNAMED --add-exports=java.desktop/sun.java2d=ALL-UNNAMED \
+  -cp "$DIR/lib/*" dev.tethium.desktop.RemoteMain "$@"

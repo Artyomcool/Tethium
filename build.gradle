@@ -137,6 +137,16 @@ tasks.register('remoteLibraries', Sync) {
     from tasks.named('remoteJar')
     from(configurations.runtimeClasspath) { exclude 'sqlite-*', 'bcpkix-*', 'bcprov-*', 'bcutil-*', 'core-3.5.3.jar' }
 }
+// The same client as plain jars for any OS with Java 25: unpack and run ./tethium-remote.
+tasks.register('packageRemoteJvm', Zip) {
+    dependsOn remoteLibraries
+    archiveFileName = 'tethium-remote-jvm.zip'
+    destinationDirectory = layout.buildDirectory.dir(providers.gradleProperty('remoteDestination').getOrElse('remote-client'))
+    into('tethium-remote') {
+        from(layout.buildDirectory.dir('remote-libs')) { into 'lib' }
+        from('src/main/remote') { filePermissions { unix('rwxr-xr-x') } }
+    }
+}
 tasks.register('packageRemote', Exec) {
     dependsOn remoteLibraries
     def destination=providers.gradleProperty('remoteDestination').getOrElse('remote-client')

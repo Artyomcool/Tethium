@@ -17,7 +17,7 @@ public final class ArtifactLauncher {
     }
     public static Process launch(Path entry)throws IOException{
         Path file=entry.toRealPath();String name=file.getFileName().toString().toLowerCase(Locale.ROOT);List<String> command;
-        if(name.endsWith(".jar"))command=List.of(Path.of(System.getProperty("java.home"),"bin","java.exe").toString(),"-jar",file.toString());
+        if(name.endsWith(".jar"))command=List.of(Path.of(System.getProperty("java.home"),"bin",System.getProperty("os.name").toLowerCase(java.util.Locale.ROOT).contains("win")?"java.exe":"java").toString(),"-jar",file.toString());
         else if(name.endsWith(".exe"))command=List.of(file.toString());else throw new IOException("Запуск поддерживается для JAR и EXE");
         return new ProcessBuilder(command).directory(file.getParent().toFile()).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(file.getParent().resolve("tethium-launch.log").toFile())).start();
     }

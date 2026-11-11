@@ -8,7 +8,7 @@ import java.awt.*;
 
 /** Entry point of the client-only distribution; never calls HostClient.connect(). */
 public final class RemoteMain {
-    public static void main(String[] args){System.setProperty("tethium.remote","true");if(System.getProperty("tethium.data")==null)System.setProperty("tethium.data",Path.of(System.getenv("LOCALAPPDATA"),"TethiumRemote").toString());Theme.install();SwingUtilities.invokeLater(()->connect(java.util.Arrays.asList(args).contains("--pair")));}
+    public static void main(String[] args){System.setProperty("tethium.remote","true");if(System.getProperty("tethium.data")==null){String local=System.getenv("LOCALAPPDATA");System.setProperty("tethium.data",(local==null?Path.of(System.getProperty("user.home"),".tethium-remote"):Path.of(local,"TethiumRemote")).toString());}Theme.install();SwingUtilities.invokeLater(()->connect(java.util.Arrays.asList(args).contains("--pair")));}
     static void restartPairing(WorkspaceFrame owner){try{new ProcessBuilder(dev.tethium.host.AppPaths.javaExecutable(true),"--enable-native-access=ALL-UNNAMED","-Dtethium.data="+dev.tethium.host.AppPaths.data(),"-cp",System.getProperty("java.class.path"),RemoteMain.class.getName(),"--pair").redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.appendTo(dev.tethium.host.AppPaths.data().resolve("remote.log").toFile())).start();owner.closeWindow();}catch(Exception failure){JOptionPane.showMessageDialog(owner,failure.getMessage(),"Подключение",JOptionPane.ERROR_MESSAGE);}}
     static void connect(boolean force){connect(force,()->{});}
     static void connect(boolean force,Runnable connected){
