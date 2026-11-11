@@ -22,6 +22,8 @@ final class ChatView implements AutoCloseable {
         this.sessionId = sessionId; paged = new VirtualHistory(host, transcript, history, navigation);
         history.setName("chat.history"); history.setBorder(null); history.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
         history.getVerticalScrollBar().setUnitIncrement(24);
+        // A scrollbar that appears and vanishes as a short chat crosses the viewport height reflows every line and makes it blink.
+        history.setVerticalScrollBarPolicy(ScrollPaneConstants.VERTICAL_SCROLLBAR_ALWAYS);
         area.add(history); area.add(navigation.requestMap(), BorderLayout.EAST);
     }
     @Override public void close() { paged.close(); }
