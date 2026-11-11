@@ -35,7 +35,7 @@ class ContentChangesTest {
             store.recordEvent(run,id,new AgentAdapter.Event("item/completed","",viewed));store.recordEvent(run,id,new AgentAdapter.Event("item/completed","",viewed));
             store.recordEvent(run,id,new AgentAdapter.Event("item/completed","",Json.object("params",Json.object("item",Json.object("type","imageGeneration","id","gen-1","status","completed","result",Base64.getEncoder().encodeToString(original))))));
             store.completeRun(run,id,AgentAdapter.Provider.CODEX,new AgentAdapter.Result("thread",AgentAdapter.Status.COMPLETED,"Before and after"),store.lastSequence(id));long sequence=store.lastSequence(id);
-            try(var media=new MediaCapture(store,root)){
+            try(var media=new MediaCapture(store,root,()->{})){
                 long until=System.nanoTime()+java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
                 while(store.mediaHistory(id).size()<2&&System.nanoTime()<until)Thread.sleep(25);
                 var images=store.mediaHistory(id);assertEquals(2,images.size());

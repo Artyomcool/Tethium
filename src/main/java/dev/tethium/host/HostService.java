@@ -91,7 +91,7 @@ public final class HostService implements AutoCloseable {
         store.recoverInterruptedRuns();
         usage=new UsageLedger(data.resolve("tethium.db"));
         resources=new ResourceController(store,data,detachedEnabled);
-        media=new MediaCapture(store,data);
+        media=new MediaCapture(store,data,this::bump);
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", this::handle); server.setExecutor(workers); server.start();
         if(adapter instanceof CodexAdapter && !Boolean.getBoolean("tethium.probe") && Files.exists(data.resolve("mobile/enabled"))) {
@@ -187,7 +187,7 @@ public final class HostService implements AutoCloseable {
             public JsonNode catalog() throws Exception { return Json.MAPPER.valueToTree(snapshot(null, false)); }
             public JsonNode conversationMeta(String id) throws Exception {
                 store.get(id);
-                return Json.object("queued", store.queued(id), "artifacts", store.artifacts(id), "messageRevision", store.messageRevision(id), "lastSequence", store.lastSequence(id),
+                return Json.object("queued", store.queued(id), "artifacts", store.artifacts(id), "media", store.mediaHistory(id), "messageRevision", store.messageRevision(id), "lastSequence", store.lastSequence(id),
                         "requests", pending.values().stream().filter(p -> p.sessionId.equals(id)).map(p -> Json.object("id", p.id, "method", p.method, "params", p.params)).toList());
             }
             public JsonNode messagesAfter(String id, long after, int limit) throws Exception { return Json.MAPPER.valueToTree(store.messages(id, after, limit)); }

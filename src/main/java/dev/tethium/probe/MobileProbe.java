@@ -15,6 +15,13 @@ public final class MobileProbe {
         Path root=Files.createDirectories(Path.of(".local/mobile-probe/"+UUID.randomUUID()).toAbsolutePath());
         var adapter=new AgentAdapter(){public Provider provider(){return Provider.CODEX;}public Result run(Request r,Consumer<Event> events,Cancellation cancel)throws Exception{
             if(r.prompt().endsWith("long")){events.accept(new Event("text","Работаю…",Json.object()));while(!cancel.isCancelled())Thread.sleep(50);return new Result("probe",Status.CANCELLED,"Работаю…");}
+            if(r.prompt().endsWith("draw")){
+                var png=new java.io.ByteArrayOutputStream();var picture=new java.awt.image.BufferedImage(96,48,java.awt.image.BufferedImage.TYPE_INT_RGB);for(int x=0;x<96;x++)for(int y=0;y<48;y++)picture.setRGB(x,y,(x*2)<<16|(y*5)<<8|180);javax.imageio.ImageIO.write(picture,"png",png);
+                events.accept(new Event("text","Рисую.",Json.object()));
+                var item=Json.object("id","ig1","type","imageGeneration","status","completed","result",java.util.Base64.getEncoder().encodeToString(png.toByteArray()));
+                events.accept(new Event("item/completed","",Json.object("method","item/completed","params",Json.object("item",item))));
+                return new Result("probe",Status.COMPLETED,"Рисую. Готово, картинка выше.");
+            }
             if(r.prompt().endsWith("ask")){
                 var question=r.requests().handle("item/tool/requestUserInput",Json.object("questions",List.of(
                     Json.object("id","one","header","Сборка","question","Какой вариант собирать?","options",List.of(Json.object("label","Быстрый","description","Без проверок"),Json.object("label","Полный","description","Со всеми тестами"))),

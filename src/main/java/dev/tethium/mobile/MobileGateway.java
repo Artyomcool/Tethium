@@ -220,7 +220,7 @@ public final class MobileGateway implements AutoCloseable {
             }else if(last>sentSequence){
                 var more=feed.messagesAfter(s,sentSequence,1000);frame.set("messages",more);sentSequence=Math.max(last,lastSequence(more));any=true;
             }
-            for(String key:List.of("queued","requests","artifacts")){String text=meta.path(key).toString();if(!text.equals(sentMeta.get(key))){sentMeta.put(key,text);frame.set(key,meta.path(key));any=true;}}
+            for(String key:List.of("queued","requests","artifacts","media")){String text=meta.path(key).toString();if(!text.equals(sentMeta.get(key))){sentMeta.put(key,text);frame.set(key,meta.path(key));any=true;}}
             if(any)send(Frames.CONVERSATION,frame);
         }
         private void pushLive()throws Exception{

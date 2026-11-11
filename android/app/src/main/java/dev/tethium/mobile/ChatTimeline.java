@@ -75,9 +75,27 @@ final class ChatTimeline extends FrameLayout {
     /** Images a message links to are shown under its text; a tap opens them full screen. */
     private void images(LinearLayout card,String text){
         var matcher=IMAGE_LINK.matcher(text);int count=0;
-        while(matcher.find()&&count++<6){
-            String link=matcher.group(2);var image=new ImageView(getContext());image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_START);image.setBackground(ui.shape(Ui.PANEL,12));image.setContentDescription(matcher.group(1).isBlank()?"Изображение":matcher.group(1));
-            var params=new LinearLayout.LayoutParams(-1,ui.dp(120));params.topMargin=ui.dp(8);card.addView(image,params);
+        while(matcher.find()&&count++<6)card.addView(image(matcher.group(2),matcher.group(1).isBlank()?"Изображение":matcher.group(1)));
+    }
+    private final Map<Long,View> media=new HashMap<>();
+    private final Map<Long,Long> mediaAnchors=new HashMap<>();
+    /** Images the agent made go under the answer they belong to, or under the live answer while it is being written. */
+    void media(JSONArray entries){
+        for(int i=0;i<entries.length();i++){
+            var entry=entries.optJSONObject(i);if(entry==null)continue;
+            long id=entry.optLong("mediaId"),anchor=entry.optLong("anchor");
+            ViewGroup parent=anchor<0?live:anchors.get(anchor) instanceof ViewGroup card?card:null;
+            var view=media.get(id);
+            if(view!=null&&view.getParent()==parent&&Objects.equals(mediaAnchors.get(id),anchor))continue;
+            if(view!=null&&view.getParent() instanceof ViewGroup old)old.removeView(view);
+            if(parent==null){media.remove(id);continue;}
+            if(view==null){view=image(entry.optString("file"),entry.optString("title","Изображение"));media.put(id,view);}
+            parent.addView(view);mediaAnchors.put(id,anchor);
+        }
+    }
+    private ImageView image(String link,String description){
+            var image=new ImageView(getContext());image.setAdjustViewBounds(true);image.setScaleType(ImageView.ScaleType.FIT_START);image.setBackground(ui.shape(Ui.PANEL,12));image.setContentDescription(description);
+            var params=new LinearLayout.LayoutParams(-1,ui.dp(120));params.topMargin=ui.dp(8);image.setLayoutParams(params);
             loadImage.accept(link,file->{
                 var bounds=new android.graphics.BitmapFactory.Options();bounds.inJustDecodeBounds=true;android.graphics.BitmapFactory.decodeFile(file.toString(),bounds);
                 var options=new android.graphics.BitmapFactory.Options();options.inSampleSize=1;while(bounds.outWidth/options.inSampleSize>1400)options.inSampleSize*=2;
@@ -85,7 +103,7 @@ final class ChatTimeline extends FrameLayout {
                 image.setBackground(null);image.setImageBitmap(bitmap);image.setMaxHeight(ui.dp(320));image.setLayoutParams(new LinearLayout.LayoutParams(-1,-2){{topMargin=ui.dp(8);}});
                 image.setOnClickListener(v->ImagePreview.show((Activity)getContext(),ui,file));
             });
-        }
+            return image;
     }
     private TextView body(){var t=ui.label("",16,Ui.TEXT);t.setTextIsSelectable(true);t.setLineSpacing(ui.dp(5),1);
         // Selectable text takes taps for itself, so links are opened here; a long press still selects.
@@ -116,7 +134,7 @@ final class ChatTimeline extends FrameLayout {
         // Existing cards are immutable in normal operation; rebuild only on pagination/deletion.
         boolean rebuild=start<0||array.length()<rendered.size();
         if(!rebuild&&changed)for(int i=start;i<Math.min(array.length(),start+rendered.size());i++){var m=array.optJSONObject(i);String old=rendered.get(m.optLong("sequence"));if(old!=null&&!old.equals(m.toString())){rebuild=true;break;}}
-        if(rebuild){start=nextStart;rendered.clear();anchors.clear();userTitles.clear();messages.removeAllViews();if(start>0||more){messages.addView(ui.button("Загрузить предыдущие сообщения",()->{if(start>0){int before=scroll.getChildAt(0).getHeight(),y=scroll.getScrollY();limit+=100;start=-1;render(history,lastLive,true);scroll.post(()->scroll.scrollTo(0,y+scroll.getChildAt(0).getHeight()-before));}else loadEarlier.run();}));ui.gap(messages,16);}}
+        if(rebuild){start=nextStart;rendered.clear();anchors.clear();for(var view:media.values())if(view.getParent() instanceof ViewGroup old)old.removeView(view);mediaAnchors.clear();userTitles.clear();messages.removeAllViews();if(start>0||more){messages.addView(ui.button("Загрузить предыдущие сообщения",()->{if(start>0){int before=scroll.getChildAt(0).getHeight(),y=scroll.getScrollY();limit+=100;start=-1;render(history,lastLive,true);scroll.post(()->scroll.scrollTo(0,y+scroll.getChildAt(0).getHeight()-before));}else loadEarlier.run();}));ui.gap(messages,16);}}
         for(int i=start;i<array.length();i++){var m=array.optJSONObject(i);long key=m.optLong("sequence");if(rendered.containsKey(key))continue;rendered.put(key,m.toString());String role=m.optString("role"),text=m.optString("text");boolean user=role.equals("user"),assistant=role.equals("assistant");
             var card=ui.col();if(user){card.setBackground(ui.shape(Ui.PANEL,18));ui.pad(card,14,6);}var header=ui.row();var name=ui.label(user?"ВЫ":assistant?m.optString("provider","Codex").toUpperCase(Locale.ROOT):"СОБЫТИЕ",11,user?Ui.ACCENT:Ui.MUTED);name.setTypeface(Typeface.DEFAULT_BOLD);header.addView(name,new LinearLayout.LayoutParams(0,-2,1));header.addView(ui.icon("copy","Копировать сообщение",()->ui.copy(withoutActions(text))),new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));card.addView(header);
             var t=body();if(user)t.setText(IMAGE_LINK.matcher(text).replaceAll("").strip());else render(t,narration(text));if(!assistant&&!user){t.setMaxLines(3);t.setEllipsize(TextUtils.TruncateAt.END);t.setTextColor(Ui.MUTED);t.setOnClickListener(v->{var detail=ui.col();ui.pad(detail,16,12);var full=body();render(full,narration(text));var sc=new ScrollView(getContext());sc.addView(full);detail.addView(sc,new LinearLayout.LayoutParams(-1,-1));ui.sheet("Событие",detail);});}card.addView(t);images(card,text);ui.gap(card,user?14:4);messages.addView(card);anchors.put(key,card);if(user)userTitles.put(key,text.replace('\n',' '));ui.gap(messages,20);

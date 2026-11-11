@@ -14,11 +14,13 @@ final class MediaCapture implements AutoCloseable {
     private final SessionStore store;
     private final Path data;
     private boolean seeded;
+    private final Runnable changed;
     private final ScheduledExecutorService executor=Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
-    MediaCapture(SessionStore store,Path data){this.store=store;this.data=data;executor.scheduleWithFixedDelay(this::poll,0,500,TimeUnit.MILLISECONDS);}
+    /** changed tells clients that wait for changes, like the phone, that an image has been kept. */
+    MediaCapture(SessionStore store,Path data,Runnable changed){this.store=store;this.data=data;this.changed=changed;executor.scheduleWithFixedDelay(this::poll,0,500,TimeUnit.MILLISECONDS);}
     private void poll(){try{
         if(!seeded){store.seedMediaJobs();seeded=true;}
-        for(var job:store.mediaJobs())try{capture(job);}catch(Exception error){System.err.println("Image preview: "+error.getMessage());store.finishMediaJob(job.path("event").asLong());}
+        for(var job:store.mediaJobs())try{capture(job);changed.run();}catch(Exception error){System.err.println("Image preview: "+error.getMessage());store.finishMediaJob(job.path("event").asLong());}
     }catch(Exception error){if(!executor.isShutdown())System.err.println("Image capture: "+error.getMessage());}}
     private void capture(JsonNode job)throws Exception{
         var item=job.path("item");String session=job.path("session").asText();UUID.fromString(session);
