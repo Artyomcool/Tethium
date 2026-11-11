@@ -18,6 +18,7 @@ public final class RemoteClient extends HostClient {
     private final Map<String,String> artifactIds=new ConcurrentHashMap<>();private volatile String session="";private HttpServer preview;private ExecutorService previewWorkers;
     public RemoteClient(Path data,JsonNode credentials)throws Exception{super(Json.object());this.data=Files.createDirectories(data);connection=new LanConnection(credentials.path("address").asText(),credentials.path("token").asText());Path file=data.resolve("drafts.json");if(Files.exists(file))Json.MAPPER.readTree(file.toFile()).properties().forEach(e->drafts.put(e.getKey(),e.getValue()));}
     @Override public boolean remote(){return true;}
+    public LanConnection connection(){return connection;}
     @Override public HttpURLConnection fileConnection(String path)throws Exception{return connection.open(path);}
     @Override public long hostPid(){return 0;}
     @Override public JsonNode get(String path)throws Exception{

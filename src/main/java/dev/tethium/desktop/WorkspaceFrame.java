@@ -126,7 +126,7 @@ public final class WorkspaceFrame extends JFrame {
         super("Tethium"); this.host = host; this.onClose = onClose;
         setIconImages(AppIcon.images());
         this.initialSelection = initialSelection;
-        if(host.remote())UacDialog.watch(this,host);
+        if(host.remote()){UacDialog.watch(this,host);var check=new javax.swing.Timer(8000,e->updateRemote(false));check.setRepeats(false);check.start();}
         try{Path saved=dev.tethium.host.AppPaths.data().resolve("session-views.json");if(Files.isRegularFile(saved))Json.MAPPER.readTree(saved.toFile()).properties().forEach(e->sessionViews.put(e.getKey(),e.getValue()));}catch(Exception ignored){}
         restoreProjectExpansion();
         ChatMarkdown.showThoughts=sessionViews.getOrDefault("$showThoughts",Json.MAPPER.getNodeFactory().booleanNode(true)).asBoolean(true);
@@ -434,6 +434,24 @@ public final class WorkspaceFrame extends JFrame {
         return shown;
     }
     private String sessionIn(String project){var s=selected==null?null:sessions.get(selected);return s!=null&&s.path("projectId").asText().equals(project)?selected:null;}
+    /** Asked from the menu, or quietly at start: then only a newer copy is offered. */
+    void updateRemote(boolean asked){
+        if(!(host instanceof dev.tethium.remote.RemoteClient remote))return;
+        if(dev.tethium.remote.RemoteUpdate.installDir()==null){if(asked)JOptionPane.showMessageDialog(this,"Эта копия Remote обновляется вручную: скачайте новый архив со страницы ноутбука.","Tethium Remote",JOptionPane.INFORMATION_MESSAGE);return;}
+        Thread.ofVirtual().start(()->{
+            try{
+                String available=dev.tethium.remote.RemoteUpdate.available(remote.connection()),installed=dev.tethium.remote.RemoteUpdate.installed();
+                boolean newer=!available.isEmpty()&&!available.equals(installed);
+                SwingUtilities.invokeLater(()->{
+                    if(!newer){if(asked)JOptionPane.showMessageDialog(this,"Установлена последняя версия Remote.","Tethium Remote",JOptionPane.INFORMATION_MESSAGE);return;}
+                    if(JOptionPane.showConfirmDialog(this,"На ноутбуке есть новая версия Tethium Remote. Обновить и перезапустить сейчас?","Tethium Remote",JOptionPane.YES_NO_OPTION)!=JOptionPane.YES_OPTION)return;
+                    saveDraft();status.setText("Скачиваем обновление Remote…");
+                    Thread.ofVirtual().start(()->{try{dev.tethium.remote.RemoteUpdate.prepare(remote.connection(),available);SwingUtilities.invokeLater(this::closeWindow);}
+                        catch(Exception failure){SwingUtilities.invokeLater(()->JOptionPane.showMessageDialog(this,"Не удалось обновить: "+failure.getMessage(),"Tethium Remote",JOptionPane.WARNING_MESSAGE));}});
+                });
+            }catch(Exception failure){if(asked)SwingUtilities.invokeLater(()->JOptionPane.showMessageDialog(this,"Не удалось проверить обновление: "+failure.getMessage(),"Tethium Remote",JOptionPane.WARNING_MESSAGE));}
+        });
+    }
     private void openSessionBacklog(){var session=selected==null?null:sessions.get(selected);if(session!=null)openBacklog(session.path("projectId").asText(),selected);}
     private void openBacklog(String project,String session){BacklogDialog.open(this,host,projects,sessions,project,session);}
     private void popup(MouseEvent event, JTree tree) {
@@ -479,7 +497,7 @@ public final class WorkspaceFrame extends JFrame {
         menu.addSeparator(); var quit = new JMenuItem("Завершить ядро и все запуски"); quit.addActionListener(e -> {
             if (JOptionPane.showConfirmDialog(this, "Остановить все запуски и завершить Tethium?", "Завершение", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION)
                 action(() -> { host.post("/shutdown", Json.object()); SwingUtilities.invokeLater(this::closeWindow); });
-        }); if(!host.remote())menu.add(quit);else{var reconnect=new JMenuItem("Подключить другой ноутбук…");reconnect.addActionListener(e->{saveDraft();RemoteMain.restartPairing(this);});menu.add(reconnect);} menu.show(heading, Math.max(0, heading.getWidth() - 100), heading.getHeight());
+        }); if(!host.remote())menu.add(quit);else{var reconnect=new JMenuItem("Подключить другой ноутбук…");reconnect.addActionListener(e->{saveDraft();RemoteMain.restartPairing(this);});menu.add(reconnect);var update=new JMenuItem("Обновить Tethium Remote…");update.addActionListener(e->updateRemote(true));menu.add(update);} menu.show(heading, Math.max(0, heading.getWidth() - 100), heading.getHeight());
     }
     private void workspaceSettings(){
         var menu=new JPopupMenu();var files=new JMenuItem("Файлы…");files.addActionListener(e->FileManagerDialog.open(this,host,selectedProject));menu.add(files);var allBacklog=new JMenuItem("Отложенные задачи…");allBacklog.addActionListener(e->openBacklog("",null));menu.add(allBacklog);var cpu=new JMenuItem("CPU: общий лимит и приоритет…");cpu.addActionListener(e->configureCpu("global","","Все исполнения"));menu.add(cpu);var trash=new JMenuItem("Корзина сессий…");trash.addActionListener(e->TrashDialog.open(this,host,()->poller.execute(this::poll)));menu.add(trash);menu.show(active,0,0);
