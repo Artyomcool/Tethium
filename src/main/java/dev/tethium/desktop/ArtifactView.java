@@ -78,6 +78,8 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
     }
     private void detach(){if(attached()){removeAll();revalidate();repaint();}}
     public void showNotice(String text){clear();message(text);}
+    /** An image fetched from the laptop, shown like a local one: no browser is needed for it. */
+    public void showImage(java.awt.image.BufferedImage image){if(closed)return;remoteUrl=null;current=null;shownSignature=null;cancelPending();generation.incrementAndGet();detach();imagePanel=new ImagePanel(image);removeAll();add(imagePanel);revalidate();repaint();}
     private static String signature(Path path){try{var attributes=Files.readAttributes(path,java.nio.file.attribute.BasicFileAttributes.class);return path+"|"+attributes.size()+"|"+attributes.lastModifiedTime().toMillis();}catch(Exception e){return path+"|missing";}}
     /** Initializes Chromium and opens a blank page in the background so the first document appears without the startup cost. */
     public void warmUp(){

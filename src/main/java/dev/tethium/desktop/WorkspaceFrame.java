@@ -126,6 +126,7 @@ public final class WorkspaceFrame extends JFrame {
         super("Tethium"); this.host = host; this.onClose = onClose;
         setIconImages(AppIcon.images());
         this.initialSelection = initialSelection;
+        if(host.remote())UacDialog.watch(this,host);
         try{Path saved=dev.tethium.host.AppPaths.data().resolve("session-views.json");if(Files.isRegularFile(saved))Json.MAPPER.readTree(saved.toFile()).properties().forEach(e->sessionViews.put(e.getKey(),e.getValue()));}catch(Exception ignored){}
         restoreProjectExpansion();
         ChatMarkdown.showThoughts=sessionViews.getOrDefault("$showThoughts",Json.MAPPER.getNodeFactory().booleanNode(true)).asBoolean(true);
@@ -1075,6 +1076,7 @@ public final class WorkspaceFrame extends JFrame {
             String filename=a.path.getFileName().toString().toLowerCase(Locale.ROOT);boolean runnable=filename.matches(".*\\.(jar|exe|zip)$");runBuild.setVisible(host.remote()&&runnable);getBuild.setVisible(host.remote());
             if(runnable&&host.remote())viewer.showNotice("Опубликованная сборка · "+a.path.getFileName()+"\nПолучите её или запустите на этом компьютере.");
             else if(host instanceof dev.tethium.remote.RemoteClient remote&&selectedFile!=null){String id=selectedFile;action(()->{var url=remote.previewDocument(id);SwingUtilities.invokeLater(()->{if(Objects.equals(selectedFile,id))viewer.openRemote(url);});});}
+            else if(host instanceof dev.tethium.remote.RemoteClient remote&&filename.matches(".*\\.(png|jpe?g|gif|bmp)$")&&!draftImages.getOrDefault(selected,List.of()).contains(a.path.toString())){String sid=selected;action(()->{var picture=remote.readImage(a.path,sid);SwingUtilities.invokeLater(()->{if(artifacts.getSelectedItem()!=a)return;if(picture==null)viewer.showNotice("Не удалось прочитать изображение");else viewer.showImage(picture);});});}
             else if(host instanceof dev.tethium.remote.RemoteClient remote&&!draftImages.getOrDefault(selected,List.of()).contains(a.path.toString())){action(()->{var url=remote.preview(a.path);SwingUtilities.invokeLater(()->{if(artifacts.getSelectedItem()==a)viewer.openRemote(url);});});}
             else viewer.open(a.path); expandPreview.setEnabled(!runnable);
             boolean image = !a.path.getFileName().toString().toLowerCase(Locale.ROOT).matches(".*\\.(html?|md|markdown|svg)$");
