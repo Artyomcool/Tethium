@@ -125,8 +125,25 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
     private java.net.URI remoteUrl;
     public void openRemote(java.net.URI url){if(closed)return;if(url.equals(remoteUrl)){attach();return;}current=null;shownSignature=null;remoteUrl=url;imagePanel=null;rendererRecoveries=0;cancelPending();long expected=generation.incrementAndGet();if(browser==null||!attached())message("Открываем результат с ноутбука…");loader.submit(()->{try{showBrowser(url,url.resolve(".").toString(),expected,null);}catch(Exception e){
             // Without the embedded browser the page still opens: the laptop's file is served locally, any browser can show it.
+            if(browserFailure!=null&&url.getPath().toLowerCase(java.util.Locale.ROOT).matches(".*\\.(md|markdown|html?)$")&&showSimple(url,expected))return;
             boolean outside=browserFailure!=null&&openOutside(url);
             SwingUtilities.invokeLater(()->{if(generation.get()==expected){detach();message(outside?"Открыто в браузере системы: "+browserFailure:"Не удалось открыть: "+e.getMessage());}});}});}
+    /** Without the embedded browser a document is still readable: its HTML is shown the way the chat is, scripts and inline images aside. */
+    private boolean showSimple(java.net.URI url,long expected){
+        try{
+            String html;try(var in=url.toURL().openStream()){html=new String(in.readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);}
+            var body=java.util.regex.Pattern.compile("(?is)<body[^>]*>(.*)</body>").matcher(html);
+            String content=(body.find()?body.group(1):html).replaceAll("(?is)<script.*?</script>","").replaceAll("(?is)<style.*?</style>","").replaceAll("(?is)<img[^>]*src=\"data:[^\"]*\"[^>]*>","<em>[изображение]</em>");
+            SwingUtilities.invokeLater(()->{
+                if(closed||generation.get()!=expected)return;
+                var pane=new ChatTranscript();pane.setText(ChatTheme.page(content));pane.setCaretPosition(0);
+                var note=new JLabel("Упрощённый вид: "+browserFailure);note.setForeground(Theme.MUTED);note.setBorder(BorderFactory.createEmptyBorder(4,8,4,8));
+                var panel=new JPanel(new java.awt.BorderLayout());panel.add(note,java.awt.BorderLayout.NORTH);var scroll=new JScrollPane(pane);scroll.setBorder(null);panel.add(scroll);
+                detach();removeAll();add(panel);revalidate();repaint();
+            });
+            return true;
+        }catch(Exception failure){return false;}
+    }
     private static boolean openOutside(java.net.URI url){
         try{if(java.awt.Desktop.isDesktopSupported()&&java.awt.Desktop.getDesktop().isSupported(java.awt.Desktop.Action.BROWSE)){java.awt.Desktop.getDesktop().browse(url);return true;}}catch(Exception ignored){}
         try{new ProcessBuilder("xdg-open",url.toString()).redirectErrorStream(true).redirectOutput(ProcessBuilder.Redirect.DISCARD).start();return true;}catch(Exception ignored){return false;}
