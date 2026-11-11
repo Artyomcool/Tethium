@@ -27,6 +27,7 @@ public final class HostService implements AutoCloseable {
     private final MediaCapture media;
     private final dev.tethium.files.FileManager fileManager;
     private AwakeGuard awake;
+    private MediaStorage mediaStorage;
     private final ScheduledExecutorService quotaMonitor=Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().factory());
     private final ScheduledExecutorService scheduleMonitor=Executors.newSingleThreadScheduledExecutor(Thread.ofVirtual().name("session-schedules-",0).factory());
     private long quotaObserved;
@@ -95,6 +96,7 @@ public final class HostService implements AutoCloseable {
         reminders=new Reminders(store,this::bump);
         resources=new ResourceController(store,data,detachedEnabled);
         media=new MediaCapture(store,data,this::bump);
+        mediaStorage=new MediaStorage(data);quotaMonitor.scheduleWithFixedDelay(()->{long was=mediaStorage.bytes();mediaStorage.measure();if(was!=mediaStorage.bytes())bump();},0,10,TimeUnit.MINUTES);
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", this::handle); server.setExecutor(workers); server.start();
         if(adapter instanceof CodexAdapter && !Boolean.getBoolean("tethium.probe") && Files.exists(data.resolve("mobile/enabled"))) {
@@ -435,7 +437,7 @@ public final class HostService implements AutoCloseable {
         var projects = store.projects();
         for (var project : projects) for (var session : store.list(project.id())) if(store.trashedAt(session.id())==0)sessions.add(sessionJson(session));
         var backlogWaiting=store.backlogWaiting();var projectValues=new ArrayList<JsonNode>();for(var p:projects)projectValues.add(Json.object("backlog",backlogWaiting.getOrDefault(p.id(),0),"id",p.id(),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"crossProject",store.crossProject(p.id()),"icon",ProjectIcons.version(Path.of(p.root())),"panel",projectPanels.read(Path.of(p.root())),"widget",projectWidgets.read(Path.of(p.root()))));
-        var result = Json.object("machineUsage",cpu==null?Json.object():cpu.machineUsage(),"resources",resources.snapshot(),"reminders",reminderRows(),"files",store.projectFiles(),"resourceUsage",usage.sidebar(),"revision", revision.get(), "projects", projectValues, "sessions", sessions, "quota", quota.snapshot(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
+        var result = Json.object("machineUsage",machineUsage(),"resources",resources.snapshot(),"reminders",reminderRows(),"files",store.projectFiles(),"resourceUsage",usage.sidebar(),"revision", revision.get(), "projects", projectValues, "sessions", sessions, "quota", quota.snapshot(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
         if (selected != null && sessions.stream().anyMatch(s -> s.path("id").asText().equals(selected))) {
             var messages = new ArrayList<SessionStore.Message>(); long cursor = 0;
             while (!window) { var page = store.messages(selected, cursor, 1000); messages.addAll(page); if (page.size() < 1000) break; cursor = page.getLast().sequence(); }
@@ -480,6 +482,12 @@ public final class HostService implements AutoCloseable {
             bump();
         }
         return result;
+    }
+    /** Machine numbers for the window, with the size of saved chat images: past the limit the window shows a red dot. */
+    private JsonNode machineUsage(){
+        var value=(com.fasterxml.jackson.databind.node.ObjectNode)(cpu==null?Json.object():cpu.machineUsage().deepCopy());
+        if(mediaStorage!=null&&mediaStorage.bytes()>=0){value.put("mediaBytes",mediaStorage.bytes());value.put("mediaLimit",MediaStorage.LIMIT);value.put("mediaFolder",mediaStorage.folder().toString());}
+        return value;
     }
     synchronized void observeSchedules(long now){
         if(closed||draining)return;

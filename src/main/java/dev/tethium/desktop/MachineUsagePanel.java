@@ -13,9 +13,18 @@ final class MachineUsagePanel extends JComponent {
     MachineUsagePanel(){
         setPreferredSize(new Dimension(0,17));setMinimumSize(new Dimension(0,17));
         setFont(UIManager.getFont("Label.font").deriveFont(Font.PLAIN,12f));setToolTipText("CPU / RAM");
+        addMouseListener(new java.awt.event.MouseAdapter(){@Override public void mouseClicked(MouseEvent e){if(mediaFull()&&e.getX()>=getWidth()-DOT-4)openMediaFolder();}});
+    }
+    private static final int DOT=7;
+    /** Saved chat images past the limit: nothing is deleted by itself, the dot asks for a manual clean-up. */
+    private boolean mediaFull(){return value.path("mediaBytes").asLong(0)>=value.path("mediaLimit").asLong(Long.MAX_VALUE);}
+    private void openMediaFolder(){
+        var folder=new java.io.File(value.path("mediaFolder").asText(""));
+        if(folder.isDirectory())try{Desktop.getDesktop().open(folder);}catch(Exception ignored){}
     }
     void update(JsonNode value){this.value=value;repaint();}
     @Override public String getToolTipText(MouseEvent event){
+        if(mediaFull()&&event.getX()>=getWidth()-DOT-4)return "<html><b>Картинки чатов: "+bytes(value.path("mediaBytes"))+"</b> (порог "+bytes(value.path("mediaLimit"))+")<br>Сами они не удаляются. Почистите папку вручную или попросите агента.<br>"+Theme.escape(value.path("mediaFolder").asText(""))+(new java.io.File(value.path("mediaFolder").asText("")).isDirectory()?"<br>Щелчок открывает папку.":"")+"</html>";
         boolean cpu=event.getX()<cpuWidth(getFontMetrics(getFont()))+Theme.GAP;String body;
         if(cpu)body="<b>CPU · загрузка всех ядер</b><br><font color='#69d9ae'>Tethium: "+percent(value.path("cpuOurs"))+"</font> · <font color='#e4bd82'>остальное: "+percent(value.path("cpuOther"))+"</font><br>Всего: "+percent(value.path("cpuTotal"))+" из 100%";
         else body="<b>RAM · физическая память</b><br><font color='#c3a0f5'>Tethium: "+(partial()?"не менее ":"")+bytes(value.path("memoryOurs"))+"</font><br><font color='#e4bd82'>Остальное: "+(partial()?"не более ":"")+bytes(value.path("memoryOther"))+"</font><br>Занято "+bytes(value.path("memoryUsed"))+" из "+bytes(value.path("memoryTotal"))
@@ -34,8 +43,9 @@ final class MachineUsagePanel extends JComponent {
         var g=(Graphics2D)graphics.create();g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g.setFont(getFont());var fm=g.getFontMetrics();int baseline=(getHeight()-fm.getHeight())/2+fm.getAscent();
         int cpuWidth=cpuWidth(fm);
+        if(mediaFull()){g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);g.setColor(Theme.RED);g.fillOval(getWidth()-DOT-1,(getHeight()-DOT)/2,DOT,DOT);}
         paintGroup(g,0,cpuWidth,baseline,"CPU",value.path("cpuOurs"),value.path("cpuOther"),true,ResourceBars.CPU_NOW);
-        int ramX=cpuWidth+Theme.GAP;paintGroup(g,ramX,getWidth()-ramX,baseline,"RAM",value.path("memoryOurs"),value.path("memoryOther"),false,ResourceBars.RAM);g.dispose();
+        int ramX=cpuWidth+Theme.GAP;paintGroup(g,ramX,getWidth()-ramX-(mediaFull()?DOT+4:0),baseline,"RAM",value.path("memoryOurs"),value.path("memoryOther"),false,ResourceBars.RAM);g.dispose();
     }
     private void paintGroup(Graphics2D g,int x,int width,int baseline,String label,JsonNode ours,JsonNode other,boolean cpu,Color color){
         String oursPrefix=!cpu&&partial()&&ours.isNumber()?"≥":"",otherPrefix=!cpu&&partial()&&other.isNumber()?"≤":"";
