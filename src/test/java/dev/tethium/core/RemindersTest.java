@@ -57,6 +57,20 @@ class RemindersTest {
         }
     }
 
+    /** A tool call is answered inside a store transaction; the reminder it writes must share that transaction, not race it. */
+    @Test void sharesTheStoreTransaction()throws Exception{
+        long now=System.currentTimeMillis();
+        try(var store=new SessionStore(dir.resolve("s.db"))){
+            var reminders=new Reminders(store,null);
+            String session=store.create(store.project(dir),null,"S",dir).id();
+            assertThrows(IllegalStateException.class,()->store.transaction(()->{reminders.add(session,"p","Откатится",now+MIN,now);store.rename(session,"T");throw new IllegalStateException("rollback");}));
+            assertTrue(reminders.active(now).isEmpty());
+            store.transaction(()->{reminders.add(session,"p","Останется",now+MIN,now);store.rename(session,"T");return null;});
+            assertEquals(1,reminders.active(now).size());
+            assertTrue(reminders.active(now).getFirst().path("due").asText().matches("\\d+ [а-я]+ \\d{4}, \\d\\d:\\d\\d, [а-я]+"),reminders.active(now).getFirst().path("due").asText());
+        }
+    }
+
     @Test void survivesReopenAndParsesAgentTimes()throws Exception{
         long now=1_800_000_000_000L;var zone=ZoneId.of("Europe/Moscow");
         try(var reminders=new Reminders(dir.resolve("t.db"),null,zone)){

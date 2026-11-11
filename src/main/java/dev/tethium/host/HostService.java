@@ -91,7 +91,7 @@ public final class HostService implements AutoCloseable {
         fileManager=new dev.tethium.files.FileManager(data,()->{try{return Json.MAPPER.valueToTree(store.projects());}catch(Exception e){throw new IllegalStateException(e);}});
         store.recoverInterruptedRuns();
         usage=new UsageLedger(data.resolve("tethium.db"));
-        reminders=new Reminders(data.resolve("tethium.db"),this::bump);
+        reminders=new Reminders(store,this::bump);
         resources=new ResourceController(store,data,detachedEnabled);
         media=new MediaCapture(store,data,this::bump);
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);

@@ -72,7 +72,10 @@ final class ReminderWindow {
         }
         var scroll=new JScrollPane(panel);scroll.setBorder(null);
         alert.setContentPane(scroll);alert.pack();
-        var screen=GraphicsEnvironment.getLocalGraphicsEnvironment().getMaximumWindowBounds();
+        // Bounds in the same scaled units as setLocation; getMaximumWindowBounds reports device pixels on scaled displays.
+        var config=(owner.isShowing()?owner.getGraphicsConfiguration():GraphicsEnvironment.getLocalGraphicsEnvironment().getDefaultScreenDevice().getDefaultConfiguration());
+        var screen=config.getBounds();var insets=Toolkit.getDefaultToolkit().getScreenInsets(config);
+        screen=new Rectangle(screen.x+insets.left,screen.y+insets.top,screen.width-insets.left-insets.right,screen.height-insets.top-insets.bottom);
         alert.setSize(Math.min(alert.getWidth()+20,screen.width-40),Math.min(alert.getHeight()+4,screen.height-80));
         if(!alert.isVisible()){alert.setLocation(screen.x+(screen.width-alert.getWidth())/2,screen.y+Math.max(40,screen.height/5));alert.setVisible(true);Toolkit.getDefaultToolkit().beep();}
         if(fresh)raise();

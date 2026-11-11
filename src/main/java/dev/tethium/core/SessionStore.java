@@ -25,6 +25,8 @@ public final class SessionStore implements AutoCloseable {
     }
     public record WorkerRun(String runId, String sessionId, String jobId, long deliveredThrough, JsonNode spec, long cursor) {}
     private final Connection connection;
+    /** For tables kept next to the store's (core.Reminders): used only while holding this store's lock, so they join its transactions. */
+    Connection sharedConnection(){return connection;}
 
     public SessionStore(Path database) throws Exception {
         Files.createDirectories(database.toAbsolutePath().getParent());
