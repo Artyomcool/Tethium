@@ -24,20 +24,50 @@ import java.util.function.Consumer;
  */
 final class DocumentView {
     private DocumentView() {}
-    static JComponent create(String html, URI base, Consumer<URI> openLink) {
+    /**
+     * Builds and lays out the page; safe off the event thread, since nothing is on screen yet. A link to a place in the same page
+     * scrolls there, any other link goes to openLink.
+     */
+    static JComponent create(String html, URI base, Consumer<URI> openLink, int width) {
         var page = Jsoup.parse(html, base.toString());
         for (var image : page.select("img[src^=data:image/]")) {
             try { image.attr("src", inline(image.attr("src")).toUri().toString()); } catch (Exception failure) { image.attr("alt", "[изображение]").removeAttr("src"); }
+        }
+        // Headings get GitHub's ids, so links like [раздел](#раздел) written for GitHub land in the same place here.
+        var used = new java.util.HashMap<String, Integer>();
+        for (var heading : page.select("h1, h2, h3, h4, h5, h6")) {
+            if (heading.hasAttr("id")) continue;
+            String slug = heading.text().toLowerCase(java.util.Locale.ROOT).replaceAll("[^\\p{L}\\p{N}\\s_-]", "").trim().replace(' ', '-');
+            int seen = used.merge(slug, 1, Integer::sum);
+            heading.attr("id", seen == 1 ? slug : slug + "-" + (seen - 1));
         }
         var document = new W3CDom().fromJsoup(page);
         var panel = new SelectablePanel();
         for (var listener : panel.getMouseTrackingListeners()) if (listener instanceof LinkListener) panel.removeMouseTrackingListener(listener);
         panel.addMouseTrackingListener(new LinkListener() {
-            @Override public void linkClicked(BasicPanel source, String uri) { if (!panel.selectedText().isEmpty()) return; try { openLink.accept(URI.create(base.resolve(uri).toString())); } catch (Exception ignored) {} }
+            @Override public void linkClicked(BasicPanel source, String uri) {
+                if (!panel.selectedText().isEmpty()) return;
+                try {
+                    URI target = URI.create(base.resolve(uri).toString());
+                    if (target.getFragment() != null && java.util.Objects.equals(target.getPath(), base.getPath()) && java.util.Objects.equals(target.getHost(), base.getHost())) { scrollTo(panel, target.getFragment()); return; }
+                    openLink.accept(target);
+                } catch (Exception ignored) {}
+            }
         });
         panel.setDocument(document, base.toString());
         var scroll = new FSScrollPane(panel); scroll.setBorder(null); scroll.getVerticalScrollBar().setUnitIncrement(24);
+        if (width > 0) {
+            // The first layout is the slow part; done here it keeps the window responsive. Resizing later lays out again.
+            int inner = Math.max(100, width - scroll.getVerticalScrollBar().getPreferredSize().width);
+            scroll.setSize(width, 800); panel.setSize(inner, 800);
+            var image = new BufferedImage(1, 1, BufferedImage.TYPE_INT_RGB); var g = image.createGraphics();
+            try { panel.doDocumentLayout(g); } finally { g.dispose(); }
+        }
         return scroll;
+    }
+    private static void scrollTo(SelectablePanel panel, String id) {
+        var box = panel.getSharedContext().getBoxById(id);
+        if (box != null) panel.scrollTo(new java.awt.Point(0, box.getAbsY()));
     }
     private static Path inline(String data) throws Exception {
         int comma = data.indexOf(','); String head = data.substring(5, comma);
