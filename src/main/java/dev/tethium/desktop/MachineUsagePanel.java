@@ -25,6 +25,7 @@ final class MachineUsagePanel extends JComponent {
     void update(JsonNode value){this.value=value;repaint();}
     @Override public String getToolTipText(MouseEvent event){
         if(mediaFull()&&event.getX()>=getWidth()-DOT-4)return "<html><b>Картинки чатов: "+bytes(value.path("mediaBytes"))+"</b> (порог "+bytes(value.path("mediaLimit"))+")<br>Сами они не удаляются. Почистите папку вручную или попросите агента.<br>"+Theme.escape(value.path("mediaFolder").asText(""))+(new java.io.File(value.path("mediaFolder").asText("")).isDirectory()?"<br>Щелчок открывает папку.":"")+"</html>";
+        if(hasDisk()&&event.getX()>=diskX(getFontMetrics(getFont()))-Theme.GAP/2)return diskTooltip();
         boolean cpu=event.getX()<cpuWidth(getFontMetrics(getFont()))+Theme.GAP;String body;
         if(cpu)body="<b>CPU · загрузка всех ядер</b><br><font color='#69d9ae'>Tethium: "+percent(value.path("cpuOurs"))+"</font> · <font color='#e4bd82'>остальное: "+percent(value.path("cpuOther"))+"</font><br>Всего: "+percent(value.path("cpuTotal"))+" из 100%";
         else body="<b>RAM · физическая память</b><br><font color='#c3a0f5'>Tethium: "+(partial()?"не менее ":"")+bytes(value.path("memoryOurs"))+"</font><br><font color='#e4bd82'>Остальное: "+(partial()?"не более ":"")+bytes(value.path("memoryOther"))+"</font><br>Занято "+bytes(value.path("memoryUsed"))+" из "+bytes(value.path("memoryTotal"))
@@ -32,12 +33,30 @@ final class MachineUsagePanel extends JComponent {
         return "<html>"+body+"<br>Цветное число — Tethium, янтарное после «+» — остальная система.<br>Tethium: сессии, их процессы, ядро и окна приложения."
             +(cpu?"":"<br>Общие страницы памяти входят в остальную систему.")+"<br>Замер: "+ResourceBars.time(value.path("updatedAt").asLong(),true)+"</html>";
     }
+    private boolean hasDisk(){return value.path("disks").size()>0;}
+    private static double used(JsonNode disk){double total=disk.path("total").asDouble();return total<=0?0:100*(1-disk.path("free").asDouble()/total);}
+    private static Color diskColor(double used){return used>=95?Theme.RED:used>=85?Theme.AMBER:Theme.TEXT;}
+    private String diskText(){return hasDisk()?String.format(Locale.forLanguageTag("ru"),"%.0f",used(value.path("disks").get(0))):"";}
+    private int dotSpace(){return mediaFull()?DOT+4:0;}
+    /** Where the disk group starts: it keeps its full width at the right end, before the media dot. */
+    private int diskX(FontMetrics fm){return hasDisk()?getWidth()-dotSpace()-fm.stringWidth("Диск "+diskText()+"%"):getWidth()-dotSpace()+Theme.GAP;}
+    private String diskTooltip(){
+        var body=new StringBuilder("<html><b>Диск · занято</b>");
+        for(var disk:value.path("disks")){
+            double used=used(disk);String color=String.format("#%06x",diskColor(used).getRGB()&0xffffff);
+            String role=disk.path("data").asBoolean()?(disk.path("projects").asInt()>0?"данные Tethium и проекты":"данные Tethium"):"проекты";
+            body.append("<br>").append(Theme.escape(disk.path("root").asText())).append(" <font color='").append(color).append("'>").append(String.format(Locale.forLanguageTag("ru"),"%.0f%%",used)).append("</font> · свободно ")
+                .append(bytes(disk.path("free"))).append(" из ").append(bytes(disk.path("total"))).append(" · ").append(role);
+        }
+        return body.append("<br>В строке — самый заполненный. Янтарный от 85%, красный от 95%.</html>").toString();
+    }
     private static String percent(JsonNode n){return n.isNumber()?String.format(Locale.forLanguageTag("ru"),"%.1f%%",n.asDouble()):"—";}
     private static String bytes(JsonNode n){return n.isNumber()?ResourceBars.bytes(n.asLong()):"—";}
     private boolean partial(){return value.path("memoryUnmeasuredProcesses").asInt()>0;}
     private int cpuWidth(FontMetrics fm){
         int ramMinimum=fm.stringWidth("RAM "+(partial()?"≥":"")+compact(value.path("memoryOurs"),false,true)+"+"+(partial()?"≤":"")+compact(value.path("memoryOther"),false,true)+"ГБ");
-        return Math.max(0,Math.min(getWidth()/2-5,getWidth()-Theme.GAP-ramMinimum));
+        int right=diskX(fm)-Theme.GAP;
+        return Math.max(0,Math.min(right/2-5,right-Theme.GAP-ramMinimum));
     }
     @Override protected void paintComponent(Graphics graphics){
         var g=(Graphics2D)graphics.create();g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -45,7 +64,9 @@ final class MachineUsagePanel extends JComponent {
         int cpuWidth=cpuWidth(fm);
         if(mediaFull()){g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);g.setColor(Theme.RED);g.fillOval(getWidth()-DOT-1,(getHeight()-DOT)/2,DOT,DOT);}
         paintGroup(g,0,cpuWidth,baseline,"CPU",value.path("cpuOurs"),value.path("cpuOther"),true,ResourceBars.CPU_NOW);
-        int ramX=cpuWidth+Theme.GAP;paintGroup(g,ramX,getWidth()-ramX-(mediaFull()?DOT+4:0),baseline,"RAM",value.path("memoryOurs"),value.path("memoryOther"),false,ResourceBars.RAM);g.dispose();
+        int diskX=diskX(fm);
+        if(hasDisk()){int x=diskX;g.setColor(Theme.TEXT);g.drawString("Диск ",x,baseline);x+=fm.stringWidth("Диск ");String used=diskText();g.setColor(diskColor(used(value.path("disks").get(0))));g.drawString(used,x,baseline);x+=fm.stringWidth(used);g.setColor(Theme.MUTED);g.drawString("%",x,baseline);}
+        int ramX=cpuWidth+Theme.GAP;paintGroup(g,ramX,diskX-Theme.GAP-ramX,baseline,"RAM",value.path("memoryOurs"),value.path("memoryOther"),false,ResourceBars.RAM);g.dispose();
     }
     private void paintGroup(Graphics2D g,int x,int width,int baseline,String label,JsonNode ours,JsonNode other,boolean cpu,Color color){
         String oursPrefix=!cpu&&partial()&&ours.isNumber()?"≥":"",otherPrefix=!cpu&&partial()&&other.isNumber()?"≤":"";

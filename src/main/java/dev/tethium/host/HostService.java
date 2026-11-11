@@ -487,6 +487,7 @@ public final class HostService implements AutoCloseable {
     private JsonNode machineUsage(){
         var value=(com.fasterxml.jackson.databind.node.ObjectNode)(cpu==null?Json.object():cpu.machineUsage().deepCopy());
         if(mediaStorage!=null&&mediaStorage.bytes()>=0){value.put("mediaBytes",mediaStorage.bytes());value.put("mediaLimit",MediaStorage.LIMIT);value.put("mediaFolder",mediaStorage.folder().toString());}
+        if(mediaStorage!=null)value.set("disks",mediaStorage.disks(()->{try{return store.projects().stream().map(p->Path.of(p.root())).toList();}catch(Exception e){return List.of();}}));
         return value;
     }
     synchronized void observeSchedules(long now){
