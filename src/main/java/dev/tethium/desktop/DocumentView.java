@@ -5,7 +5,6 @@ import com.github.weisj.jsvg.parser.SVGLoader;
 import org.jsoup.Jsoup;
 import org.jsoup.helper.W3CDom;
 import org.xhtmlrenderer.simple.FSScrollPane;
-import org.xhtmlrenderer.simple.XHTMLPanel;
 import org.xhtmlrenderer.swing.BasicPanel;
 import org.xhtmlrenderer.swing.LinkListener;
 import javax.imageio.ImageIO;
@@ -31,10 +30,10 @@ final class DocumentView {
             try { image.attr("src", inline(image.attr("src")).toUri().toString()); } catch (Exception failure) { image.attr("alt", "[изображение]").removeAttr("src"); }
         }
         var document = new W3CDom().fromJsoup(page);
-        var panel = new XHTMLPanel();
+        var panel = new SelectablePanel();
         for (var listener : panel.getMouseTrackingListeners()) if (listener instanceof LinkListener) panel.removeMouseTrackingListener(listener);
         panel.addMouseTrackingListener(new LinkListener() {
-            @Override public void linkClicked(BasicPanel source, String uri) { try { openLink.accept(URI.create(base.resolve(uri).toString())); } catch (Exception ignored) {} }
+            @Override public void linkClicked(BasicPanel source, String uri) { if (!panel.selectedText().isEmpty()) return; try { openLink.accept(URI.create(base.resolve(uri).toString())); } catch (Exception ignored) {} }
         });
         panel.setDocument(document, base.toString());
         var scroll = new FSScrollPane(panel); scroll.setBorder(null); scroll.getVerticalScrollBar().setUnitIncrement(24);
