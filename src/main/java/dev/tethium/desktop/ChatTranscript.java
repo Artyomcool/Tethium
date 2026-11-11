@@ -67,6 +67,47 @@ final class ChatTranscript extends JEditorPane {
         setBorder(BorderFactory.createEmptyBorder());
         ((DefaultCaret) getCaret()).setUpdatePolicy(DefaultCaret.NEVER_UPDATE);
         setName("chat.transcript");
+        installCopyButton();
+    }
+
+    // A command line or a code block offers a copy button while the pointer is over it.
+    private final JButton copy=new JButton("Копировать");
+    private Element hovered;
+    private final Timer copied=new Timer(1200,e->copy.setText("Копировать"));
+    private void installCopyButton(){
+        setLayout(null);copy.setFocusable(false);copy.setName("chat.copyBlock");copy.setFont(copy.getFont().deriveFont(11f));copy.putClientProperty("JButton.buttonType","roundRect");copy.setMargin(new java.awt.Insets(1,8,1,8));
+        copy.setToolTipText("Скопировать в буфер обмена");copy.setVisible(false);copied.setRepeats(false);add(copy);
+        copy.addActionListener(e->{if(hovered==null)return;String text=copyText(hovered);if(text.isEmpty())return;
+            java.awt.Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new java.awt.datatransfer.StringSelection(text),null);copy.setText("Скопировано");copied.restart();});
+        addMouseMotionListener(new java.awt.event.MouseMotionAdapter(){@Override public void mouseMoved(java.awt.event.MouseEvent e){hover(e.getPoint());}});
+        addMouseListener(new java.awt.event.MouseAdapter(){@Override public void mouseExited(java.awt.event.MouseEvent e){if(!copy.getBounds().contains(e.getPoint()))hideCopy();}});
+    }
+    private void hideCopy(){hovered=null;copy.setVisible(false);}
+    private void hover(java.awt.Point point){
+        int position=viewToModel2D(point);if(position<0||!(getDocument() instanceof HTMLDocument document)){hideCopy();return;}
+        Element block=copyable(document.getParagraphElement(position));
+        java.awt.Rectangle area=block==null?null:area(block);
+        if(area==null||point.y<area.y||point.y>area.y+area.height){hideCopy();return;}
+        hovered=block;var size=copy.getPreferredSize();var insets=getInsets();
+        int x=getWidth()-insets.right-size.width-6,y=Math.max(area.y,area.y+(Math.min(area.height,28)-size.height)/2);
+        copy.setBounds(x,y,size.width,size.height);if(!copy.isVisible()){copy.setText("Копировать");copy.setVisible(true);}
+    }
+    /** A command line of the agent, or a block of code; null for ordinary text. */
+    static Element copyable(Element element){
+        for(var e=element;e!=null;e=e.getParentElement()){
+            if("pre".equals(e.getName()))return e;
+            if("p".equals(e.getName()))return "action".equals(String.valueOf(e.getAttributes().getAttribute(HTML.Attribute.CLASS)))?e:null;
+        }
+        return null;
+    }
+    private java.awt.Rectangle area(Element block){
+        try{var first=modelToView2D(block.getStartOffset());var last=modelToView2D(Math.max(block.getStartOffset(),block.getEndOffset()-1));if(first==null||last==null)return null;return first.getBounds().union(last.getBounds());}catch(BadLocationException e){return null;}
+    }
+    /** For a command line only the command itself, without its "Команда: " label. */
+    String copyText(Element block){
+        try{String text=getDocument().getText(block.getStartOffset(),block.getEndOffset()-block.getStartOffset()).strip();
+            return "pre".equals(block.getName())?text:text.replaceFirst("^(Команда|Файлы|Инструмент|Поиск): ","");}
+        catch(BadLocationException e){return "";}
     }
 
     @Override public boolean getScrollableTracksViewportWidth() { return true; }
