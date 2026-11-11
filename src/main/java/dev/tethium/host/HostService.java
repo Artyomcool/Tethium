@@ -88,6 +88,7 @@ public final class HostService implements AutoCloseable {
         this.adapter = adapter; this.quota = quota; this.draining = standby; this.models = models; this.data = data;
         detachedEnabled=adapter instanceof CodexAdapter&&!Boolean.getBoolean("tethium.probe");
         store = new SessionStore(data.resolve("tethium.db"));
+        try{store.compactEvents();}catch(Exception e){System.err.println("Event compaction: "+e.getMessage());}
         fileManager=new dev.tethium.files.FileManager(data,()->{try{return Json.MAPPER.valueToTree(store.projects());}catch(Exception e){throw new IllegalStateException(e);}});
         store.recoverInterruptedRuns();
         usage=new UsageLedger(data.resolve("tethium.db"));

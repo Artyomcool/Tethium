@@ -505,7 +505,7 @@ public final class SessionStore implements AutoCloseable {
         if (event.type().equals("conversation")) {
             execute("INSERT INTO bindings(session_id,provider,conversation_id,last_sequence) SELECT ?,provider,?,0 FROM runs WHERE id=? ON CONFLICT(session_id,provider) DO UPDATE SET conversation_id=excluded.conversation_id", sessionId, event.text(), runId);
         } else if (event.type().equals("item/started") || event.type().equals("item/completed") || event.type().equals("error") || event.type().equals("request")) {
-            execute("INSERT INTO events(session_id,run_id,type,payload) VALUES(?,?,?,?)", sessionId, runId, event.type(), event.raw().toString());
+            execute("INSERT INTO events(session_id,run_id,type,payload) VALUES(?,?,?,?)", sessionId, runId, event.type(), storedEvent(event.raw()));
             var item=event.raw().path("params").path("item");
             if(event.type().equals("item/completed")&&Set.of("imageView","imageGeneration").contains(item.path("type").asText())&&(!item.has("status")||item.path("status").asText().equals("completed"))){
                 long eventId;try(var q=connection.createStatement();var r=q.executeQuery("SELECT last_insert_rowid()")){r.next();eventId=r.getLong(1);}
@@ -890,6 +890,37 @@ public final class SessionStore implements AutoCloseable {
         }
     }
     private void linkRunMessage(String run,String session)throws SQLException{execute("INSERT INTO run_messages(run_id,session_id,result_sequence) VALUES(?,?,?) ON CONFLICT(run_id) DO UPDATE SET result_sequence=excluded.result_sequence",run,session,lastSequence(session));}
+    /** Events only feed the activity window (the last hundred of a session); older ones and whole outputs are never read again. */
+    static final int EVENTS_KEPT=300,EVENT_TEXT=8192;
+    /** An event as stored: a generated image is already a file of its own, a long output keeps its beginning and end. */
+    static String storedEvent(JsonNode raw){
+        var copy=raw.deepCopy();
+        if(copy.path("params").path("item") instanceof com.fasterxml.jackson.databind.node.ObjectNode item&&item.path("type").asText().equals("imageGeneration"))item.remove("result");
+        shorten(copy);return copy.toString();
+    }
+    private static void shorten(JsonNode node){
+        if(node instanceof com.fasterxml.jackson.databind.node.ObjectNode object){
+            var names=new ArrayList<String>();object.fieldNames().forEachRemaining(names::add);
+            for(String name:names){var value=object.get(name);if(value.isTextual()&&value.asText().length()>EVENT_TEXT)object.put(name,shortened(value.asText()));else shorten(value);}
+        }else if(node instanceof com.fasterxml.jackson.databind.node.ArrayNode array){
+            for(int i=0;i<array.size();i++){var value=array.get(i);if(value.isTextual()&&value.asText().length()>EVENT_TEXT)array.set(i,Json.MAPPER.getNodeFactory().textNode(shortened(value.asText())));else shorten(value);}
+        }
+    }
+    private static String shortened(String text){int half=EVENT_TEXT/2;return text.substring(0,half)+"\n… "+(text.length()-EVENT_TEXT)+" символов пропущено …\n"+text.substring(text.length()-half);}
+    /**
+     * Drops events beyond the last few hundred of each session and shortens old payloads, then gives the space back. Runs at the
+     * core's start, before other connections open; waits for the media migration, which still reads images from old events.
+     */
+    public synchronized void compactEvents()throws SQLException{
+        try(var q=connection.createStatement();var r=q.executeQuery("SELECT 1 FROM media_migrations WHERE name='events-v1'")){if(!r.next())return;}
+        execute("DELETE FROM events WHERE sequence IN (SELECT sequence FROM (SELECT sequence,ROW_NUMBER() OVER (PARTITION BY session_id ORDER BY sequence DESC) n FROM events) WHERE n>?)",EVENTS_KEPT);
+        var trimmed=new LinkedHashMap<Long,String>();
+        try(var q=connection.prepareStatement("SELECT sequence,payload FROM events WHERE length(payload)>?")){q.setInt(1,2*EVENT_TEXT+256);try(var r=q.executeQuery()){while(r.next()){try{trimmed.put(r.getLong(1),storedEvent(Json.parse(r.getString(2))));}catch(Exception ignored){}}}}
+        for(var entry:trimmed.entrySet())execute("UPDATE events SET payload=? WHERE sequence=?",entry.getValue(),entry.getKey());
+        long pages,free;
+        try(var q=connection.createStatement()){try(var r=q.executeQuery("PRAGMA page_count")){r.next();pages=r.getLong(1);}try(var r=q.executeQuery("PRAGMA freelist_count")){r.next();free=r.getLong(1);}}
+        if(free*4>pages)try(var q=connection.createStatement()){q.execute("VACUUM");}
+    }
     public synchronized void seedMediaJobs()throws SQLException{
         try(var q=connection.createStatement();var r=q.executeQuery("SELECT 1 FROM media_migrations WHERE name='events-v1'")){if(r.next())return;}
         execute("INSERT OR IGNORE INTO media_jobs(event_id,run_id,session_id,item_id,output_offset,input_sequence,payload) SELECT e.sequence,e.run_id,e.session_id,json_extract(e.payload,'$.params.item.id'),0,COALESCE(w.delivered_through,0),json_extract(e.payload,'$.params.item') FROM events e LEFT JOIN worker_runs w ON w.run_id=e.run_id WHERE e.type='item/completed' AND json_extract(e.payload,'$.params.item.type') IN ('imageView','imageGeneration') AND COALESCE(json_extract(e.payload,'$.params.item.status'),'completed')='completed'");
