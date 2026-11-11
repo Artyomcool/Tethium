@@ -452,6 +452,12 @@ public final class WorkspaceFrame extends JFrame {
             }catch(Exception failure){if(asked)SwingUtilities.invokeLater(()->JOptionPane.showMessageDialog(this,"Не удалось проверить обновление: "+failure.getMessage(),"Tethium Remote",JOptionPane.WARNING_MESSAGE));}
         });
     }
+    /** Remote names its build in the title, so an update that did not arrive is visible without taking space in the window. */
+    private String versionSuffix(){return host.remote()?" · Remote "+version():"";}
+    static String version(){
+        String build=dev.tethium.update.BuildInfo.BUILD,archive=dev.tethium.remote.RemoteUpdate.installed();
+        return (build.length()>7?build.substring(0,7):build)+(archive.isEmpty()?"":" · архив "+archive.substring(0,Math.min(7,archive.length())));
+    }
     private void openSessionBacklog(){var session=selected==null?null:sessions.get(selected);if(session!=null)openBacklog(session.path("projectId").asText(),selected);}
     private void openBacklog(String project,String session){BacklogDialog.open(this,host,projects,sessions,project,session);}
     private void popup(MouseEvent event, JTree tree) {
@@ -497,7 +503,7 @@ public final class WorkspaceFrame extends JFrame {
         menu.addSeparator(); var quit = new JMenuItem("Завершить ядро и все запуски"); quit.addActionListener(e -> {
             if (JOptionPane.showConfirmDialog(this, "Остановить все запуски и завершить Tethium?", "Завершение", JOptionPane.OK_CANCEL_OPTION) == JOptionPane.OK_OPTION)
                 action(() -> { host.post("/shutdown", Json.object()); SwingUtilities.invokeLater(this::closeWindow); });
-        }); if(!host.remote())menu.add(quit);else{var reconnect=new JMenuItem("Подключить другой ноутбук…");reconnect.addActionListener(e->{saveDraft();RemoteMain.restartPairing(this);});menu.add(reconnect);var update=new JMenuItem("Обновить Tethium Remote…");update.addActionListener(e->updateRemote(true));menu.add(update);} menu.show(heading, Math.max(0, heading.getWidth() - 100), heading.getHeight());
+        }); if(!host.remote())menu.add(quit);else{var reconnect=new JMenuItem("Подключить другой ноутбук…");reconnect.addActionListener(e->{saveDraft();RemoteMain.restartPairing(this);});menu.add(reconnect);var update=new JMenuItem("Обновить Tethium Remote…");update.addActionListener(e->updateRemote(true));menu.add(update);var version=new JMenuItem("Версия: "+version());version.setEnabled(false);menu.add(version);} menu.show(heading, Math.max(0, heading.getWidth() - 100), heading.getHeight());
     }
     private void workspaceSettings(){
         var menu=new JPopupMenu();var files=new JMenuItem("Файлы…");files.addActionListener(e->FileManagerDialog.open(this,host,selectedProject));menu.add(files);var allBacklog=new JMenuItem("Отложенные задачи…");allBacklog.addActionListener(e->openBacklog("",null));menu.add(allBacklog);var reminderList=new JMenuItem("Напоминания…");reminderList.addActionListener(e->{if(reminderWindow!=null)reminderWindow.openList();});menu.add(reminderList);var cpu=new JMenuItem("CPU: общий лимит и приоритет…");cpu.addActionListener(e->configureCpu("global","","Все исполнения"));menu.add(cpu);var trash=new JMenuItem("Корзина сессий…");trash.addActionListener(e->TrashDialog.open(this,host,()->poller.execute(this::poll)));menu.add(trash);menu.show(active,0,0);
@@ -537,7 +543,7 @@ public final class WorkspaceFrame extends JFrame {
     }
     private void renderDocument(){
         var document=documents.get(selectedFile);if(document==null)return;selectedProject=document.path("projectId").asText();
-        heading.setText(document.path("title").asText());status.setText(document.path("path").asText());status.setToolTipText(status.getText());setTitle(projects.get(selectedProject).path("title").asText()+": "+heading.getText());
+        heading.setText(document.path("title").asText());status.setText(document.path("path").asText());status.setToolTipText(status.getText());setTitle(projects.get(selectedProject).path("title").asText()+": "+heading.getText()+versionSuffix());
         model.setVisible(false);results.setVisible(false);pinPreview.setVisible(false);closePreview.setVisible(true);content.setLeftComponent(null);
         String signature=document.toString();if(!signature.equals(documentSignature)){documentSignature=signature;applying=true;artifacts.removeAllItems();artifacts.addItem(new Artifact(document.path("title").asText(),Path.of(document.path("path").asText())));applying=false;previewOpen=false;showPreview(true);}content.setDividerSize(0);content.setDividerLocation(0);
     }
@@ -574,7 +580,7 @@ public final class WorkspaceFrame extends JFrame {
         String executor = executorTitle(session); input.putClientProperty("JTextArea.placeholderText", "Сообщение " + executor + "…");
         heading.setText(session.path("title").asText()); heading.setToolTipText(session.path("directory").asText());
         var project = projects.get(session.path("projectId").asText());
-        setTitle((project == null ? "Tethium" : project.path("title").asText("Tethium")) + ": " + session.path("title").asText());
+        setTitle((project == null ? "Tethium" : project.path("title").asText("Tethium")) + ": " + session.path("title").asText() + versionSuffix());
         status.setText(busy ? session.path("phase").asText("Работает") : !enabled ? "Неактивна" : session.path("status").asText().equals("FAILED") ? "Ошибка" : executor);
         int queued = session.path("queued").asInt(); if (queued > 0) status.setText(status.getText() + " · очередь " + queued);
         status.setToolTipText(status.getText());
