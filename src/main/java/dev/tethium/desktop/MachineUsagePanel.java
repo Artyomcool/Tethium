@@ -43,7 +43,7 @@ final class MachineUsagePanel extends JComponent {
     private String diskText(){var disk=tightest();return disk==null?"":String.format(Locale.forLanguageTag("ru"),"%.0f",freeGb(disk));}
     private int dotSpace(){return mediaFull()?DOT+4:0;}
     /** Where the disk group starts: it keeps its full width at the right end, before the media dot. */
-    private int diskX(FontMetrics fm){return hasDisk()?getWidth()-dotSpace()-fm.stringWidth("Диск "+diskText()+" ГБ"):getWidth()-dotSpace()+Theme.GAP;}
+    private int diskX(FontMetrics fm){return hasDisk()?getWidth()-dotSpace()-fm.stringWidth("Диск "+diskText()+"ГБ"):getWidth()-dotSpace()+Theme.GAP;}
     private String diskTooltip(){
         var body=new StringBuilder("<html><b>Диск · свободно</b>");
         for(var disk:value.path("disks")){
@@ -69,7 +69,7 @@ final class MachineUsagePanel extends JComponent {
         if(mediaFull()){g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);g.setColor(Theme.RED);g.fillOval(getWidth()-DOT-1,(getHeight()-DOT)/2,DOT,DOT);}
         paintGroup(g,0,cpuWidth,baseline,"CPU",value.path("cpuOurs"),value.path("cpuOther"),true,ResourceBars.CPU_NOW);
         int diskX=diskX(fm);
-        if(hasDisk()){int x=diskX;g.setColor(Theme.TEXT);g.drawString("Диск ",x,baseline);x+=fm.stringWidth("Диск ");String free=diskText();g.setColor(diskColor(freeGb(tightest())));g.drawString(free,x,baseline);x+=fm.stringWidth(free);g.setColor(Theme.MUTED);g.drawString(" ГБ",x,baseline);}
+        if(hasDisk()){int x=diskX;g.setColor(Theme.TEXT);g.drawString("Диск ",x,baseline);x+=fm.stringWidth("Диск ");String free=diskText();g.setColor(diskColor(freeGb(tightest())));g.drawString(free,x,baseline);x+=fm.stringWidth(free);g.setColor(Theme.MUTED);g.drawString("ГБ",x,baseline);}
         int ramX=cpuWidth+Theme.GAP;paintGroup(g,ramX,diskX-Theme.GAP-ramX,baseline,"RAM",value.path("memoryOurs"),value.path("memoryOther"),false,ResourceBars.RAM);g.dispose();
     }
     private void paintGroup(Graphics2D g,int x,int width,int baseline,String label,JsonNode ours,JsonNode other,boolean cpu,Color color){
