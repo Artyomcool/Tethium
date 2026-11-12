@@ -184,6 +184,14 @@ public final class SessionStore implements AutoCloseable {
     /** Projects folded in the sidebar, shared by the window, Remote and the phone. */
     public synchronized Set<String> collapsedProjects()throws SQLException{var result=new HashSet<String>();try(var q=connection.createStatement();var rows=q.executeQuery("SELECT project_id FROM project_collapsed")){while(rows.next())result.add(rows.getString(1));}return result;}
     public synchronized void projectCollapsed(String id,boolean collapsed)throws SQLException{if(collapsed)execute("INSERT OR IGNORE INTO project_collapsed VALUES(?)",id);else execute("DELETE FROM project_collapsed WHERE project_id=?",id);}
+    /** Whether the session's messages, or the answer being written, name the file by its full path (with either slash). */
+    public synchronized boolean mentions(String session,Path file)throws SQLException{
+        String back=file.toAbsolutePath().normalize().toString(),forward=back.replace('\\','/');
+        try(var q=connection.prepareStatement("SELECT 1 FROM messages WHERE session_id=? AND (instr(lower(text),lower(?))>0 OR instr(lower(text),lower(?))>0) UNION ALL SELECT 1 FROM run_progress WHERE session_id=? AND (instr(lower(output),lower(?))>0 OR instr(lower(output),lower(?))>0) LIMIT 1")){
+            q.setString(1,session);q.setString(2,back);q.setString(3,forward);q.setString(4,session);q.setString(5,back);q.setString(6,forward);
+            try(var r=q.executeQuery()){return r.next();}
+        }
+    }
     public synchronized boolean projectActive(String id)throws SQLException{
         try(var q=connection.prepareStatement("SELECT active FROM project_visibility WHERE project_id=?")){q.setString(1,id);try(var r=q.executeQuery()){return !r.next()||r.getBoolean(1);}}
     }

@@ -193,6 +193,7 @@ public final class HostService implements AutoCloseable {
     public dev.tethium.mobile.MobileGateway.Feed feed() {
         return new dev.tethium.mobile.MobileGateway.Feed() {
             public dev.tethium.files.FileManager files(){return fileManager;}
+            public boolean mentions(String session,Path file){try{return store.mentions(session,file);}catch(Exception e){return false;}}
             public long revision() { return revision.get(); }
             public void addListener(Runnable listener) { changeListeners.add(listener); }
             public void removeListener(Runnable listener) { changeListeners.remove(listener); }

@@ -24,6 +24,8 @@ public final class MobileGateway implements AutoCloseable {
     /** In-process access to the host: change signal plus the pieces the link streams. */
     public interface Feed {
         default dev.tethium.files.FileManager files(){return null;}
+        /** Whether the session's conversation names this file: the agent linked it, so Remote may open it outside the project. */
+        default boolean mentions(String session,Path file){return false;}
         long revision();
         void addListener(Runnable listener);
         void removeListener(Runnable listener);
@@ -283,7 +285,7 @@ public final class MobileGateway implements AutoCloseable {
                 Path rawPath=link.startsWith("file:")?Path.of(URI.create(link)):Path.of(URLDecoder.decode(link.replace("+","%2B"),StandardCharsets.UTF_8));
                 Path directory=Path.of(session.path("directory").asText()).toRealPath();file=directory.resolve(rawPath).normalize().toRealPath();
                 Path project=directory;for(var value:snapshot.path("projects"))if(value.path("id").asText().equals(session.path("projectId").asText()))project=Path.of(value.path("root").asText()).toRealPath();
-                if(!file.startsWith(project)&&!file.startsWith(directory)&&!ownedMedia(file,session.path("id").asText()))throw new IllegalArgumentException("Файл вне проекта");
+                if(!file.startsWith(project)&&!file.startsWith(directory)&&!ownedMedia(file,session.path("id").asText())&&!feed.mentions(session.path("id").asText(),file))throw new IllegalArgumentException("Файл вне проекта");
                 if(!file.getFileName().toString().toLowerCase(Locale.ROOT).matches(".*\\.(md|markdown|html?|svg|png|jpe?g|gif|webp)$"))throw new IllegalArgumentException("Этот формат не поддерживается в просмотре");
             }
             String key=random();
