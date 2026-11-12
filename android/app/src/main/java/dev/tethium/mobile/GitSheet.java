@@ -69,13 +69,36 @@ final class GitSheet {
                 main.post(()->{if(!sheet.isShowing())return;status.setVisibility(View.GONE);text.setText(colored);});}
             catch(Exception e){main.post(()->{if(sheet.isShowing())status.setText("Не удалось: "+e.getMessage());});}});
     }
+    private static final java.util.regex.Pattern HUNK=java.util.regex.Pattern.compile("^@@ -(\\d+)(?:,\\d+)? \\+(\\d+)(?:,\\d+)? @@.*$");
+    /** A band across the whole line, like GitHub: the text keeps its colour, the background tells added from removed. */
+    private record Band(int color) implements android.text.style.LineBackgroundSpan {
+        public void drawBackground(android.graphics.Canvas canvas,android.graphics.Paint paint,int left,int right,int top,int baseline,int bottom,CharSequence text,int start,int end,int line){
+            int previous=paint.getColor();paint.setColor(color);canvas.drawRect(left,top,right,bottom,paint);paint.setColor(previous);
+        }
+    }
+    /** Unified diff as GitHub shows it: old and new line numbers, full-width bands, one bar per file, no index/---/+++ lines. */
     private static CharSequence color(String diff){
         String shown=diff.length()>SHOWN?diff.substring(0,SHOWN)+"\n… показано "+SHOWN/1000+" КБ из "+diff.length()/1000:diff;
-        var out=new SpannableStringBuilder();
-        for(String line:shown.split("\n",-1)){
-            int start=out.length();out.append(line).append('\n');
-            int color=line.startsWith("+++")||line.startsWith("---")||line.startsWith("diff ")||line.startsWith("index ")||line.startsWith("commit ")?Ui.MUTED:line.startsWith("@@")?Ui.ACCENT:line.startsWith("+")?Ui.GREEN:line.startsWith("-")?Ui.RED:0;
-            if(color!=0)out.setSpan(new ForegroundColorSpan(color),start,out.length(),Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        var out=new SpannableStringBuilder();int oldLine=0,newLine=0;boolean inHunk=false;
+        for(String raw:shown.replace("\t","    ").split("\n",-1)){
+            String line;int band=0,text=0;boolean bold=false,numbered=false;
+            if(raw.startsWith("diff --git ")){int at=raw.lastIndexOf(" b/");line=at>0?raw.substring(at+3):raw.substring(11);band=0xff2a2f3a;text=Ui.TEXT;bold=true;inHunk=false;}
+            else if(!inHunk&&(raw.startsWith("index ")||raw.startsWith("--- ")||raw.startsWith("+++ ")||raw.startsWith("similarity index")||raw.startsWith("old mode")||raw.startsWith("new mode")))continue;
+            else if(!inHunk&&(raw.startsWith("new file mode")||raw.startsWith("deleted file mode"))){line=raw.startsWith("new")?"новый файл":"файл удалён";text=Ui.MUTED;}
+            else{var hunk=HUNK.matcher(raw);
+                if(hunk.matches()){oldLine=Integer.parseInt(hunk.group(1));newLine=Integer.parseInt(hunk.group(2));inHunk=true;line=raw;band=0xff1e2a42;text=Ui.ACCENT;}
+                else if(inHunk&&raw.startsWith("+")){line=String.format(Locale.ROOT,"%5s %5d + %s","",newLine++,raw.substring(1));band=0xff1f3a2c;numbered=true;}
+                else if(inHunk&&raw.startsWith("-")){line=String.format(Locale.ROOT,"%5d %5s - %s",oldLine++,"",raw.substring(1));band=0xff41242a;numbered=true;}
+                else if(inHunk&&raw.startsWith(" ")){line=String.format(Locale.ROOT,"%5d %5d   %s",oldLine++,newLine++,raw.substring(1));numbered=true;}
+                else if(inHunk&&raw.startsWith("\\")){line=raw.substring(1).strip();text=Ui.MUTED;}
+                else{inHunk=false;line=raw;}
+            }
+            int start=out.length();out.append(line).append('\n');int end=out.length();
+            if(band!=0)out.setSpan(new Band(band),start,end,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            if(text!=0)out.setSpan(new ForegroundColorSpan(text),start,end,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            if(bold)out.setSpan(new android.text.style.StyleSpan(Typeface.BOLD),start,end,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            // Line numbers in the gutter are dimmed so the code reads first.
+            if(numbered)out.setSpan(new ForegroundColorSpan(Ui.MUTED),start,start+11,Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
         }
         return out;
     }

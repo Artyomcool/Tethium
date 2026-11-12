@@ -27,7 +27,7 @@ final class GitDialog extends JDialog {
     private final DefaultListModel<JsonNode> files = new DefaultListModel<>(), commits = new DefaultListModel<>();
     private final JList<JsonNode> fileList = new JList<>(files), commitList = new JList<>(commits);
     private final JTabbedPane tabs = new JTabbedPane();
-    private final JTextPane diff = new JTextPane();
+    private final DiffView diff = new DiffView();
     private long request;
 
     static void open(Window owner, HostClient host, String project, String title) {
@@ -38,7 +38,6 @@ final class GitDialog extends JDialog {
         super(owner, "Git · " + title, ModalityType.MODELESS);
         this.host = host; this.project = project;
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
-        diff.setEditable(false); diff.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 13)); diff.setBackground(Theme.BACKGROUND); diff.setBorder(new EmptyBorder(8, 10, 8, 10));
         fileList.setCellRenderer(new FileRenderer()); commitList.setCellRenderer(new CommitRenderer());
         fileList.addListSelectionListener(e -> { if (!e.getValueIsAdjusting() && fileList.getSelectedValue() != null) showFile(fileList.getSelectedValue()); });
         commitList.addListSelectionListener(e -> { if (!e.getValueIsAdjusting() && commitList.getSelectedValue() != null) showCommit(commitList.getSelectedValue()); });
@@ -46,7 +45,7 @@ final class GitDialog extends JDialog {
         var refresh = Theme.button("Обновить", "Перечитать состояние репозитория", this::refresh);
         var top = new JPanel(new BorderLayout(Theme.GAP, 0)); top.setBorder(new EmptyBorder(8, 12, 8, 12)); summary.setForeground(Theme.MUTED);
         top.add(summary); top.add(refresh, BorderLayout.EAST);
-        var diffScroll = new JScrollPane(diff); diffScroll.getVerticalScrollBar().setUnitIncrement(24);
+        var diffScroll = new JScrollPane(diff); diffScroll.setBorder(null);
         var split = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, tabs, diffScroll); split.setDividerLocation(340); split.setBorder(null);
         add(top, BorderLayout.NORTH); add(split);
         getRootPane().registerKeyboardAction(e -> dispose(), KeyStroke.getKeyStroke("ESCAPE"), JComponent.WHEN_IN_FOCUSED_WINDOW);
@@ -93,25 +92,11 @@ final class GitDialog extends JDialog {
         }.execute();
     }
 
-    /** Diff lines coloured by kind; very long output is cut so the window stays responsive. */
+    /** Very long output is cut so the window stays responsive. */
     private void show(String text) {
-        var document = new DefaultStyledDocument();
-        Style plain = style(document, Theme.TEXT, false), added = style(document, Theme.GREEN, false), removed = style(document, Theme.RED, false),
-            hunk = style(document, Theme.ACCENT, false), header = style(document, Theme.MUTED, true);
-        String shown = text.length() > SHOWN ? text.substring(0, SHOWN) + "\n… показано " + SHOWN / 1000 + " КБ из " + text.length() / 1000 : text;
-        try {
-            for (String line : shown.split("\n", -1)) {
-                AttributeSet look = line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff ") || line.startsWith("index ") || line.startsWith("commit ") || line.startsWith("new file") || line.startsWith("deleted file") ? header
-                    : line.startsWith("@@") ? hunk : line.startsWith("+") ? added : line.startsWith("-") ? removed : plain;
-                document.insertString(document.getLength(), line + "\n", look);
-            }
-        } catch (BadLocationException ignored) {}
-        diff.setDocument(document); diff.setCaretPosition(0);
+        int cut = text.length() > SHOWN ? Math.max(text.lastIndexOf('\n', SHOWN), SHOWN / 2) : text.length();
+        diff.setText(cut < text.length() ? text.substring(0, cut) + "\n… показано " + SHOWN / 1000 + " КБ из " + text.length() / 1000 : text);
     }
-    private static Style style(StyledDocument document, Color color, boolean bold) {
-        var style = document.addStyle(null, null); StyleConstants.setForeground(style, color); StyleConstants.setBold(style, bold); return style;
-    }
-
     /** Status, file name and folder as separate labels: the name first, since long paths are cut at the right. */
     private static final class FileRenderer extends JPanel implements ListCellRenderer<JsonNode> {
         private final JLabel mark = new JLabel(), name = new JLabel(), folder = new JLabel();
