@@ -35,20 +35,24 @@ final class MachineUsagePanel extends JComponent {
     }
     private boolean hasDisk(){return value.path("disks").size()>0;}
     private static double used(JsonNode disk){double total=disk.path("total").asDouble();return total<=0?0:100*(1-disk.path("free").asDouble()/total);}
-    private static Color diskColor(double used){return used>=95?Theme.RED:used>=85?Theme.AMBER:Theme.TEXT;}
-    private String diskText(){return hasDisk()?String.format(Locale.forLanguageTag("ru"),"%.0f",used(value.path("disks").get(0))):"";}
+    private static double freeGb(JsonNode disk){return disk.path("free").asDouble()/1073741824;}
+    /** Free space: green with more than 100 GB left, red under 20 GB. */
+    private static Color diskColor(double free){return free<20?Theme.RED:free>100?Theme.GREEN:Theme.TEXT;}
+    /** The drive with the least free space is the one that can run out. */
+    private JsonNode tightest(){JsonNode best=null;for(var disk:value.path("disks"))if(best==null||disk.path("free").asLong()<best.path("free").asLong())best=disk;return best;}
+    private String diskText(){var disk=tightest();return disk==null?"":String.format(Locale.forLanguageTag("ru"),"%.0f",freeGb(disk));}
     private int dotSpace(){return mediaFull()?DOT+4:0;}
     /** Where the disk group starts: it keeps its full width at the right end, before the media dot. */
-    private int diskX(FontMetrics fm){return hasDisk()?getWidth()-dotSpace()-fm.stringWidth("Диск "+diskText()+"%"):getWidth()-dotSpace()+Theme.GAP;}
+    private int diskX(FontMetrics fm){return hasDisk()?getWidth()-dotSpace()-fm.stringWidth("Диск "+diskText()+" ГБ"):getWidth()-dotSpace()+Theme.GAP;}
     private String diskTooltip(){
-        var body=new StringBuilder("<html><b>Диск · занято</b>");
+        var body=new StringBuilder("<html><b>Диск · свободно</b>");
         for(var disk:value.path("disks")){
-            double used=used(disk);String color=String.format("#%06x",diskColor(used).getRGB()&0xffffff);
+            String color=String.format("#%06x",diskColor(freeGb(disk)).getRGB()&0xffffff);
             String role=disk.path("data").asBoolean()?(disk.path("projects").asInt()>0?"данные Tethium и проекты":"данные Tethium"):"проекты";
-            body.append("<br>").append(Theme.escape(disk.path("root").asText())).append(" <font color='").append(color).append("'>").append(String.format(Locale.forLanguageTag("ru"),"%.0f%%",used)).append("</font> · свободно ")
-                .append(bytes(disk.path("free"))).append(" из ").append(bytes(disk.path("total"))).append(" · ").append(role);
+            body.append("<br>").append(Theme.escape(disk.path("root").asText())).append(" <font color='").append(color).append("'>").append(bytes(disk.path("free"))).append("</font> из ").append(bytes(disk.path("total")))
+                .append(String.format(Locale.forLanguageTag("ru")," · занято %.0f%%",used(disk))).append(" · ").append(role);
         }
-        return body.append("<br>В строке — самый заполненный. Янтарный от 85%, красный от 95%.</html>").toString();
+        return body.append("<br>В строке — диск, где места меньше всего. Зелёный — больше 100 ГБ, красный — меньше 20 ГБ.</html>").toString();
     }
     private static String percent(JsonNode n){return n.isNumber()?String.format(Locale.forLanguageTag("ru"),"%.1f%%",n.asDouble()):"—";}
     private static String bytes(JsonNode n){return n.isNumber()?ResourceBars.bytes(n.asLong()):"—";}
@@ -65,7 +69,7 @@ final class MachineUsagePanel extends JComponent {
         if(mediaFull()){g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);g.setColor(Theme.RED);g.fillOval(getWidth()-DOT-1,(getHeight()-DOT)/2,DOT,DOT);}
         paintGroup(g,0,cpuWidth,baseline,"CPU",value.path("cpuOurs"),value.path("cpuOther"),true,ResourceBars.CPU_NOW);
         int diskX=diskX(fm);
-        if(hasDisk()){int x=diskX;g.setColor(Theme.TEXT);g.drawString("Диск ",x,baseline);x+=fm.stringWidth("Диск ");String used=diskText();g.setColor(diskColor(used(value.path("disks").get(0))));g.drawString(used,x,baseline);x+=fm.stringWidth(used);g.setColor(Theme.MUTED);g.drawString("%",x,baseline);}
+        if(hasDisk()){int x=diskX;g.setColor(Theme.TEXT);g.drawString("Диск ",x,baseline);x+=fm.stringWidth("Диск ");String free=diskText();g.setColor(diskColor(freeGb(tightest())));g.drawString(free,x,baseline);x+=fm.stringWidth(free);g.setColor(Theme.MUTED);g.drawString(" ГБ",x,baseline);}
         int ramX=cpuWidth+Theme.GAP;paintGroup(g,ramX,diskX-Theme.GAP-ramX,baseline,"RAM",value.path("memoryOurs"),value.path("memoryOther"),false,ResourceBars.RAM);g.dispose();
     }
     private void paintGroup(Graphics2D g,int x,int width,int baseline,String label,JsonNode ours,JsonNode other,boolean cpu,Color color){
