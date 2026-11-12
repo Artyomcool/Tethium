@@ -51,7 +51,25 @@ final class SelectablePanel extends XHTMLPanel {
         var menu = new JPopupMenu();
         var copy = new JMenuItem("Копировать"); copy.setEnabled(!selectedText().isEmpty()); copy.addActionListener(a -> copy()); menu.add(copy);
         var all = new JMenuItem("Выделить всё"); all.addActionListener(a -> selectAll()); menu.add(all);
+        var image = imageAt(e.getX(), e.getY());
+        if (image != null) { var item = new JMenuItem("Копировать изображение"); item.addActionListener(a -> ClipboardImages.copy(this, image)); menu.insert(item, 0); }
         menu.show(this, e.getX(), e.getY());
+    }
+    /**
+     * The picture under a point, as it should land in the clipboard: a file or page image in its original size, an SVG drawn from
+     * its vectors at twice its size on the page. Null when the point is not on an image.
+     */
+    private java.util.concurrent.Callable<Image> imageAt(int x, int y) {
+        Box box = find(x, y);
+        for (int depth = 0; box != null && depth < 3 && !(box instanceof org.xhtmlrenderer.render.BlockBox block && block.getReplacedElement() instanceof org.xhtmlrenderer.swing.ImageReplacedElement); depth++) box = box.getParent();
+        if (!(box instanceof org.xhtmlrenderer.render.BlockBox block) || !(block.getReplacedElement() instanceof org.xhtmlrenderer.swing.ImageReplacedElement replaced)) return null;
+        var shown = replaced.getImage(); var element = box.getElement();
+        if (shown instanceof java.awt.image.MultiResolutionImage vector && element != null && element.hasAttribute(SvgElements.ATTRIBUTE))
+            return () -> vector.getResolutionVariant(replaced.getIntrinsicWidth() * 2.0, replaced.getIntrinsicHeight() * 2.0);
+        String src = element == null ? "" : element.getAttribute("src");
+        if (src.isBlank()) return () -> shown;
+        String resolved = getSharedContext().getUserAgentCallback().resolveURI(src);
+        return () -> { try { var original = ClipboardImages.read(resolved, java.nio.file.Path.of(".")); return original != null ? original : shown; } catch (Exception failure) { return shown; } };
     }
     void selectAll() { pieces = collect(); if (pieces.isEmpty()) return; anchor = new Point(0, 0); focus = new Point(pieces.size() - 1, pieces.getLast().text.length()); repaint(); }
     private void copy() { String text = selectedText(); if (!text.isEmpty()) Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(text), null); }
