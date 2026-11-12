@@ -48,6 +48,17 @@ class MobileGatewayTest {
             }
         }
     }
+    @Test void uacStatusIsPushedToPairedClientsAndActionsAreNotHostCommands()throws Exception{
+        try(var h=new HostService(root,ADAPTER);var local=new HostClient(h.descriptor());var m=new MobileGateway(root,h.feed(),0,0)){
+            var unauthorized=HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+m.httpPort()+"/uac")).build(),HttpResponse.BodyHandlers.ofString());assertEquals(401,unauthorized.statusCode());
+            try(var phone=hello(m,pairOverLink(m))){
+                var state=phone.expect(Frames.STATE,f->f.path("full").asBoolean());assertTrue(state.path("uac").has("available"));assertFalse(state.path("uac").has("token"));
+                assertEquals(200,phone.request("/uac",null).path("status").asInt());
+                assertEquals(400,phone.request("/uac/answer",Json.object("id","expired","action","unknown")).path("status").asInt());
+            }
+            assertThrows(HostClient.ApiException.class,()->local.post("/uac/answer",Json.object("id","expired","action","unknown")));
+        }
+    }
     @Test void pairedPhoneCreatesProjectAndInitialSessionWithoutStartingAnAgent()throws Exception{
         Path data=root.resolve("data"),directory=root.resolve("new-project");
         try(var h=new HostService(data,ADAPTER);var m=new MobileGateway(data,h.feed(),0,0);var local=new HostClient(h.descriptor())){

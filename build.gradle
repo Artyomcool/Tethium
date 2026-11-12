@@ -36,7 +36,7 @@ application {
 
 def buildMetadata = layout.buildDirectory.dir('generated/buildInfo')
 tasks.register('generateBuildInfo') {
-    inputs.files(fileTree('src/main'), file('build.gradle'), file('scripts/enable_mobile_firewall.ps1'))
+    inputs.files(fileTree('src/main'), fileTree('native/uac'), file('build.gradle'), file('scripts/enable_mobile_firewall.ps1'), file('scripts/build_uac.ps1'), file('scripts/install_uac.ps1'))
     outputs.dir(buildMetadata)
     doLast {
         def digest = { files ->
@@ -44,7 +44,7 @@ tasks.register('generateBuildInfo') {
             files.sort { it.path }.each { file -> hash.update(relativePath(file).getBytes('UTF-8')); hash.update(file.bytes) }
             hash.digest().encodeHex().toString()
         }
-        def all = (fileTree('src/main').files + file('build.gradle') + file('scripts/enable_mobile_firewall.ps1')) as List
+        def all = (fileTree('src/main').files + fileTree('native/uac').files + file('build.gradle') + file('scripts/enable_mobile_firewall.ps1') + file('scripts/build_uac.ps1') + file('scripts/install_uac.ps1')) as List
         def host = all.findAll { !it.path.replace('\\', '/').contains('/desktop/') && !it.path.replace('\\', '/').contains('/probe/') }
         def output = new File(buildMetadata.get().asFile, 'tethium-build.properties'); output.parentFile.mkdirs()
         output.text = "build=${digest(all)}\nhost=${digest(host)}\n"
@@ -53,6 +53,21 @@ tasks.register('generateBuildInfo') {
 sourceSets.main.resources.srcDir(buildMetadata)
 tasks.named('processResources') { dependsOn 'generateBuildInfo' }
 tasks.named('processResources') { from('scripts') { include 'enable_mobile_firewall.ps1'; into 'mobile' } }
+
+// The optional UAC service is installed once with human consent and stays separate from core/GUI handoff.
+def uacHelper = layout.buildDirectory.dir('native/uac')
+tasks.register('buildUacHelper', Exec) {
+    inputs.files(file('native/uac/TethiumUac.cs'), file('scripts/build_uac.ps1'))
+    outputs.file(uacHelper.map { it.file('TethiumUac.exe') })
+    onlyIf { System.getProperty('os.name').startsWith('Windows') }
+    commandLine 'powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
+            file('scripts/build_uac.ps1'), '-Destination', uacHelper.get().asFile
+}
+tasks.named('processResources') {
+    dependsOn 'buildUacHelper'
+    from(uacHelper) { include 'TethiumUac.exe'; into 'native/uac' }
+    from('scripts/install_uac.ps1') { into 'native/uac' }
+}
 
 tasks.register('agentProbe', JavaExec) {
     classpath = sourceSets.main.runtimeClasspath

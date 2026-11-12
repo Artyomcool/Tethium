@@ -49,7 +49,9 @@ final class DesktopControl implements AutoCloseable {
                         case "/prepare" -> edt(frame::prepareHandoff).get(15, TimeUnit.SECONDS);
                         case "/adopt" -> edt(() -> { frame.adoptHandoff(body); return Json.object("ok", true); });
                         case "/updating" -> edt(() -> { frame.setUpdating(body.path("value").asBoolean()); return Json.object("ok", true); });
-                        case "/activate", "/resume" -> edt(() -> { frame.activateAfterHandoff(); return frame.reloadReadiness(); });
+                        case "/activate" -> edt(() -> { if(body.path("handoff").asBoolean())frame.completeHandoff();else frame.activateAfterHandoff();return frame.reloadReadiness(); });
+                        case "/resume" -> edt(() -> { frame.completeHandoff();return frame.reloadReadiness(); });
+                        case "/tray" -> edt(() -> { frame.minimizeToTray();return frame.reloadReadiness(); });
                         case "/close" -> { SwingUtilities.invokeLater(frame::closeWindow); yield Json.object("ok", true); }
                         default -> throw new IllegalArgumentException("Unknown action");
                     };

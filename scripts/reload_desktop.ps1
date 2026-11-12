@@ -85,7 +85,7 @@ function ClientReady($descriptorFile,$visible=$false) {
         $errorFile=[IO.Path]::ChangeExtension($descriptorFile,'error.json')
         if (Test-Path -LiteralPath $errorFile) { $failure=Get-Content -Raw -LiteralPath $errorFile | ConvertFrom-Json; throw ('Candidate startup failed: '+$failure.error) }
         if (Test-Path -LiteralPath $descriptorFile) {
-            try { $value=Get-Content -Raw -LiteralPath $descriptorFile | ConvertFrom-Json; $state=Api $value '/state'; if ($state.ready -and (-not $visible -or $state.visible)) { return $value } } catch {}
+            try { $value=Get-Content -Raw -LiteralPath $descriptorFile | ConvertFrom-Json; $state=Api $value '/state'; if ($state.ready -and (-not $visible -or $state.visible -or $state.tray)) { return $value } } catch {}
         }
         Start-Sleep -Milliseconds 200
     }
@@ -174,7 +174,7 @@ try {
         if ($file.FullName -eq $clientFile -or $file.Name.EndsWith('.error.json')) { continue }
         try {
             $entry=Get-Content -Raw -LiteralPath $file.FullName | ConvertFrom-Json; $state=Api $entry '/state'
-            if ($state.visible -and $state.hostPid -eq $oldHost.pid) {
+            if (($state.visible -or $state.tray) -and $state.hostPid -eq $oldHost.pid) {
                 $score=0
                 if ($entry.instanceId -eq $activeInstance) { $score+=4 }
                 if ($SessionId -and $state.sessionId -eq $SessionId) { $score+=2 }
@@ -186,7 +186,7 @@ try {
     if ($null -ne $oldClient) {
         $snapshot=Api $oldClient '/prepare' @{}
         $null=Api $newClient '/adopt' $snapshot; $newClient=ClientReady $clientFile
-        $null=Api $newClient '/activate' @{}; $newClient=ClientReady $clientFile $true
+        $null=Api $newClient '/activate' @{handoff=$true}; $newClient=ClientReady $clientFile $true
         Start-Sleep -Milliseconds 500; $null=Api $newClient '/state'; $activated=$true
         try { $null=Api $oldClient '/close' @{} } catch {}
         WaitExit $oldClient.pid

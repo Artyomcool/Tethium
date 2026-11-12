@@ -11,6 +11,7 @@ public final class DesktopMain {
         String instance = option(args, "--instance="); if (instance == null) instance = java.util.UUID.randomUUID().toString();
         String instanceId = instance;
         boolean hidden = java.util.Arrays.asList(args).contains("--hidden");
+        boolean tray = java.util.Arrays.asList(args).contains("--tray");
         Theme.install();
         Thread.ofPlatform().name("tethium-connect").start(() -> {
             try {
@@ -28,7 +29,15 @@ public final class DesktopMain {
                         String appPath = option(args, "--app-path=");
                         if (appPath == null) appPath = System.getProperty("jpackage.app-path", ProcessHandle.current().info().command().orElse(""));
                         control[0] = new DesktopControl(frame, instanceId, appPath);
-                        if (hidden) { frame.addNotify(); frame.validate(); } else frame.setVisible(true);
+                        if(java.awt.SystemTray.isSupported())frame.installTray(new DesktopTray(frame,frame::activateAfterHandoff,frame::closeWindow));
+                        if (hidden) { frame.addNotify(); frame.validate(); }
+                        else {
+                            if(tray){frame.addNotify();frame.validate();}
+                            if(!tray||!frame.minimizeToTray())frame.activateAfterHandoff();
+                            Path active=AppPaths.data().resolve("desktop-active.json"),temporary=active.resolveSibling("desktop-active."+instanceId+".tmp");
+                            Json.MAPPER.writeValue(temporary.toFile(),Json.object("appPath",appPath,"pid",ProcessHandle.current().pid(),"instanceId",instanceId));
+                            Files.move(temporary,active,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);
+                        }
                         if(!hidden)Thread.ofVirtual().start(()->dev.tethium.update.UpdateRequests.resume(AppPaths.data()));
                     } catch (Exception e) { fail(instanceId, hidden, e); }
                 });
