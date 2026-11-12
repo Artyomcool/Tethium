@@ -284,6 +284,7 @@ public final class HostService implements AutoCloseable {
         if(path.matches("/projects/[a-zA-Z0-9-]+/settings")){
             String pid=path.split("/")[2];Path root=Path.of(store.projects().stream().filter(p->p.id().equals(pid)).findFirst().orElseThrow().root());return GitHubProjects.configure(root,body);
         }
+        if(path.matches("/projects/[a-zA-Z0-9-]+/collapsed")){store.projectCollapsed(path.split("/")[2],body.path("collapsed").asBoolean());return Json.object("ok",true);}
         if(path.matches("/projects/[a-zA-Z0-9-]+/active")){store.projectActive(path.split("/")[2],body.path("active").asBoolean());return Json.object("ok",true);}
         if(path.matches("/projects/[a-zA-Z0-9-]+/cross-project")){store.crossProject(path.split("/")[2],body.path("enabled").asBoolean());return Json.object("ok",true);}
         if(path.matches("/projects/[a-zA-Z0-9-]+/app-publish")){
@@ -436,7 +437,7 @@ public final class HostService implements AutoCloseable {
         var sessions = new ArrayList<JsonNode>();
         var projects = store.projects();
         for (var project : projects) for (var session : store.list(project.id())) if(store.trashedAt(session.id())==0)sessions.add(sessionJson(session));
-        var backlogWaiting=store.backlogWaiting();var projectValues=new ArrayList<JsonNode>();for(var p:projects)projectValues.add(Json.object("backlog",backlogWaiting.getOrDefault(p.id(),0),"id",p.id(),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"crossProject",store.crossProject(p.id()),"icon",ProjectIcons.version(Path.of(p.root())),"panel",projectPanels.read(Path.of(p.root())),"widget",projectWidgets.read(Path.of(p.root()))));
+        var backlogWaiting=store.backlogWaiting();var collapsed=store.collapsedProjects();var projectValues=new ArrayList<JsonNode>();for(var p:projects)projectValues.add(Json.object("backlog",backlogWaiting.getOrDefault(p.id(),0),"id",p.id(),"collapsed",collapsed.contains(p.id()),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"crossProject",store.crossProject(p.id()),"icon",ProjectIcons.version(Path.of(p.root())),"panel",projectPanels.read(Path.of(p.root())),"widget",projectWidgets.read(Path.of(p.root()))));
         var result = Json.object("machineUsage",machineUsage(),"resources",resources.snapshot(),"reminders",reminderRows(),"files",store.projectFiles(),"resourceUsage",usage.sidebar(),"revision", revision.get(), "projects", projectValues, "sessions", sessions, "quota", quota.snapshot(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
         if (selected != null && sessions.stream().anyMatch(s -> s.path("id").asText().equals(selected))) {
             var messages = new ArrayList<SessionStore.Message>(); long cursor = 0;

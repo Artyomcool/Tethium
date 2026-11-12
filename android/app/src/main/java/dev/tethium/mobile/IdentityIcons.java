@@ -15,7 +15,16 @@ final class IdentityIcons {
     private final Properties names=new Properties();
     private final Map<String,Bitmap> images=new HashMap<>();
     IdentityIcons(Context context){this.context=context;try(var in=context.getAssets().open("identity/names.properties")){names.load(new InputStreamReader(in,StandardCharsets.UTF_8));}catch(IOException e){throw new IllegalStateException("Missing shared identities",e);}}
+    /** Icons the projects keep in .tethium on the laptop, by project directory; they win over the built-in set. */
+    private final Map<String,Bitmap> custom=new HashMap<>();
+    private final Map<String,String> customVersions=new HashMap<>();
+    private int generation;
+    int generation(){return generation;}
+    boolean customCurrent(String directory,String version){return Objects.equals(customVersions.get(key(directory)),version);}
+    void custom(String directory,String version,Bitmap image){String key=key(directory);customVersions.put(key,version);if(image==null)custom.remove(key);else custom.put(key,image);generation++;}
+    private static String key(String directory){return Objects.requireNonNullElse(directory,"").replace('\\','/').replaceAll("/+$","").toLowerCase(Locale.ROOT);}
     Drawable of(boolean project,String title,String directory){
+        if(project){Bitmap own=custom.get(key(directory));if(own!=null){var drawable=new BitmapDrawable(context.getResources(),own);drawable.setFilterBitmap(true);return drawable;}}
         String name=Objects.requireNonNullElse(title,"");
         if(project){String path=Objects.requireNonNullElse(directory,"").replace('\\','/').replaceAll("/+$","");if(!path.isBlank())name=path.substring(path.lastIndexOf('/')+1);}
         String normalized=normalize(name);

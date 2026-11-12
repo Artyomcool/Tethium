@@ -49,6 +49,7 @@ public final class SessionStore implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS preferences(session_id TEXT PRIMARY KEY REFERENCES sessions(id), model TEXT, access TEXT NOT NULL DEFAULT 'danger-full-access', draft TEXT NOT NULL DEFAULT '')");
             s.execute("UPDATE preferences SET access='danger-full-access' WHERE access<>'danger-full-access'");
             s.execute("CREATE TABLE IF NOT EXISTS run_progress(run_id TEXT PRIMARY KEY REFERENCES runs(id), session_id TEXT NOT NULL, output TEXT NOT NULL DEFAULT '')");
+            s.execute("CREATE TABLE IF NOT EXISTS project_collapsed(project_id TEXT PRIMARY KEY)");
             s.execute("CREATE TABLE IF NOT EXISTS events(sequence INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id), run_id TEXT NOT NULL, type TEXT NOT NULL, payload TEXT NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), source_id TEXT REFERENCES sessions(id), prompt TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'QUEUED')");
             s.execute("CREATE TABLE IF NOT EXISTS queue_state(session_id TEXT PRIMARY KEY REFERENCES sessions(id), paused INTEGER NOT NULL DEFAULT 0)");
@@ -180,6 +181,9 @@ public final class SessionStore implements AutoCloseable {
     public synchronized void crossProject(String id,boolean enabled)throws SQLException{
         execute("INSERT INTO project_cross_project VALUES(?,?) ON CONFLICT(project_id) DO UPDATE SET enabled=excluded.enabled",id,enabled);
     }
+    /** Projects folded in the sidebar, shared by the window, Remote and the phone. */
+    public synchronized Set<String> collapsedProjects()throws SQLException{var result=new HashSet<String>();try(var q=connection.createStatement();var rows=q.executeQuery("SELECT project_id FROM project_collapsed")){while(rows.next())result.add(rows.getString(1));}return result;}
+    public synchronized void projectCollapsed(String id,boolean collapsed)throws SQLException{if(collapsed)execute("INSERT OR IGNORE INTO project_collapsed VALUES(?)",id);else execute("DELETE FROM project_collapsed WHERE project_id=?",id);}
     public synchronized boolean projectActive(String id)throws SQLException{
         try(var q=connection.prepareStatement("SELECT active FROM project_visibility WHERE project_id=?")){q.setString(1,id);try(var r=q.executeQuery()){return !r.next()||r.getBoolean(1);}}
     }

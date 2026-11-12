@@ -88,6 +88,23 @@ public final class WorkspaceFrame extends JFrame {
     private boolean externalUpdate;
     private final Map<String,JsonNode> sessionViews=new LinkedHashMap<>();
     private final Set<String> collapsedProjects=new HashSet<>();
+    /** When this window last changed a project's folding: until the core echoes it back, older states must not undo it. */
+    private final Map<String,Long> collapseSent=new HashMap<>();
+    private void syncCollapsed(JsonNode state){
+        boolean any=false;for(var project:state.path("projects"))any|=project.has("collapsed");if(!any)return;
+        if(!sessionViews.containsKey("$collapsedShared")){
+            // First run against a core that shares folding: hand over what this window kept on its own.
+            for(var project:state.path("projects")){String id=project.path("id").asText();if(collapsedProjects.contains("active:"+id)&&!project.path("collapsed").asBoolean()){collapseSent.put(id,System.currentTimeMillis());action(()->host.post("/projects/"+id+"/collapsed",Json.object("collapsed",true)));}}
+            sessionViews.put("$collapsedShared",Json.MAPPER.valueToTree(true));persistViews();return;
+        }
+        boolean changed=false;long now=System.currentTimeMillis();
+        for(var project:state.path("projects")){
+            String id=project.path("id").asText(),key="active:"+id;Long sent=collapseSent.get(id);
+            if(sent!=null&&now-sent<5000)continue;
+            boolean folded=project.path("collapsed").asBoolean();changed|=folded?collapsedProjects.add(key):collapsedProjects.remove(key);
+        }
+        if(changed){sessionViews.put("$collapsedProjects",Json.MAPPER.valueToTree(collapsedProjects));persistViews();treeSignature="";}
+    }
     private String restoreViewFor;private boolean switchingView;
     private void rememberPreview(){
         if(selected==null||switchingView||Objects.equals(restoreViewFor,selected))return;
@@ -286,6 +303,8 @@ public final class WorkspaceFrame extends JFrame {
         if(((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject() instanceof Node n&&n.project){
             String key=expansionKey(tree,n.id);boolean changed=collapsed?collapsedProjects.add(key):collapsedProjects.remove(key);
             if(changed){sessionViews.put("$collapsedProjects",Json.MAPPER.valueToTree(collapsedProjects));persistViews();}
+            // The active list's folding is shared through the core with Remote and the phone.
+            if(changed&&tree!=inactive){String id=n.id;collapseSent.put(id,System.currentTimeMillis());action(()->host.post("/projects/"+id+"/collapsed",Json.object("collapsed",collapsed)));}
         }
         tree.repaint();
     }
@@ -318,7 +337,11 @@ public final class WorkspaceFrame extends JFrame {
             tree.addMouseListener(new MouseAdapter() {
                 @Override public void mouseClicked(MouseEvent e) {
                     if(!SwingUtilities.isLeftMouseButton(e))return;int row=tree.getClosestRowForLocation(e.getX(),e.getY());var bounds=tree.getRowBounds(row);if(bounds==null)return;
-                    var rowPath=tree.getPathForRow(row);if(((DefaultMutableTreeNode)rowPath.getLastPathComponent()).getUserObject() instanceof Node n&&shownBacklog(tree,rowPath,n)>0&&backlogBounds(tree,n,shownBacklog(tree,rowPath,n),shownAttention(tree,rowPath,n),bounds).contains(e.getPoint())){if(n.project)openBacklog(n.id,sessionIn(n.id));else openBacklog(sessions.get(n.id).path("projectId").asText(),n.id);}
+                    var rowPath=tree.getPathForRow(row);if(!(((DefaultMutableTreeNode)rowPath.getLastPathComponent()).getUserObject() instanceof Node n))return;
+                    if(shownBacklog(tree,rowPath,n)>0&&backlogBounds(tree,n,shownBacklog(tree,rowPath,n),shownAttention(tree,rowPath,n),bounds).contains(e.getPoint())){if(n.project)openBacklog(n.id,sessionIn(n.id));else openBacklog(sessions.get(n.id).path("projectId").asText(),n.id);return;}
+                    if(!n.project&&!n.file&&rowPath.equals(tree.getSelectionPath())&&bounds.y<=e.getY()&&e.getY()<bounds.y+bounds.height){
+                        SwingUtilities.invokeLater(()->{if(Objects.equals(selected,n.id)&&selectedFile==null&&isActive()&&input.isShowing()&&input.isEnabled()){viewer.releaseFocus();input.requestFocusInWindow();}});
+                    }
                 }
                 @Override public void mousePressed(MouseEvent e) { popup(e, tree); }
                 @Override public void mouseReleased(MouseEvent e) { popup(e, tree); }
@@ -639,6 +662,7 @@ public final class WorkspaceFrame extends JFrame {
             var panel=project.path("panel");String pid=project.path("id").asText(),id="panel-"+pid;
             documents.put(id,Json.object("id",id,"projectId",pid,"title",panel.path("title"),"path",panel.path("path"),"panel",true,"config",panel));
         }
+        syncCollapsed(state);
         String signature = state.path("files").toString()+state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("projects").findValues("backlog") + state.path("sessions").findValues("backlog") + state.path("sessions").findValues("active") + state.path("sessions").findValues("technical") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
         signature+=state.path("sessions").findValues("queuePaused").toString()+state.path("sessions").findValues("queued");
         if (!signature.equals(treeSignature)) { rebuildTrees(state); treeSignature = signature; }
@@ -1159,17 +1183,22 @@ public final class WorkspaceFrame extends JFrame {
     private void error(Exception e) { if (!disposed) JOptionPane.showMessageDialog(this, e.getMessage(), "Tethium", JOptionPane.ERROR_MESSAGE); }
     public JTextArea inputArea() { return input; }
     public String selectedSession() { return selected; }
+    private DesktopTray desktopTray;
+    private boolean handoffTrayHidden;
+    void installTray(DesktopTray tray){desktopTray=tray;}
+    public boolean minimizeToTray(){return desktopTray!=null&&desktopTray.hideWindow();}
     public JsonNode reloadReadiness() {
         return Json.object("ready", !disposed && lastAppliedState > System.currentTimeMillis() - 5000 && pendingHandoff == null,
-                "visible", isShowing(), "hostPid", host.hostPid(), "sessionId", selected, "lastStateAt", lastAppliedState);
+                "visible", isShowing(), "tray", desktopTray!=null&&desktopTray.hidden(), "trayAvailable",desktopTray!=null,"hostPid", host.hostPid(), "sessionId", selected, "lastStateAt", lastAppliedState);
     }
     public CompletableFuture<JsonNode> prepareHandoff() {
+        handoffTrayHidden=desktopTray!=null&&desktopTray.hidden();
         setEnabled(false); draftTimer.stop(); saveSettings(); saveDraft();rememberPreview();
         var result = new CompletableFuture<JsonNode>();
         io.submit(() -> SwingUtilities.invokeLater(() -> {
             var scroll = history.getVerticalScrollBar(); var bounds = getBounds();
             result.complete(Json.object("fileId",selectedFile,"sessionId", selected, "drafts", drafts, "draftImages",draftImages,"priorityInterrupt",pendingInterrupt,"provider", model.provider(), "model", model.model(), "reasoningEffort", model.effort(), "queueTake", pendingTake, "chatPosition", chatNavigation.savePosition(),
-                    "x", bounds.x, "y", bounds.y, "width", bounds.width, "height", bounds.height, "extendedState", getExtendedState(),
+                    "x", bounds.x, "y", bounds.y, "width", bounds.width, "height", bounds.height, "extendedState", getExtendedState(),"trayHidden",handoffTrayHidden,
                     "sessionViews",sessionViews,"inactiveOpen", inactiveOpen, "previewOpen", previewOpen, "previewDivider", content.getDividerLocation(),
                     "artifact", artifacts.getSelectedItem() instanceof Artifact a ? a.path.toString() : "", "queueExpanded", runStatus.queueExpanded(),
                     "scroll", scroll.getValue(), "tail", scroll.getValue() + scroll.getVisibleAmount() >= scroll.getMaximum() - 60));
@@ -1177,6 +1206,7 @@ public final class WorkspaceFrame extends JFrame {
         return result;
     }
     public void adoptHandoff(JsonNode saved) {
+        handoffTrayHidden=saved.path("trayHidden").asBoolean();
         saved.path("sessionViews").properties().forEach(e->sessionViews.put(e.getKey(),e.getValue()));
         restoreProjectExpansion();persistViews();treeSignature="";
         initialDocument=saved.path("fileId").asText(null);String id = saved.path("sessionId").asText(null);
@@ -1184,11 +1214,12 @@ public final class WorkspaceFrame extends JFrame {
         if (saved.has("width")) { setBounds(saved.path("x").asInt(), saved.path("y").asInt(), Math.max(920, saved.path("width").asInt()), Math.max(600, saved.path("height").asInt())); setExtendedState(saved.path("extendedState").asInt()); }
         pendingHandoff = saved; lastAppliedState = 0; poller.execute(this::poll);
     }
-    public void activateAfterHandoff() { setEnabled(true); setVisible(true); toFront(); if(selectedFile==null)input.requestFocusInWindow(); }
+    public void activateAfterHandoff() { handoffTrayHidden=false;setEnabled(true);if(desktopTray!=null)desktopTray.showWindow();else{setExtendedState(getExtendedState()&~Frame.ICONIFIED);setVisible(true);toFront();}if(selectedFile==null)input.requestFocusInWindow(); }
+    public void completeHandoff(){boolean hidden=handoffTrayHidden;handoffTrayHidden=false;setEnabled(true);if(!hidden||!minimizeToTray())activateAfterHandoff();}
     public void setUpdating(boolean value) { externalUpdate = value; poller.execute(this::poll); }
     public void closeWindow() {closeWindow(true);}
     private void closeWindow(boolean notify) {
-        if (disposed) return; saveDraft();rememberPreview(); disposed = true;if(reminderWindow!=null)reminderWindow.close(); exitFullScreen(); draftTimer.stop(); poller.shutdownNow();for(var view:chatViews.values())view.close();if(chatView!=null&&!chatViews.containsValue(chatView))chatView.close(); viewer.close(); io.shutdown(); dispose();
+        if (disposed) return; saveDraft();rememberPreview(); disposed = true;if(reminderWindow!=null)reminderWindow.close(); exitFullScreen(); draftTimer.stop(); poller.shutdownNow();for(var view:chatViews.values())view.close();if(chatView!=null&&!chatViews.containsValue(chatView))chatView.close(); viewer.close(); io.shutdown();if(desktopTray!=null)desktopTray.close();dispose();
         Thread.ofVirtual().start(() -> { try { io.awaitTermination(20, TimeUnit.SECONDS); } catch (InterruptedException ignored) {} host.close(); if(notify)onClose.run(); });
     }
 }

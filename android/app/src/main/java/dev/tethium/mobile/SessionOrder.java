@@ -9,7 +9,7 @@ final class SessionOrder {
         var result=new StringBuilder();
         for(String key:new String[]{"projects","sessions"}){
             result.append(key);var values=state.optJSONArray(key);if(values==null)continue;
-            for(int i=0;i<values.length();i++){var item=values.optJSONObject(i);if(item!=null)result.append(':').append(item.optString("id"));}
+            for(int i=0;i<values.length();i++){var item=values.optJSONObject(i);if(item!=null)result.append(':').append(item.optString("id")).append(item.optBoolean("collapsed")?"-":"").append(item.optString("icon"));}
         }
         return result.toString();
     }
