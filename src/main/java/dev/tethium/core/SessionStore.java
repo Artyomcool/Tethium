@@ -225,12 +225,20 @@ public final class SessionStore implements AutoCloseable {
     public static final int HISTORY_CHUNK=8000;
     private record HistoryIndex(long last,long revision,List<JsonNode> entries){}
     private final Map<String,HistoryIndex> historyIndexes=new LinkedHashMap<>();
+    /** Piece boundaries of long messages, kept while the message keeps its length: an index rebuild re-reads only new ones. */
+    private final LinkedHashMap<String,List<int[]>> pieceCache=new LinkedHashMap<>(256,.75f,true);
+    private List<int[]> pieces(String session,long sequence,int length,long revision)throws SQLException{
+        String key=session+":"+sequence+":"+length+":"+revision;var cached=pieceCache.get(key);if(cached!=null)return cached;
+        var computed=HistoryChunks.split(historyText(session,sequence),HISTORY_CHUNK);pieceCache.put(key,computed);
+        while(pieceCache.size()>4000)pieceCache.remove(pieceCache.keySet().iterator().next());
+        return computed;
+    }
     public synchronized List<JsonNode> historyIndex(String id)throws SQLException{
         long last=lastSequence(id),revision=messageRevision(id);var saved=historyIndexes.get(id);if(saved!=null&&saved.last==last&&saved.revision==revision)return saved.entries;
         var entries=new ArrayList<JsonNode>();
         try(var q=connection.prepareStatement("SELECT sequence,role,provider,length(text),substr(text,1,320),length(text)-length(replace(text,char(10),'')),created_at FROM messages WHERE session_id=? ORDER BY sequence")){
             q.setString(1,id);try(var r=q.executeQuery()){while(r.next()){
-                int length=r.getInt(4);var pieces=length>HISTORY_CHUNK?HistoryChunks.split(historyText(id,r.getLong(1)),HISTORY_CHUNK):List.of(new int[]{0,length});
+                int length=r.getInt(4);var pieces=length>HISTORY_CHUNK?pieces(id,r.getLong(1),length,revision):List.of(new int[]{0,length});
                 for(var piece:pieces){int offset=piece[0],count=piece[1];entries.add(Json.object("sequence",r.getLong(1),"role",r.getString(2),"provider",r.getString(3),"timestamp",r.getLong(7),"revision",revision,"offset",offset,"length",count,"lines",Math.max(1,(int)((long)r.getInt(6)*count/Math.max(1,length))),"title",offset==0&&r.getString(2).equals("user")?r.getString(5):""));}
             }}
         }

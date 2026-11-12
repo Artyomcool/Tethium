@@ -18,16 +18,24 @@ public final class HistoryChunks {
         int total = text.codePointCount(0, text.length());
         if (total <= limit) { result.add(new int[]{0, total}); return result; }
         boolean[] fenced = fencedLines(text); int[] starts = lineStarts(text);
-        int startChar = 0;
+        // Linear: each step looks only at its own piece; code point offsets are carried forward, not recounted from the start.
+        int startChar = 0, startPoint = 0;
         while (true) {
-            int remaining = text.codePointCount(startChar, text.length());
-            if (remaining <= limit) { result.add(new int[]{text.codePointCount(0, startChar), remaining}); break; }
-            int hardEnd = text.offsetByCodePoints(startChar, limit), floor = text.offsetByCodePoints(startChar, limit / 2);
-            int end = boundary(text, fenced, starts, floor, hardEnd);
-            result.add(new int[]{text.codePointCount(0, startChar), text.codePointCount(startChar, end)});
-            startChar = end;
+            int hardEnd = text.length() - startChar <= limit ? -1 : endOf(text, startChar, limit);
+            if (hardEnd < 0) { result.add(new int[]{startPoint, text.codePointCount(startChar, text.length())}); break; }
+            int floor = text.offsetByCodePoints(startChar, limit / 2);
+            int end = boundary(text, fenced, starts, floor, hardEnd), points = text.codePointCount(startChar, end);
+            result.add(new int[]{startPoint, points});
+            startChar = end; startPoint += points;
         }
         return result;
+    }
+
+    /** The char index `limit` code points after start, or -1 when fewer remain. */
+    private static int endOf(String text, int start, int limit) {
+        int at = start;
+        for (int i = 0; i < limit; i++) { if (at >= text.length()) return -1; at += Character.charCount(text.codePointAt(at)); }
+        return at >= text.length() ? -1 : at;
     }
 
     /** The piece as it should be rendered: a block cut by the piece boundaries is reopened before it and closed after it. */
