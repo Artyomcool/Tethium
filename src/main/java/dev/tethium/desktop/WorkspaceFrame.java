@@ -1057,9 +1057,20 @@ public final class WorkspaceFrame extends JFrame {
                 clean = java.net.URLDecoder.decode(clean.replace("+", "%2B"), java.nio.charset.StandardCharsets.UTF_8);
                 path = Path.of(clean.startsWith("/") && clean.length() > 3 && clean.charAt(2) == ':' ? clean.substring(1) : clean);
             }
-            if (!path.isAbsolute() && selected != null) path = Path.of(sessions.get(selected).path("directory").asText()).resolve(path);
+            if (host.remote()) path = Path.of(laptopPath(path.toString()));
+            else if (!path.isAbsolute() && selected != null) path = Path.of(sessions.get(selected).path("directory").asText()).resolve(path);
             openArtifact(path);
         } catch (Exception e) { error(e); }
+    }
+    /**
+     * A file on the laptop, named by a link in the chat. Remote may run on Linux, where "C:/x" is not absolute and joining it to the
+     * session folder made "C:\project/C:/x"; laptop paths are therefore read by Windows rules here and only kept as text.
+     */
+    private String laptopPath(String link) {
+        String path = link.replace('/', '\\').replaceFirst("^\\\\(?=[A-Za-z]:)", "");
+        if (path.matches("(?i)[a-z]:\\\\.*") || path.startsWith("\\\\") || selected == null) return path;
+        String folder = sessions.get(selected).path("directory").asText().replace('/', '\\').replaceAll("\\\\+$", "");
+        return folder + "\\" + path.replaceFirst("^\\.\\\\", "");
     }
     private void openArtifact(Path path) {
         String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
