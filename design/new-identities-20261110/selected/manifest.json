@@ -1,0 +1,170 @@
+[
+  {
+    "id": "project-ahchecklist",
+    "source": "new-identities-20261110",
+    "row": 1,
+    "column": 1,
+    "region": [
+      0,
+      0,
+      330,
+      332
+    ],
+    "bounds": [
+      53,
+      70,
+      283,
+      297
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "project-batchimagegenerator",
+    "source": "new-identities-20261110",
+    "row": 1,
+    "column": 3,
+    "region": [
+      620,
+      0,
+      941,
+      332
+    ],
+    "bounds": [
+      40,
+      72,
+      285,
+      295
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "project-jbytevm",
+    "source": "new-identities-20261110",
+    "row": 2,
+    "column": 2,
+    "region": [
+      324,
+      332,
+      629,
+      634
+    ],
+    "bounds": [
+      34,
+      61,
+      259,
+      242
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "project-jxenon",
+    "source": "new-identities-20261110",
+    "row": 2,
+    "column": 3,
+    "region": [
+      629,
+      332,
+      936,
+      634
+    ],
+    "bounds": [
+      47,
+      35,
+      263,
+      262
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "project-nessplitter",
+    "source": "new-identities-20261110",
+    "row": 3,
+    "column": 1,
+    "region": [
+      0,
+      634,
+      322,
+      934
+    ],
+    "bounds": [
+      46,
+      42,
+      290,
+      268
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "session-development",
+    "source": "new-identities-20261110",
+    "row": 3,
+    "column": 4,
+    "region": [
+      932,
+      634,
+      1254,
+      934
+    ],
+    "bounds": [
+      41,
+      39,
+      282,
+      254
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  },
+  {
+    "id": "session-shapes",
+    "source": "new-identities-20261110",
+    "row": 4,
+    "column": 1,
+    "region": [
+      0,
+      934,
+      324,
+      1254
+    ],
+    "bounds": [
+      46,
+      58,
+      291,
+      283
+    ],
+    "borders": [
+      0,
+      0,
+      0,
+      0
+    ]
+  }
+]

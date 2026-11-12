@@ -1,0 +1,16 @@
+Generate one transparent RGBA square 4x4 icon atlas. 14 icons, last two cells EMPTY. Match supplied reference's accepted style exactly: matte low-poly sculpture, sharp broad facets, clean antialiased contours, light-facing planes clearly brighter than shadows, moderately rich tasteful colors, no washed-out colors and no neon. All icons small desktop sidebar identities with recognizable simple silhouettes at 22px. Each complete asset centered within its equal grid cell with 18% transparent margins. No visible grid, labels, letters, numbers, text, background tiles, cast shadows, glows or sparkles. Reference for style only; do not copy its objects. Left-to-right top-to-bottom exact contents:
+1. AHChecklist: small blue grocery basket with apple and folded checklist
+2. AHChecklist: ivory shopping checklist with green check and small carrot
+3. BatchImageGenerator: three overlapping picture tiles with different simple landscape silhouettes
+4. BatchImageGenerator: four miniature colored image tiles being separated from a sheet
+5. JByteVM: compact silver microchip with tiny copper coffee cup on top
+6. JByteVM: small blue interpreter engine cube inside an open silver bracket
+7. JXenon: three layered translucent blue and lavender application panels
+8. JXenon: faceted cool blue xenon lamp inside a minimal window frame
+9. NesSplitter: retro ivory and charcoal gamepad with two red buttons before four small screen panes
+10. NesSplitter: four colored screen quadrants in one small retro television with gamepad
+11. session Development: blue engineering cube with copper wrench
+12. session Development: small partially built machine with two silver gears and blue housing
+13. session Shapes: ivory sphere blue cube and peach cone arranged as sculptural group
+14. session Shapes: artist geometry compass around faceted blue polyhedron
+15 and 16 entirely transparent. Maximum available resolution.
