@@ -173,6 +173,7 @@ public final class HostService implements AutoCloseable {
             case "/messages" -> messagesBefore(query(uri,"session"),query(uri,"before")==null?Long.MAX_VALUE:Long.parseLong(query(uri,"before")),query(uri,"count")==null?100:Integer.parseInt(query(uri,"count")));
             case "/trash" -> trashList();
             case "/project-icon" -> ProjectIcons.read(Path.of(store.projects().stream().filter(p->p.id().equals(query(uri,"project"))).findFirst().orElseThrow().root()));
+            case "/git" -> ProjectGit.read(Path.of(store.projects().stream().filter(p->p.id().equals(query(uri,"project"))).findFirst().orElseThrow().root()),query(uri,"op"),query(uri,"path"),query(uri,"commit"));
             case "/project" -> GitHubProjects.status(Path.of(store.projects().stream().filter(p->p.id().equals(query(uri,"project"))).findFirst().orElseThrow().root()));
             case "/usage" -> usage.report(query(uri,"period"),query(uri,"project"),query(uri,"session"));
             case "/models" -> modelCatalog(query(uri, "session"));

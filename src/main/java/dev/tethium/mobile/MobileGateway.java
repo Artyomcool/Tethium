@@ -292,7 +292,7 @@ public final class MobileGateway implements AutoCloseable {
             previews.entrySet().removeIf(x->x.getValue().expires<System.currentTimeMillis());previews.put(key,new Preview(file.getParent(),System.currentTimeMillis()+3600_000));
             return Json.object("path","/preview/"+key+"/"+new URI(null,null,file.getFileName().toString(),null).toASCIIString());
         }
-        if(!post&&(path.equals("/state")||path.equals("/project-icon")||path.equals("/backlog")||path.equals("/reminders")||path.equals("/models")||path.equals("/resources")||path.equals("/usage")||path.equals("/history/index")||path.equals("/history/page")||path.equals("/messages")||path.equals("/trash")))return feed.get(target);
+        if(!post&&(path.equals("/state")||path.equals("/project-icon")||path.equals("/git")||path.equals("/backlog")||path.equals("/reminders")||path.equals("/models")||path.equals("/resources")||path.equals("/usage")||path.equals("/history/index")||path.equals("/history/page")||path.equals("/messages")||path.equals("/trash")))return feed.get(target);
         if(post&&allowed(path)){
             var b=body instanceof ObjectNode object?object:Json.object();
             // Chat attachments use validated uploads, separate from file-manager/project paths.

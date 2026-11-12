@@ -505,6 +505,7 @@ public final class WorkspaceFrame extends JFrame {
         if(!n.project&&!n.file){var pinSession=new JMenuItem("Закрепить файл справа…");pinSession.addActionListener(e->choosePinnedFile(false));menu.add(pinSession);}
         if(n.project){var archive=new JMenuItem(projects.get(n.id).path("active").asBoolean(true)?"В неактивные весь проект":"Вернуть проект в активные");archive.addActionListener(e->action(()->host.post("/projects/"+n.id+"/active",Json.object("active",!projects.get(n.id).path("active").asBoolean(true)))));menu.add(archive);}
         if(n.project){var pin=new JMenuItem("Закрепить файл в проекте…");pin.addActionListener(e->choosePinnedFile(true));menu.add(pin);}
+        if(n.project){var git=new JMenuItem("Изменения в Git…");git.addActionListener(e->GitDialog.open(this,host,n.id,projects.get(n.id).path("title").asText()));menu.add(git);}
         if(n.project&&!host.remote()){var settings=new JMenuItem("Настройки проекта и GitHub…");settings.addActionListener(e->ProjectDialog.open(this,host,projects.get(n.id),value->{}));menu.add(settings);}
         var cpuItem=new JMenuItem("CPU: лимит и приоритет…");cpuItem.addActionListener(e->configureCpu(n.project?"project":"session",n.id,n.title));menu.add(cpuItem);
         var backlogItem=new JMenuItem("Отложенные задачи…");backlogItem.addActionListener(e->openBacklog(n.project?n.id:sessions.get(n.id).path("projectId").asText(),n.project?null:n.id));menu.add(backlogItem);
