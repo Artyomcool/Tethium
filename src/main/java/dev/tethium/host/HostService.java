@@ -349,7 +349,7 @@ public final class HostService implements AutoCloseable {
                 return Json.object("jobId", job);
             }
             case "stop" -> {
-                for(String target:interruptionScope(id,body.path("scope").asText())) { store.pauseQueue(target,true); store.periodicSchedule(target,"pause",0,"",System.currentTimeMillis());store.autonomy(target,"pause","","","Остановлено пользователем");usage.waiting(target,false); stopRunning(target); }
+                for(String target:interruptionScope(id,body.path("scope").asText())) { if(target.equals(id))store.clearCascade(id);else store.cascadePaused(target,id); store.pauseQueue(target,true); store.periodicSchedule(target,"pause",0,"",System.currentTimeMillis());store.autonomy(target,"pause","","","Остановлено пользователем");usage.waiting(target,false); stopRunning(target); }
             }
             case "interrupt" -> {
                 String requestId=body.path("requestId").asText(); var previous=store.operationResult(id,requestId,"interrupt"); if(previous!=null)return previous;
@@ -359,8 +359,9 @@ public final class HostService implements AutoCloseable {
                 for(String target:affected){store.periodicSchedule(target,"pause",0,"",System.currentTimeMillis());store.autonomy(target,"pause","","","Приоритетная правка пользователя");usage.waiting(target,false);stopRunning(target);}
                 schedule(id); return result;
             }
-            case "queue-pause" -> store.pauseQueue(id,true);
-            case "queue-resume" -> {var a=store.autonomy(id);if(a.path("state").asText().equals("paused"))store.autonomy(id,"resume",a.path("goalId").asText(),"","");if(store.periodicSchedule(id).path("state").asText().equals("paused"))store.periodicSchedule(id,"resume",0,"",System.currentTimeMillis()); usage.waiting(id,false); store.pauseQueue(id, false); schedule(id); }
+            case "queue-pause" -> {store.clearCascade(id);store.pauseQueue(id,true);}
+            // Resuming a stopped session also resumes the sessions its stop paused below it (lanes of a coordinator, for one).
+            case "queue-resume" -> {var below=store.cascadedFrom(id);resumeQueue(id);for(String child:below)resumeQueue(child);}
             case "queue-remove" -> store.removeQueued(id, body.path("jobId").asText());
             case "queue-move" -> store.moveQueued(id, body.path("jobId").asText(), body.path("direction").asText());
             case "queue-take" -> { return store.takeQueuedPart(id, body.path("jobId").asText(), body.path("expectedPrompt").asText(), body.path("draft").asText(), body.path("requestId").asText(),!body.path("preserveDesktopDraft").asBoolean()); }
@@ -655,6 +656,12 @@ public final class HostService implements AutoCloseable {
             if(run.workerRun!=null){try(var journal=new dev.tethium.worker.WorkerJournal(data.resolve("workers").resolve(run.workerRun.runId()))){journal.state("cancel","true");}catch(Exception e){throw new IllegalStateException("Не удалось передать Stop исполнителю",e);}}
             workers.submit(run.cancellation::cancel);
         }
+    }
+    private void resumeQueue(String id)throws Exception{
+        store.clearCascade(id);
+        var a=store.autonomy(id);if(a.path("state").asText().equals("paused"))store.autonomy(id,"resume",a.path("goalId").asText(),"","");
+        if(store.periodicSchedule(id).path("state").asText().equals("paused"))store.periodicSchedule(id,"resume",0,"",System.currentTimeMillis());
+        usage.waiting(id,false);store.pauseQueue(id,false);schedule(id);
     }
     private List<String> interruptionScope(String id,String scope) throws Exception {
         var all=new ArrayList<SessionStore.Session>();

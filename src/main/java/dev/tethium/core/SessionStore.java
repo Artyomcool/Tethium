@@ -50,6 +50,7 @@ public final class SessionStore implements AutoCloseable {
             s.execute("UPDATE preferences SET access='danger-full-access' WHERE access<>'danger-full-access'");
             s.execute("CREATE TABLE IF NOT EXISTS run_progress(run_id TEXT PRIMARY KEY REFERENCES runs(id), session_id TEXT NOT NULL, output TEXT NOT NULL DEFAULT '')");
             s.execute("CREATE TABLE IF NOT EXISTS project_collapsed(project_id TEXT PRIMARY KEY)");
+            s.execute("CREATE TABLE IF NOT EXISTS cascade_pauses(session_id TEXT PRIMARY KEY,origin TEXT NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS events(sequence INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id), run_id TEXT NOT NULL, type TEXT NOT NULL, payload TEXT NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), source_id TEXT REFERENCES sessions(id), prompt TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'QUEUED')");
             s.execute("CREATE TABLE IF NOT EXISTS queue_state(session_id TEXT PRIMARY KEY REFERENCES sessions(id), paused INTEGER NOT NULL DEFAULT 0)");
@@ -769,6 +770,10 @@ public final class SessionStore implements AutoCloseable {
     }
     public synchronized void jobStatus(String id, String status) throws SQLException { execute("UPDATE jobs SET status=? WHERE id=?", status, id); }
     public synchronized void cancelQueued(String sessionId) throws SQLException { execute("UPDATE jobs SET status='CANCELLED' WHERE session_id=? AND status='QUEUED'", sessionId); }
+    /** A queue paused because its parent was stopped: resuming that parent resumes it too, unless it was touched by hand since. */
+    public synchronized void cascadePaused(String session,String origin)throws SQLException{execute("INSERT INTO cascade_pauses VALUES(?,?) ON CONFLICT(session_id) DO UPDATE SET origin=excluded.origin",session,origin);}
+    public synchronized List<String> cascadedFrom(String origin)throws SQLException{var result=new ArrayList<String>();try(var q=connection.prepareStatement("SELECT session_id FROM cascade_pauses WHERE origin=?")){q.setString(1,origin);try(var r=q.executeQuery()){while(r.next())result.add(r.getString(1));}}return result;}
+    public synchronized void clearCascade(String session)throws SQLException{execute("DELETE FROM cascade_pauses WHERE session_id=?",session);}
     public synchronized boolean queuePaused(String sessionId) throws SQLException {
         try (var q = connection.prepareStatement("SELECT paused FROM queue_state WHERE session_id=?")) {
             q.setString(1, sessionId); try (var row = q.executeQuery()) { return row.next() && row.getBoolean(1); }
