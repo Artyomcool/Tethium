@@ -30,8 +30,19 @@ final class DocumentView {
      */
     static JComponent create(String html, URI base, Consumer<URI> openLink, int width) {
         var page = Jsoup.parse(html, base.toString());
-        for (var image : page.select("img[src^=data:image/]")) {
-            try { image.attr("src", inline(image.attr("src")).toUri().toString()); } catch (Exception failure) { image.attr("alt", "[изображение]").removeAttr("src"); }
+        // SVG is kept as vectors and drawn at the scale it is painted at; other inline images become files the renderer can read.
+        var vectors = new java.util.HashMap<String, com.github.weisj.jsvg.SVGDocument>();
+        for (var image : page.select("img[src]")) {
+            String src = image.attr("src");
+            try {
+                byte[] svg = null;
+                if (src.startsWith("data:image/svg")) svg = decode(src);
+                else if (src.toLowerCase(java.util.Locale.ROOT).matches("[^?#]*\\.svg([?#].*)?")) try (var in = base.resolve(src).toURL().openStream()) { svg = in.readAllBytes(); }
+                if (svg != null) {
+                    var parsed = SvgElements.parse(svg); if (parsed == null) throw new IllegalArgumentException("SVG");
+                    String key = "svg-" + vectors.size(); vectors.put(key, parsed); image.attr(SvgElements.ATTRIBUTE, key).removeAttr("src");
+                } else if (src.startsWith("data:image/")) image.attr("src", inline(src).toUri().toString());
+            } catch (Exception failure) { image.attr("alt", "[изображение]").removeAttr("src"); }
         }
         // Headings get GitHub's ids, so links like [раздел](#раздел) written for GitHub land in the same place here.
         var used = new java.util.HashMap<String, Integer>();
@@ -43,6 +54,7 @@ final class DocumentView {
         }
         var document = new W3CDom().fromJsoup(page);
         var panel = new SelectablePanel();
+        panel.getSharedContext().setReplacedElementFactory(new SvgElements(panel, vectors));
         for (var listener : panel.getMouseTrackingListeners()) if (listener instanceof LinkListener) panel.removeMouseTrackingListener(listener);
         panel.addMouseTrackingListener(new LinkListener() {
             @Override public void linkClicked(BasicPanel source, String uri) {
@@ -69,18 +81,13 @@ final class DocumentView {
         var box = panel.getSharedContext().getBoxById(id);
         if (box != null) panel.scrollTo(new java.awt.Point(0, box.getAbsY()));
     }
-    private static Path inline(String data) throws Exception {
+    private static byte[] decode(String data) {
         int comma = data.indexOf(','); String head = data.substring(5, comma);
-        byte[] bytes = head.endsWith(";base64") ? Base64.getDecoder().decode(data.substring(comma + 1)) : java.net.URLDecoder.decode(data.substring(comma + 1), java.nio.charset.StandardCharsets.UTF_8).getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        Path file = Files.createTempFile("tethium-document-", head.startsWith("image/svg") ? ".png" : "." + head.replaceAll("^image/([a-z0-9+]+).*$", "$1").replace("jpeg", "jpg"));
-        file.toFile().deleteOnExit();
-        if (!head.startsWith("image/svg")) { Files.write(file, bytes); return file; }
-        var svg = new SVGLoader().load(new ByteArrayInputStream(bytes), null, LoaderContext.builder().build());
-        if (svg == null) throw new IllegalArgumentException("SVG");
-        var size = svg.size(); int width = Math.max(1, Math.min(4096, Math.round(size.width))), height = Math.max(1, Math.min(4096, Math.round(size.height)));
-        var image = new BufferedImage(width, height, BufferedImage.TYPE_INT_ARGB); var g = image.createGraphics();
-        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON); g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        svg.render(null, g); g.dispose();
-        ImageIO.write(image, "png", file.toFile()); return file;
+        return head.endsWith(";base64") ? Base64.getDecoder().decode(data.substring(comma + 1)) : java.net.URLDecoder.decode(data.substring(comma + 1), java.nio.charset.StandardCharsets.UTF_8).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+    }
+    private static Path inline(String data) throws Exception {
+        String head = data.substring(5, data.indexOf(','));
+        Path file = Files.createTempFile("tethium-document-", "." + head.replaceAll("^image/([a-z0-9+]+).*$", "$1").replace("jpeg", "jpg"));
+        file.toFile().deleteOnExit(); Files.write(file, decode(data)); return file;
     }
 }
