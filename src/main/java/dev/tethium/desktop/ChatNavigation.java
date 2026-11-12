@@ -110,11 +110,14 @@ final class ChatNavigation extends JPanel {
         if (!rendering || renderingPosition == null || forceTail) renderingPosition = position();
         rendering = true; return renderingPosition;
     }
-    void afterChange(Position saved) {
+    void afterChange(Position saved) { afterChange(saved, false); }
+    /** hold: keep the given position even while following the tail; the next real layout moves to the end. */
+    void afterChange(Position saved, boolean hold) {
         trace.operation("navigation.after","savedY",saved.absolute,"savedTask",saved.sequence,"savedOffset",saved.offset,"savedTail",saved.tail,"savedNavigation",saved.navigation,"navigation",navigation,"followTail",followTail);
         indexPositions(); restoring = true;
         try {
-            if (followTail && (saved.tail || saved.navigation != navigation)) setBottom();
+            if (hold && followTail) history.getVerticalScrollBar().setValue(saved.absolute);
+            else if (followTail && (saved.tail || saved.navigation != navigation)) setBottom();
             else if (saved.navigation != navigation && requestedTask != null) setTaskPosition(requestedTask, 0);
             else if (saved.navigation == navigation && !saved.tail) {
                 if (!setTaskPosition(saved.sequence, saved.offset)) history.getVerticalScrollBar().setValue(saved.absolute);
