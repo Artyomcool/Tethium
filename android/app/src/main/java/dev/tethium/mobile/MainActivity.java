@@ -337,6 +337,7 @@ public final class MainActivity extends Activity {
             .action("laptop","Запрос UAC","Права администратора на ноутбуке",()->{if(uac!=null)uac.show();})
             .action("plus","Новый проект","Создать папку на ноутбуке или добавить существующую",()->newProject(null))
             .action("folder","Файлы","Обмен между телефоном и ноутбуком",()->startActivity(new Intent(this,FileManagerActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)))
+            .action("history","Git проекта","Изменения и коммиты с дифами",()->{String pid=session().optString("projectId");GitSheet.show(this,ui,connection,pid,projectName(pid));})
             .action("gauge","Квота",null,this::quota)
             .action("chart","Расход токенов","Проекты и сессии",()->UsageSheet.show(this,ui,connection,snapshot))
             .action("store","Магазин приложений","Установка и обновление наших APK",()->AppUpdates.show(this,ui,connection))
