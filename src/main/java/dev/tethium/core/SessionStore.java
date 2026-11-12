@@ -230,7 +230,8 @@ public final class SessionStore implements AutoCloseable {
         var entries=new ArrayList<JsonNode>();
         try(var q=connection.prepareStatement("SELECT sequence,role,provider,length(text),substr(text,1,320),length(text)-length(replace(text,char(10),'')),created_at FROM messages WHERE session_id=? ORDER BY sequence")){
             q.setString(1,id);try(var r=q.executeQuery()){while(r.next()){
-                int length=r.getInt(4);for(int offset=0;offset<Math.max(1,length);offset+=HISTORY_CHUNK){int count=Math.min(HISTORY_CHUNK,length-offset);entries.add(Json.object("sequence",r.getLong(1),"role",r.getString(2),"provider",r.getString(3),"timestamp",r.getLong(7),"revision",revision,"offset",offset,"length",count,"lines",Math.max(1,(int)((long)r.getInt(6)*count/Math.max(1,length))),"title",offset==0&&r.getString(2).equals("user")?r.getString(5):""));}
+                int length=r.getInt(4);var pieces=length>HISTORY_CHUNK?HistoryChunks.split(historyText(id,r.getLong(1)),HISTORY_CHUNK):List.of(new int[]{0,length});
+                for(var piece:pieces){int offset=piece[0],count=piece[1];entries.add(Json.object("sequence",r.getLong(1),"role",r.getString(2),"provider",r.getString(3),"timestamp",r.getLong(7),"revision",revision,"offset",offset,"length",count,"lines",Math.max(1,(int)((long)r.getInt(6)*count/Math.max(1,length))),"title",offset==0&&r.getString(2).equals("user")?r.getString(5):""));}
             }}
         }
         if(historyIndexes.size()>=16)historyIndexes.remove(historyIndexes.keySet().iterator().next());historyIndexes.put(id,new HistoryIndex(last,revision,List.copyOf(entries)));return List.copyOf(entries);
@@ -240,7 +241,12 @@ public final class SessionStore implements AutoCloseable {
     }
     public synchronized String historyChunk(String id,long sequence,int offset,int count)throws SQLException{
         if(offset<0||count<0||count>HISTORY_CHUNK)throw new IllegalArgumentException("Некорректная часть истории");
-        try(var q=connection.prepareStatement("SELECT substr(text,?,?) FROM messages WHERE session_id=? AND sequence=?")){q.setInt(1,offset+1);q.setInt(2,count);q.setString(3,id);q.setLong(4,sequence);try(var r=q.executeQuery()){return r.next()?r.getString(1):"";}}
+        String text=historyText(id,sequence);
+        // A whole short message needs no repair; a piece of a long one gets its code and thought blocks closed and reopened.
+        return offset==0&&count>=text.codePointCount(0,text.length())?text:HistoryChunks.piece(text,offset,count);
+    }
+    private String historyText(String id,long sequence)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT text FROM messages WHERE session_id=? AND sequence=?")){q.setString(1,id);q.setLong(2,sequence);try(var r=q.executeQuery()){return r.next()?r.getString(1):"";}}
     }
 
     public record ProjectFile(String id,String projectId,String path,String title){}

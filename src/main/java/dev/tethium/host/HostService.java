@@ -454,7 +454,7 @@ public final class HostService implements AutoCloseable {
     private String historyVersion(String id)throws Exception{var live=running.get(id);return store.lastSequence(id)+"-"+store.messageRevision(id)+"-"+store.mediaRevision(id)+":"+(live==null?"done":System.identityHashCode(live)+":"+live.text.length());}
     private JsonNode historyIndex(String id,boolean gallery)throws Exception{
         store.get(id);var entries=new ArrayList<JsonNode>(store.historyIndex(id));var live=running.get(id);
-        if(live!=null){int length;synchronized(live.text){length=live.text.codePointCount(0,live.text.length());}for(int offset=0;offset<length;offset+=SessionStore.HISTORY_CHUNK)entries.add(Json.object("sequence",-1,"role","assistant","provider",live.provider==null?"CODEX":live.provider.name(),"offset",offset,"length",Math.min(SessionStore.HISTORY_CHUNK,length-offset),"lines",10,"title","","timestamp",live.activity.snapshot().path("startedAt").asLong(),"live",true));}
+        if(live!=null){String text;synchronized(live.text){text=live.text.toString();}for(var piece:text.isEmpty()?List.<int[]>of():dev.tethium.core.HistoryChunks.split(text,SessionStore.HISTORY_CHUNK))entries.add(Json.object("sequence",-1,"role","assistant","provider",live.provider==null?"CODEX":live.provider.name(),"offset",piece[0],"length",piece[1],"lines",10,"title","","timestamp",live.activity.snapshot().path("startedAt").asLong(),"live",true));}
         entries.addAll(store.mediaHistory(id));entries.sort(Comparator.comparingLong((JsonNode row)->{long seq=row.has("anchor")?row.path("anchor").asLong():row.path("sequence").asLong();return seq==-1?Long.MAX_VALUE:seq;}).thenComparingInt(row->row.has("outputOffset")?row.path("outputOffset").asInt():row.path("offset").asInt()).thenComparingInt(row->row.path("kind").asText().equals("image")?1:0));
         return Json.object("version",historyVersion(id),"entries",gallery?HistoryImages.group(entries):entries);
     }
@@ -465,7 +465,7 @@ public final class HostService implements AutoCloseable {
             var entry=(com.fasterxml.jackson.databind.node.ObjectNode)entries.get(i).deepCopy();int offset=entry.path("offset").asInt(),length=entry.path("length").asInt();String text;
             if(entry.path("kind").asText().equals("gallery")){for(var image:entry.path("images"))((com.fasterxml.jackson.databind.node.ObjectNode)image).put("thumbnail",Base64.getEncoder().encodeToString(Files.readAllBytes(Path.of(image.path("thumbnailFile").asText()))));text="";}
             else if(entry.path("kind").asText().equals("image")){entry.put("thumbnail",Base64.getEncoder().encodeToString(Files.readAllBytes(Path.of(entry.path("thumbnailFile").asText()))));text="";}
-            else if(entry.path("live").asBoolean()){var live=running.get(id);if(live==null)return Json.object("stale",true);synchronized(live.text){int points=live.text.codePointCount(0,live.text.length());text=live.text.substring(live.text.offsetByCodePoints(0,Math.min(offset,points)),live.text.offsetByCodePoints(0,Math.min(offset+length,points)));}}
+            else if(entry.path("live").asBoolean()){var live=running.get(id);if(live==null)return Json.object("stale",true);String all;synchronized(live.text){all=live.text.toString();}text=dev.tethium.core.HistoryChunks.piece(all,offset,length);}
             else text=store.historyChunk(id,entry.path("sequence").asLong(),offset,length);
             entry.put("index",i);entry.put("text",text);result.add(entry);
         }return Json.object("version",index.path("version"),"entries",result);
