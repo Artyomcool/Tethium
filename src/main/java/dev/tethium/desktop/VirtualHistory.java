@@ -142,11 +142,20 @@ final class VirtualHistory implements AutoCloseable {
         int width=0,lineHeight=0,total=16;for(var image:row.path("images")){int w=image.path("width").asInt(200)+8,h=image.path("height").asInt(120)+8;if(width>0&&width+w>available){total+=lineHeight;width=0;lineHeight=0;}width+=w;lineHeight=Math.max(lineHeight,h);}return total+lineHeight;
     }
     private String galleryHtml(JsonNode row)throws Exception{var html=new StringBuilder("<p class='gallery'>");for(var image:row.path("images"))html.append(imageHtml(image)).append(" ");return html.append("</p>").toString();}
+    /**
+     * A link to a file on the laptop. On a Linux Remote "C:\x" is not absolute and toUri() would put the local home folder in
+     * front of it, so drive paths are written as file:/C:/... directly.
+     */
+    static String fileLink(String file){
+        String slashed=file.replace('\\','/');
+        if(slashed.matches("(?i)[a-z]:/.*"))try{return new java.net.URI("file","","/"+slashed,null).toString();}catch(Exception ignored){}
+        return java.nio.file.Path.of(file).toUri().toString();
+    }
     private String imageHtml(JsonNode row)throws Exception{
         var folder=java.nio.file.Files.createDirectories(dev.tethium.host.AppPaths.data().resolve("chat-thumbnails"));
         String key=java.util.UUID.nameUUIDFromBytes(row.path("file").asText().getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();var thumbnail=folder.resolve(key+".png");
         if(!java.nio.file.Files.isRegularFile(thumbnail)&&!row.path("thumbnail").asText().isBlank())java.nio.file.Files.write(thumbnail,java.util.Base64.getDecoder().decode(row.path("thumbnail").asText()));
-        String target=java.nio.file.Path.of(row.path("file").asText()).toUri().toString();
+        String target=fileLink(row.path("file").asText());
         return "<a href='"+Theme.escape(target)+"'><img src='"+thumbnail.toUri()+"' data-original='"+Theme.escape(target)+"' width='"+row.path("width").asInt(160)+"' height='"+row.path("height").asInt(100)+"' border='0'></a>";
     }
     private final class Surface extends JPanel implements Scrollable {
