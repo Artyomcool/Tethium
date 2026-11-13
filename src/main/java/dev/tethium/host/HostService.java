@@ -104,6 +104,7 @@ public final class HostService implements AutoCloseable {
             try { startMobile(); } catch(Exception e) { System.err.println("Mobile gateway: " + e); }
         }
         if(adapter instanceof CodexAdapter&&!Boolean.getBoolean("tethium.probe"))quotaMonitor.scheduleWithFixedDelay(()->{try{String codexHome=System.getenv("CODEX_HOME");NativeUsageImport.read(store,usage,(codexHome==null?Path.of(System.getProperty("user.home"),".codex"):Path.of(codexHome)).resolve("sessions"));}catch(Exception e){if(!closed)System.err.println("Usage import: "+e.getMessage());}},0,5,TimeUnit.MINUTES);
+        recoverClaudeQuotaDisplay();
         recoverClaudeQuotaFailures();
         if(!Boolean.getBoolean("tethium.probe"))for(var saved:store.workerRuns()){
             var run=new Running(saved.spec().path("startedAt").asLong(System.currentTimeMillis()));run.workerRun=saved;run.provider=AgentAdapter.Provider.of(saved.spec().path("provider").asText(null));running.put(saved.sessionId(),run);
@@ -599,17 +600,21 @@ public final class HostService implements AutoCloseable {
     private void recoverClaudeQuotaFailures(){
         try{
             for(var failed:store.failedClaudeWorkers()){
-                if(!store.acceptsWork(failed.sessionId())||!workerHasQuotaFailure(failed.runId()))continue;
+                if(!store.acceptsWork(failed.sessionId())||workerQuotaFailure(failed.runId())==null)continue;
                 var job=store.job(failed.jobId());var failover=claudeQuotaFailover(failed.sessionId(),job,AgentAdapter.Provider.CLAUDE);
                 if(failover!=null)applyExecutorFailover(failed.sessionId(),job,failover);
             }
         }catch(Exception e){System.err.println("Claude quota recovery: "+e.getMessage());}
     }
-    private boolean workerHasQuotaFailure(String runId)throws Exception{
-        Path directory=data.resolve("workers").resolve(runId);if(!Files.exists(directory.resolve("journal.db")))return false;
+    private void recoverClaudeQuotaDisplay(){
+        try{for(var failed:store.recentFailedClaudeWorkers()){var event=workerQuotaFailure(failed.runId());if(event!=null&&quota.claudeExhausted(event))return;}}
+        catch(Exception e){System.err.println("Claude quota display recovery: "+e.getMessage());}
+    }
+    private JsonNode workerQuotaFailure(String runId)throws Exception{
+        Path directory=data.resolve("workers").resolve(runId);if(!Files.exists(directory.resolve("journal.db")))return null;
         try(var journal=new dev.tethium.worker.WorkerJournal(directory)){
             long cursor=0;
-            while(true){var entries=journal.after(cursor);if(entries.isEmpty())return false;for(var entry:entries){cursor=entry.sequence();if(entry.kind().equals("event")&&quotaError(entry.value().toString()))return true;}}
+            while(true){var entries=journal.after(cursor);if(entries.isEmpty())return null;for(var entry:entries){cursor=entry.sequence();if(entry.kind().equals("event")&&quotaError(entry.value().toString()))return entry.value();}}
         }
     }
     private static void narrate(Running run, AgentAdapter.Event event) {
@@ -618,7 +623,7 @@ public final class HostService implements AutoCloseable {
     private static boolean codexQuota(Running run){return run.provider==null||run.provider==AgentAdapter.Provider.CODEX;}
     private void observe(String id,Running run,AgentAdapter.Event event){
         narrate(run, event);
-        if((event.type().equals("error")||event.type().equals("finished"))&&quotaError(event.raw().toString()))run.quotaBlocked=true;
+        if((event.type().equals("error")||event.type().equals("finished"))&&quotaError(event.raw().toString())){run.quotaBlocked=true;if(run.provider==AgentAdapter.Provider.CLAUDE)quota.claudeExhausted(event.raw());}
         if(event.type().equals("thread/tokenUsage/updated")){try{var payload=event.raw().path("params");var tokenUsage=payload.path("tokenUsage");usage.sample(id,store.get(id).projectId(),payload.path("threadId").asText(),System.currentTimeMillis(),tokenUsage.path("total"),tokenUsage.path("last"),run.provider==null?null:run.provider.name());}catch(Exception e){System.err.println("Usage sample: "+e.getMessage());}}
         if(event.type().equals("rate_limit_event")){try{var windows=Json.MAPPER.createArrayNode();event.raw().path("rate_limit_info").path("unifiedWindows").properties().forEach(w->{long minutes=w.getKey().equals("seven_day")?10080:w.getKey().equals("five_hour")?300:0;if(minutes>0&&w.getValue().path("resetsAt").asLong()>0)windows.add(Json.object("kind",w.getKey(),"durationMinutes",minutes,"resetsAt",w.getValue().path("resetsAt").asLong()));});if(!windows.isEmpty())usage.snapshot(Json.object("updatedAt",System.currentTimeMillis(),"buckets",List.of(Json.object("id","claude","label","Claude","windows",windows))));}catch(Exception e){System.err.println("Rate limit event: "+e.getMessage());}}
         String phase=run.activity.accept(event);if(!run.stopping&&phase!=null)run.phase=phase;bump();

@@ -3,8 +3,11 @@ package dev.tethium.host;
 import com.fasterxml.jackson.databind.JsonNode;
 import dev.tethium.agent.ClaudeAccountClient;
 import dev.tethium.json.Json;
+import java.time.*;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.*;
+import java.util.regex.Pattern;
 
 /** One cached account snapshot per host, shared by all projects and sessions. Codex and Claude limits are read
  * independently and shown as separate buckets; reset credits and automatic quota waits remain Codex features. */
@@ -70,6 +73,36 @@ public final class CodexQuotaService implements AutoCloseable {
                 synchronized (this) { if (!closed && success) updatedAt = System.currentTimeMillis(); }
             } finally { synchronized (this) { refreshing = false; } }
         });
+    }
+    /** A model turn is authoritative when Claude itself rejects it for quota, even if the usage endpoint is unavailable. */
+    public synchronized boolean claudeExhausted(JsonNode event) {
+        String text=event.toString(),lower=text.toLowerCase(Locale.ROOT);
+        long duration=lower.contains("weekly limit")?10080:300;
+        Long reset=claudeReset(text);
+        if(reset!=null&&reset<=Instant.now().getEpochSecond())return false;
+        var next=Json.MAPPER.createArrayNode();boolean found=false;
+        for(var bucket:claudeBuckets){
+            var copy=(com.fasterxml.jackson.databind.node.ObjectNode)bucket.deepCopy();
+            if(copy.path("id").asText().equals("claude")){
+                found=true;var windows=(com.fasterxml.jackson.databind.node.ArrayNode)copy.withArray("windows");boolean windowFound=false;
+                for(var window:windows)if(window.path("durationMinutes").asLong()==duration){((com.fasterxml.jackson.databind.node.ObjectNode)window).put("remainingPercent",0);if(reset!=null)((com.fasterxml.jackson.databind.node.ObjectNode)window).put("resetsAt",reset);windowFound=true;}
+                if(!windowFound)windows.add(Json.object("kind",duration==10080?"secondary":"primary","remainingPercent",0,"durationMinutes",duration,"resetsAt",reset));
+            }
+            next.add(copy);
+        }
+        if(!found)next.add(Json.object("id","claude","label","Claude","windows",List.of(Json.object("kind",duration==10080?"secondary":"primary","remainingPercent",0,"durationMinutes",duration,"resetsAt",reset))));
+        claudeBuckets=next;claudeError="";updatedAt=System.currentTimeMillis();return true;
+    }
+    private static final Pattern CLAUDE_RESET=Pattern.compile("(?i)resets\\s+([a-z]{3})\\s+(\\d{1,2}),\\s*(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)\\s*\\(([^)]+)\\)");
+    private static Long claudeReset(String text){
+        try{
+            var match=CLAUDE_RESET.matcher(text);if(!match.find())return null;
+            Month month=Month.from(DateTimeFormatter.ofPattern("MMM",Locale.ENGLISH).parse(match.group(1)));
+            int hour=Integer.parseInt(match.group(3))%12;if(match.group(5).equalsIgnoreCase("pm"))hour+=12;
+            int minute=match.group(4)==null?0:Integer.parseInt(match.group(4));ZoneId zone=ZoneId.of(match.group(6));int year=ZonedDateTime.now(zone).getYear();
+            var reset=ZonedDateTime.of(year,month.getValue(),Integer.parseInt(match.group(2)),hour,minute,0,0,zone);if(reset.isBefore(ZonedDateTime.now(zone).minusDays(1)))reset=reset.plusYears(1);
+            return reset.toEpochSecond();
+        }catch(Exception ignored){return null;}
     }
     public JsonNode consume(String key)throws Exception{
         if(resetter==null)throw new IllegalStateException("Сброс недоступен для этого подключения");

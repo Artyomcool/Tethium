@@ -518,6 +518,13 @@ public final class SessionStore implements AutoCloseable {
         try(var q=connection.createStatement();var r=q.executeQuery(sql)){while(r.next())result.add(new FailedWorkerRun(r.getString(1),r.getString(2),r.getString(3)));}
         return result;
     }
+    public synchronized List<FailedWorkerRun> recentFailedClaudeWorkers()throws SQLException{
+        var result=new ArrayList<FailedWorkerRun>();
+        try(var q=connection.createStatement();var r=q.executeQuery("SELECT w.run_id,w.session_id,w.job_id FROM worker_runs w JOIN runs r ON r.id=w.run_id WHERE w.finished=1 AND r.provider='CLAUDE' AND r.status='FAILED' ORDER BY r.rowid DESC LIMIT 32")){
+            while(r.next())result.add(new FailedWorkerRun(r.getString(1),r.getString(2),r.getString(3)));
+        }
+        return result;
+    }
     public synchronized void workerCursor(String runId,long cursor)throws SQLException{execute("UPDATE worker_runs SET cursor=MAX(cursor,?) WHERE run_id=?",cursor,runId);}
     public synchronized void workerFinished(String runId)throws SQLException{execute("UPDATE worker_runs SET finished=1 WHERE run_id=?",runId);}
     public synchronized void workerReply(String runId,long sequence,JsonNode value)throws SQLException{

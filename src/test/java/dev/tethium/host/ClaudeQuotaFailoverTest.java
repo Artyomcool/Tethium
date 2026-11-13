@@ -26,6 +26,10 @@ class ClaudeQuotaFailoverTest {
         for(var row:client.get("/state").path("sessions"))if(row.path("id").asText().equals(id))return row;
         throw new AssertionError(id);
     }
+    private static int claudeQuota(HostClient client)throws Exception{
+        for(var bucket:client.get("/state").path("quota").path("buckets"))if(bucket.path("id").asText().equals("claude"))return bucket.path("windows").get(0).path("remainingPercent").asInt(-1);
+        return -1;
+    }
     private static AgentAdapter claude(List<String> calls){return new AgentAdapter(){
         public Provider provider(){return Provider.CLAUDE;}
         public Result run(Request request,Consumer<Event> events,Cancellation cancellation){
@@ -52,6 +56,7 @@ class ClaudeQuotaFailoverTest {
             var prefs=session(client,id).path("preferences");
             assertEquals("CODEX",prefs.path("provider").asText());assertEquals("gpt-6.1-sol",prefs.path("model").asText());assertEquals("xhigh",prefs.path("reasoningEffort").asText());
             assertEquals(0,session(client,id).path("queued").asInt());
+            assertEquals(0,claudeQuota(client),"the exhausted executor remains visible as zero quota");
         }
     }
 
@@ -87,6 +92,7 @@ class ClaudeQuotaFailoverTest {
             until(()->calls.size()==1&&!session(client,id).path("running").asBoolean());
             assertTrue(calls.getFirst().startsWith("CODEX:gpt-6.1-sol:")&&calls.getFirst().contains("resume after restart"),calls.toString());
             assertEquals("CODEX",session(client,id).path("preferences").path("provider").asText());
+            assertEquals(0,claudeQuota(client),"the durable journal restores the zero after a core restart");
         }
     }
 

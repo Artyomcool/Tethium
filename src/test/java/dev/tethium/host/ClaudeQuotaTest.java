@@ -3,6 +3,7 @@ package dev.tethium.host;
 import dev.tethium.agent.ClaudeAccountClient;
 import dev.tethium.json.Json;
 import org.junit.jupiter.api.*;
+import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import static org.junit.jupiter.api.Assertions.*;
@@ -33,6 +34,13 @@ class ClaudeQuotaTest {
         var buckets = ClaudeAccountClient.normalize(Json.parse("{\"five_hour\":null,\"seven_day\":{\"utilization\":0,\"resets_at\":\"2026-11-10T20:00:00+00:00\"},\"limits\":[]}"));
         assertEquals(1, buckets.size()); assertEquals(1, buckets.get(0).path("windows").size()); assertEquals(100, buckets.get(0).path("windows").get(0).path("remainingPercent").asInt());
         assertTrue(ClaudeAccountClient.normalize(Json.parse("{}")).isEmpty());
+    }
+    @Test void modelQuotaFailureCreatesAVisibleZeroEvenWithoutTheUsageEndpoint() throws Exception {
+        try(var quota=new CodexQuotaService(null,null,null,0)){
+            assertTrue(quota.claudeExhausted(Json.object("api_error","usage_limit_reached","result","You've hit your weekly limit · resets Dec 31, 11pm (Europe/Berlin)")));
+            var bucket=quota.snapshot().path("buckets").get(0);var window=bucket.path("windows").get(0);
+            assertEquals("claude",bucket.path("id").asText());assertEquals(0,window.path("remainingPercent").asInt(-1));assertEquals(10080,window.path("durationMinutes").asInt());assertTrue(window.path("resetsAt").asLong()>Instant.now().getEpochSecond());
+        }
     }
     @Test void claudeBucketsJoinTheSharedSnapshotAndACodexFailureDoesNotHideThem() throws Exception {
         var codexFails = new boolean[]{false};
