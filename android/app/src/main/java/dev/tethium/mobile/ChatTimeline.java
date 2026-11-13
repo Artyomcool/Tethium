@@ -76,6 +76,7 @@ final class ChatTimeline extends FrameLayout {
     }
     /** Thought blocks become quotes (or vanish when hidden). */
     static String narration(String text){
+        text=visualizeLinks(text);
         if(!text.contains("```thought"))return text;
         var out=new StringBuilder();int at=0;
         while(true){int open=text.indexOf("```thought",at);if(open<0){out.append(text,at,text.length());break;}
@@ -83,6 +84,16 @@ final class ChatTimeline extends FrameLayout {
             if(showThoughts){for(String line:body.split("\n"))out.append("> ").append(line.isEmpty()?"\u200b":line).append('\n');out.append('\n');}
             if(close<0)break;at=close+4;}
         return out.toString();
+    }
+    /** Tethium does not implement Codex's native visualize card, so expose the already published file as a normal link. */
+    static String visualizeLinks(String text){
+        var matcher=Pattern.compile("\\uE200visualize\\uE202(.*?)\\uE201",Pattern.DOTALL).matcher(text);var out=new StringBuffer();
+        while(matcher.find()){
+            String replacement="Визуализация";
+            try{var value=new JSONObject(matcher.group(1));String path=value.optString("path"),title=value.optString("title","Визуализация");if(!path.isBlank())replacement="["+title.replace("\\","\\\\").replace("[","\\[").replace("]","\\]")+"]("+path.replace('\\','/').replace("%","%25").replace(" ","%20").replace("(","%28").replace(")","%29").replace("<","%3C").replace(">","%3E")+")";}catch(Exception ignored){}
+            matcher.appendReplacement(out,java.util.regex.Matcher.quoteReplacement(replacement));
+        }
+        matcher.appendTail(out);return out.toString();
     }
     Runnable loadEarlier=()->{};
     private String lastLive="",session="";
@@ -99,6 +110,7 @@ final class ChatTimeline extends FrameLayout {
         scroll.setOnScrollChangeListener((v,x,y,ox,oy)->{remember();end.setVisibility(bottom()?GONE:VISIBLE);String current="Запросы в разговоре";for(var e:anchors.entrySet())if(e.getValue().getTop()<=y+ui.dp(24)&&userTitles.containsKey(e.getKey()))current=userTitles.get(e.getKey());currentRequest.accept(current);if(bottom())atEnd.run();});
     }
     BiConsumer<String,Consumer<File>> loadImage=(link,done)->{};
+    BiConsumer<String,File> openImage=(link,file)->{};
     private static final Pattern IMAGE_LINK=Pattern.compile("!?\\[([^\\]]*)\\]\\(<?([^)>\\s]+\\.(?:png|jpe?g|gif|webp|bmp))>?\\)",Pattern.CASE_INSENSITIVE);
     /** Images a message links to are shown under its text; a tap opens them full screen. */
     private void images(LinearLayout card,String text){
@@ -129,7 +141,7 @@ final class ChatTimeline extends FrameLayout {
                 var options=new android.graphics.BitmapFactory.Options();options.inSampleSize=1;while(bounds.outWidth/options.inSampleSize>1400)options.inSampleSize*=2;
                 var bitmap=android.graphics.BitmapFactory.decodeFile(file.toString(),options);if(bitmap==null)return;
                 image.setBackground(null);image.setImageBitmap(bitmap);image.setMaxHeight(ui.dp(320));image.setLayoutParams(new LinearLayout.LayoutParams(-1,-2){{topMargin=ui.dp(8);}});
-                image.setOnClickListener(v->ImagePreview.show((Activity)getContext(),ui,file));
+                image.setOnClickListener(v->openImage.accept(link,file));
             });
             return image;
     }
@@ -165,7 +177,7 @@ final class ChatTimeline extends FrameLayout {
         if(rebuild){start=nextStart;rendered.clear();anchors.clear();for(var view:media.values())if(view.getParent() instanceof ViewGroup old)old.removeView(view);mediaAnchors.clear();userTitles.clear();messages.removeAllViews();if(start>0||more){messages.addView(ui.button("Загрузить предыдущие сообщения",()->{if(start>0){limit+=100;start=-1;render(history,lastLive,true);}else loadEarlier.run();}));ui.gap(messages,16);}}
         for(int i=start;i<array.length();i++){var m=array.optJSONObject(i);long key=m.optLong("sequence");if(rendered.containsKey(key))continue;rendered.put(key,m.toString());String role=m.optString("role"),text=m.optString("text");boolean user=role.equals("user"),assistant=role.equals("assistant");
             var card=ui.col();if(user){card.setBackground(ui.shape(Ui.PANEL,18));ui.pad(card,14,6);}var header=ui.row();var name=ui.label(user?"ВЫ":assistant?m.optString("provider","Codex").toUpperCase(Locale.ROOT):"СОБЫТИЕ",11,user?Ui.ACCENT:Ui.MUTED);name.setTypeface(Typeface.DEFAULT_BOLD);header.addView(name,new LinearLayout.LayoutParams(0,-2,1));header.addView(ui.icon("copy","Копировать сообщение",()->ui.copy(withoutActions(text))),new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));card.addView(header);
-            var t=body();if(user)t.setText(IMAGE_LINK.matcher(text).replaceAll("").strip());else render(t,narration(text));if(!assistant&&!user){t.setMaxLines(3);t.setEllipsize(TextUtils.TruncateAt.END);t.setTextColor(Ui.MUTED);t.setOnClickListener(v->{var detail=ui.col();ui.pad(detail,16,12);var full=body();render(full,narration(text));var sc=new ScrollView(getContext());sc.addView(full);detail.addView(sc,new LinearLayout.LayoutParams(-1,-1));ui.sheet("Событие",detail);});}card.addView(t);images(card,text);ui.gap(card,user?14:4);messages.addView(card);anchors.put(key,card);if(user)userTitles.put(key,text.replace('\n',' '));ui.gap(messages,20);
+            var t=body();if(user)t.setText(IMAGE_LINK.matcher(text).replaceAll("").strip());else render(t,narration(text));if(!assistant&&!user){t.setMaxLines(3);t.setEllipsize(TextUtils.TruncateAt.END);t.setTextColor(Ui.MUTED);t.setOnClickListener(v->{var detail=ui.col();ui.pad(detail,16,12);var full=body();render(full,narration(text));var sc=new ScrollView(getContext());sc.addView(full);detail.addView(sc,new LinearLayout.LayoutParams(-1,-1));ui.sheet("Событие",detail);});}card.addView(t);images(card,visualizeLinks(text));ui.gap(card,user?14:4);messages.addView(card);anchors.put(key,card);if(user)userTitles.put(key,text.replace('\n',' '));ui.gap(messages,20);
         }
         if(!streaming.equals(lastLive)){lastLive=streaming;render(liveText,narration(streaming));}live.setVisibility(streaming.isEmpty()?GONE:VISIBLE);
         if(array.length()==0&&streaming.isEmpty()&&messages.getChildCount()==0){var empty=ui.col();ui.pad(empty,8,36);empty.addView(ui.title("Начнём с задачи"));ui.gap(empty,12);empty.addView(ui.label("Все действия выполняются на ноутбуке. Здесь — тот же разговор, очередь и результаты.",16,Ui.MUTED));messages.addView(empty);start=-1;}

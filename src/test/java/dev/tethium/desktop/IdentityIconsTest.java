@@ -19,6 +19,21 @@ class IdentityIconsTest {
         assertEquals("session-tasks",IdentityIcons.asset(false,"Мелкие   задачи",""));
         assertEquals(IdentityIcons.asset(false,"Будущая сессия","a"),IdentityIcons.asset(false,"будущая сессия","b"));
     }
+    @Test void taskSuffixAfterTheFirstColonDoesNotChangeTheSessionIdentity() {
+        assertEquals("session-lane-1",IdentityIcons.asset(false,"Lane 1: parse 0x1234",""));
+        assertEquals("session-lane-1",IdentityIcons.asset(false,"Lane 1: another: nested task",""));
+        assertEquals("session-lane-4",IdentityIcons.asset(false,"Lane 4: final gate",""));
+        assertEquals("hash:custom",IdentityIcons.asset(false,"Custom: first task",""));
+        assertEquals(22,IdentityIcons.named("group-favorites").getIconWidth());
+    }
+    @Test void projectGroupsHaveGeneratedFolderArtworkAndAStableFallback() {
+        assertEquals("group-neural",IdentityIcons.groupAsset("Нейронки"));
+        assertEquals("group-games",IdentityIcons.groupAsset("Игры"));
+        assertEquals("group-heroes",IdentityIcons.groupAsset("Герои"));
+        assertEquals("group-java",IdentityIcons.groupAsset("JAVA"));
+        assertEquals("group-general",IdentityIcons.groupAsset("Новая папка"));
+        assertEquals(22,IdentityIcons.group("Герои").getIconWidth());
+    }
     @Test void projectsHaveNoRegistryAnymoreAndCountsDoNotChangeIdentity() {
         assertEquals("hash:project/h3phoenix2",IdentityIcons.asset(true,"H3Phoenix2  3","C:\\git\\H3Phoenix2"),"project artwork lives in the project, not in Tethium");
         for(String name:new String[]{"Графика","Логика","Верификация","Прогресс","Мелкие задачи","Новая сессия","Исследование"})

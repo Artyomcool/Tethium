@@ -1,0 +1,245 @@
+{
+  "source": "C:\\git\\Tethium\\design\\identity-missing-v5\\atlas.png",
+  "sha256": "f9c48ac084974ee5bafbb9c9e9056d0ac0f871a9fe2920bce3e0246ffcb028aa",
+  "actual_size": [
+    1254,
+    1254
+  ],
+  "side": 4,
+  "items": [
+    {
+      "id": "session-lane-1",
+      "description": "blue single-route switch track with one checkpoint",
+      "row": 0,
+      "column": 0,
+      "source_bounds": [
+        67,
+        54,
+        283,
+        304
+      ],
+      "pixel_size": [
+        228,
+        262
+      ],
+      "pivot": [
+        0.5,
+        0.9694656488549618
+      ],
+      "nominal_cell": [
+        0,
+        0,
+        314,
+        314
+      ]
+    },
+    {
+      "id": "session-lane-2",
+      "description": "sage twin-route switch track with two checkpoints",
+      "row": 0,
+      "column": 1,
+      "source_bounds": [
+        368,
+        62,
+        578,
+        301
+      ],
+      "pixel_size": [
+        222,
+        251
+      ],
+      "pivot": [
+        0.5,
+        0.9681274900398407
+      ],
+      "nominal_cell": [
+        314,
+        0,
+        627,
+        314
+      ]
+    },
+    {
+      "id": "session-lane-3",
+      "description": "amber three-route switch track with three checkpoints",
+      "row": 0,
+      "column": 2,
+      "source_bounds": [
+        659,
+        63,
+        889,
+        297
+      ],
+      "pixel_size": [
+        242,
+        246
+      ],
+      "pivot": [
+        0.5,
+        0.967479674796748
+      ],
+      "nominal_cell": [
+        627,
+        0,
+        940,
+        314
+      ]
+    },
+    {
+      "id": "session-lane-4",
+      "description": "mauve four-route switch track with four checkpoints",
+      "row": 0,
+      "column": 3,
+      "source_bounds": [
+        960,
+        61,
+        1208,
+        297
+      ],
+      "pixel_size": [
+        260,
+        248
+      ],
+      "pivot": [
+        0.5,
+        0.967741935483871
+      ],
+      "nominal_cell": [
+        940,
+        0,
+        1254,
+        314
+      ]
+    },
+    {
+      "id": "session-interpreter",
+      "description": "compact bytecode interpreter with play prism and stacked instruction plates",
+      "row": 1,
+      "column": 0,
+      "source_bounds": [
+        50,
+        396,
+        293,
+        576
+      ],
+      "pixel_size": [
+        255,
+        192
+      ],
+      "pivot": [
+        0.5,
+        0.9583333333333334
+      ],
+      "nominal_cell": [
+        0,
+        314,
+        314,
+        627
+      ]
+    },
+    {
+      "id": "session-reminders",
+      "description": "ivory notification bell combined with a small blue clock face",
+      "row": 1,
+      "column": 1,
+      "source_bounds": [
+        351,
+        364,
+        591,
+        599
+      ],
+      "pixel_size": [
+        252,
+        247
+      ],
+      "pivot": [
+        0.5,
+        0.9676113360323887
+      ],
+      "nominal_cell": [
+        314,
+        314,
+        627,
+        627
+      ]
+    },
+    {
+      "id": "session-night-watch",
+      "description": "deep blue crescent moon cradling a warm copper lantern",
+      "row": 1,
+      "column": 2,
+      "source_bounds": [
+        657,
+        366,
+        888,
+        605
+      ],
+      "pixel_size": [
+        243,
+        251
+      ],
+      "pivot": [
+        0.5,
+        0.9681274900398407
+      ],
+      "nominal_cell": [
+        627,
+        314,
+        940,
+        627
+      ]
+    },
+    {
+      "id": "session-campaign",
+      "description": "peach pennant flag pinned into a folded strategic route map",
+      "row": 1,
+      "column": 3,
+      "source_bounds": [
+        950,
+        362,
+        1217,
+        605
+      ],
+      "pixel_size": [
+        281,
+        257
+      ],
+      "pivot": [
+        0.5,
+        0.9649805447470817
+      ],
+      "nominal_cell": [
+        940,
+        314,
+        1254,
+        627
+      ]
+    },
+    {
+      "id": "group-favorites",
+      "description": "single warm golden faceted five-point favorite star",
+      "row": 2,
+      "column": 0,
+      "source_bounds": [
+        51,
+        671,
+        283,
+        899
+      ],
+      "pixel_size": [
+        244,
+        240
+      ],
+      "pivot": [
+        0.5,
+        0.9666666666666667
+      ],
+      "nominal_cell": [
+        0,
+        627,
+        314,
+        940
+      ]
+    }
+  ]
+}

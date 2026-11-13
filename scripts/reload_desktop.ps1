@@ -95,6 +95,14 @@ function WaitExit($processId) {
     $process=Get-Process -Id $processId -ErrorAction SilentlyContinue
     if ($null -ne $process -and -not $process.WaitForExit(20000)) { throw ('Process did not exit gracefully: '+$processId) }
 }
+function WaitHostExit($processId,$graceMilliseconds=60000) {
+    $process=Get-Process -Id $processId -ErrorAction SilentlyContinue
+    if ($null -eq $process -or $process.WaitForExit($graceMilliseconds)) { return }
+    # Shutdown was acknowledged. Independent workers keep their journals and must not be stopped.
+    Status 'stopping-stuck-core' 'The old core did not exit after shutdown; releasing its database lock.'
+    $process.Kill()
+    if (-not $process.WaitForExit(15000)) { throw ('Core did not exit after shutdown: '+$processId) }
+}
 function WaitForRuns($timeoutSeconds=5400) {
     $deadline=[DateTime]::Now.AddSeconds($timeoutSeconds)
     while ($true) {
@@ -237,7 +245,7 @@ try {
     Status 'switching-core' 'Starting the verified core in standby mode.'
     $null=Bridge 'backup' (Join-Path $DataPath 'tethium.db') (Join-Path $updateRoot 'before-core.db')
     $shutdown=if ($handoff) { '/updates/handoff' } elseif ($legacy) { '/shutdown' } else { '/updates/shutdown' }
-    $null=Api $oldHost $shutdown @{}; $oldHostClosed=$true; WaitExit $oldHost.pid
+    $null=Api $oldHost $shutdown @{}; $oldHostClosed=$true; WaitHostExit $oldHost.pid
     if ($null -ne $coldPlan -and -not $coldPlan.completed) { StopRestartProcesses $coldPlan.keepers }
     $replacement=Host $AppPath $DataPath 'replacement-host'
     $health=Api $replacement '/health'
@@ -260,8 +268,8 @@ try {
         if ($oldHostClosed) {
             try {
                 $current=Get-Content -Raw -LiteralPath (Join-Path $DataPath 'host.json') | ConvertFrom-Json; $health=Api $current '/health'
-                if ($health.workerProtocol -eq 1 -and $health.handoffReady) { $null=Api $current '/updates/handoff' @{}; WaitExit $current.pid }
-                elseif ($health.draining -and $health.running -eq 0) { $null=Api $current '/updates/shutdown' @{}; WaitExit $current.pid }
+                if ($health.workerProtocol -eq 1 -and $health.handoffReady) { $null=Api $current '/updates/handoff' @{}; WaitHostExit $current.pid }
+                elseif ($health.draining -and $health.running -eq 0) { $null=Api $current '/updates/shutdown' @{}; WaitHostExit $current.pid }
             } catch {}
             $oldHost=Host $previousCorePath $DataPath 'rollback-host'
         }

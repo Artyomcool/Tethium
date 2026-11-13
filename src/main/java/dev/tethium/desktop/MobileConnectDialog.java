@@ -18,7 +18,7 @@ final class MobileConnectDialog {
         Thread.ofVirtual().start(()->{try(var host=HostClient.connect()){
             var info=host.post("/mobile/pair",Json.object());
             SwingUtilities.invokeLater(()->{if(!dialog.isDisplayable())return;try{
-                message.setText("Одна сеть Wi-Fi • привязка действует 5 минут • подключено: "+info.path("devices").asInt());
+                var traffic=info.path("traffic");var today=traffic.path("today");message.setText("Домашняя сеть — напрямую • вне дома — Cloudflare E2E • подключено: "+info.path("devices").asInt()+" • CF сегодня ↑ "+bytes(today.path("cloudflareUp").asLong())+" ↓ "+bytes(today.path("cloudflareDown").asLong())+" • Free Worker ≈ "+traffic.path("estimatedWorkerRequests").asLong()+"/100000, DO ≈ "+traffic.path("estimatedDurableRequests").asLong()+"/100000");
                 var columns=new JPanel(new GridLayout(1,2,24,0));
                 columns.add(card("1. Установить APK",info.path("download").asText()));
                 columns.add(card("2. Привязать приложение",info.path("pairing").asText()));body.add(columns);
@@ -59,6 +59,7 @@ final class MobileConnectDialog {
         var image=new BufferedImage(256,256,BufferedImage.TYPE_INT_RGB);for(int y=0;y<256;y++)for(int x=0;x<256;x++)image.setRGB(x,y,matrix.get(x,y)?0xff10151c:0xffffffff);
         panel.add(new JLabel(new ImageIcon(image)));var copy=new JButton("Копировать ссылку");copy.addActionListener(e->Toolkit.getDefaultToolkit().getSystemClipboard().setContents(new StringSelection(value),null));panel.add(copy,BorderLayout.SOUTH);return panel;
     }
+    private static String bytes(long value){if(value<1024)return value+" B";if(value<1024*1024)return String.format(java.util.Locale.ROOT,"%.1f KiB",value/1024d);if(value<1024L*1024*1024)return String.format(java.util.Locale.ROOT,"%.1f MiB",value/1048576d);return String.format(java.util.Locale.ROOT,"%.2f GiB",value/1073741824d);}
     private static void firewall(JLabel status){
         status.setText("Windows запрашивает подтверждение настройки доступа по Wi-Fi…");
         Thread.ofVirtual().start(()->{try{

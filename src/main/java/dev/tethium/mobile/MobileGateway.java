@@ -44,6 +44,8 @@ public final class MobileGateway implements AutoCloseable {
     private final UacBridge uac;
     private final Path data;
     private final Feed feed;
+    private final TrafficLedger traffic;
+    private final RelayLinkManager relay;
     private final ServerSocket link;
     private final HttpServer http;
     private final ExecutorService workers = Executors.newVirtualThreadPerTaskExecutor();
@@ -58,8 +60,10 @@ public final class MobileGateway implements AutoCloseable {
     public MobileGateway(Path data, Feed feed, int linkPort, int httpPort) throws Exception {
         this.data = Files.createDirectories(data.resolve("mobile")); this.feed = feed; adb = new AdbInstaller(this.data); services = new PhoneServices(this.data,()->feed.catalog().path("projects"));
         uac=new UacBridge(()->{for(var l:List.copyOf(links))l.kick();});
+        traffic=new TrafficLedger(this.data.resolve("traffic.json"));
         Path deviceFile=this.data.resolve("devices.json");
         if(Files.exists(deviceFile))Json.MAPPER.readTree(deviceFile.toFile()).properties().forEach(e->devices.put(e.getKey(),e.getValue().asText()));
+        relay=new RelayLinkManager(this.data,traffic,channel->workers.execute(new Link(channel)));
         link=new ServerSocket();link.setReuseAddress(true);link.bind(new InetSocketAddress("0.0.0.0",linkPort),32);
         try {http=HttpServer.create(new InetSocketAddress("0.0.0.0",httpPort),16);}
         catch(Exception e){link.close();workers.close();throw e;}
@@ -80,7 +84,7 @@ public final class MobileGateway implements AutoCloseable {
         try(var socket=new DatagramSocket()){socket.connect(InetAddress.getByName("1.1.1.1"),53);String preferred=socket.getLocalAddress().getHostAddress();if(addresses.remove(preferred))addresses.addFirst(preferred);}catch(Exception ignored){}
         if(addresses.isEmpty())addresses.add("127.0.0.1");
         String address=addresses.getFirst();
-        return Json.object("address",address,"addresses",addresses,"port",port(),"httpPort",httpPort(),"downloadPort",httpPort(),"download","http://"+address+":"+httpPort()+"/","pairing","tethium://pair?address="+address+":"+port()+"&http="+httpPort()+"&code="+code,"expires",expires,"devices",devices.size());
+        return Json.object("address",address,"addresses",addresses,"port",port(),"httpPort",httpPort(),"downloadPort",httpPort(),"download","http://"+address+":"+httpPort()+"/","pairing","tethium://pair?address="+address+":"+port()+"&http="+httpPort()+"&code="+code,"expires",expires,"devices",devices.size(),"relay",relay.status(),"traffic",traffic.snapshot());
     }
     // ---- adb over Wi-Fi: silent installs when configured ----
     public JsonNode adbStatus(){return adb.status();}
@@ -112,11 +116,11 @@ public final class MobileGateway implements AutoCloseable {
         if(!Files.isRegularFile(apk))try(var in=MobileGateway.class.getResourceAsStream("/mobile/tethium.apk")){if(in==null)throw new IOException("Встроенный APK отсутствует");Path tmp=Files.createTempFile(folder,"tethium-",".tmp");Files.copy(in,tmp,StandardCopyOption.REPLACE_EXISTING);Files.move(tmp,apk,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}
         return apk;
     }
-    public synchronized JsonNode revoke()throws IOException{devices.clear();code=null;previews.clear();saveDevices();services.revoke();for(var l:List.copyOf(links))l.close();return Json.object("ok",true);}
+    public synchronized JsonNode revoke()throws IOException{devices.clear();code=null;previews.clear();saveDevices();relay.clear();services.revoke();for(var l:List.copyOf(links))l.close();return Json.object("ok",true);}
     private synchronized JsonNode pair(JsonNode body) throws Exception {
         if(code==null||System.currentTimeMillis()>expires||!equal(code,body.path("code").asText()))throw new SecurityException("QR истёк. Откройте новый на ноутбуке.");
-        String token=random();devices.put(sha(token.getBytes(StandardCharsets.UTF_8)),body.path("name").asText("Android"));saveDevices();code=null;
-        return Json.object("token",token,"httpPort",httpPort());
+        String token=random(),hash=sha(token.getBytes(StandardCharsets.UTF_8));devices.put(hash,body.path("name").asText("Android"));saveDevices();code=null;
+        return Json.object("token",token,"httpPort",httpPort(),"relay",relay.device(hash));
     }
     private boolean authorized(String token){return token!=null&&!token.isEmpty()&&devices.containsKey(sha(token.getBytes(StandardCharsets.UTF_8)));}
     private void saveDevices()throws IOException{Path tmp=data.resolve("devices.tmp");Json.MAPPER.writeValue(tmp.toFile(),devices);Files.move(tmp,data.resolve("devices.json"),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}
@@ -124,66 +128,90 @@ public final class MobileGateway implements AutoCloseable {
     // ---- framed link ----
     private void accept(){
         while(!closed){
-            try{var socket=link.accept();socket.setTcpNoDelay(true);socket.setKeepAlive(true);workers.execute(new Link(socket));}
+            try{var socket=link.accept();socket.setTcpNoDelay(true);socket.setKeepAlive(true);workers.execute(new Link(new LanLinkChannel(socket,traffic)));}
             catch(IOException e){if(closed)return;}
         }
     }
     private final class Link implements Runnable {
-        private final Socket socket;
-        private DataInputStream in; private DataOutputStream out;
+        private final LinkChannel channel;
         private final Tbin.Writer writer=new Tbin.Writer(); private final Tbin.Reader reader=new Tbin.Reader();
+        private String deviceToken="";
         private final Object wake=new Object(); private boolean dirty,reset;
         private volatile String watched="";
         private final Runnable listener=this::kick;
         private final Map<String,String> sentCatalog=new HashMap<>(),sentSessions=new HashMap<>(),sentMeta=new HashMap<>();
         private boolean catalogSent; private String convSession=""; private long sentSequence=-1,sentMessageRevision=-1,liveRun=-1; private int liveOffset;
         private String resumeSession; private long resumeAfter=-1,resumeRevision=-1,resumeLiveRun=-1; private int resumeLiveOffset,tail=TAIL;
-        Link(Socket socket){this.socket=socket;}
+        Link(LinkChannel channel){this.channel=channel;}
         private record Frame(int kind,JsonNode body){}
         public void run(){
             try{
-                socket.setSoTimeout(30_000);
-                in=new DataInputStream(new BufferedInputStream(socket.getInputStream()));out=new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));
+                channel.idleTimeout(30_000);
                 var first=read();
                 if(first.body.path("protocol").asInt()!=Frames.PROTOCOL){send(Frames.BYE,Json.object("error","Обновите приложение Tethium на телефоне"));return;}
                 if(first.kind==Frames.PAIR){try{send(Frames.PAIRED,pair(first.body));}catch(SecurityException denied){send(Frames.BYE,Json.object("error",denied.getMessage()));}return;}
-                if(first.kind!=Frames.HELLO||!authorized(first.body.path("token").asText())){send(Frames.BYE,Json.object("error","Подключите телефон по QR на ноутбуке"));return;}
-                send(Frames.WELCOME,Json.object("protocol",Frames.PROTOCOL,"httpPort",httpPort()));
-                if(socket.getInetAddress()!=null)adb.phone(socket.getInetAddress().getHostAddress());
-                socket.setSoTimeout(45_000);links.add(this);feed.addListener(listener);kick();
+                deviceToken=first.body.path("token").asText();
+                if(first.kind!=Frames.HELLO||!authorized(deviceToken)){send(Frames.BYE,Json.object("error","Подключите телефон по QR на ноутбуке"));return;}
+                if(channel.remote())traffic.relayConnection();
+                send(Frames.WELCOME,Json.object("protocol",Frames.PROTOCOL,"httpPort",httpPort(),"transport",channel.remote()?"cloudflare":"lan","relay",relay.device(sha(deviceToken.getBytes(StandardCharsets.UTF_8))),"traffic",traffic.snapshot()));
+                if(channel.lanAddress()!=null)adb.phone(channel.lanAddress());
+                channel.idleTimeout(45_000);links.add(this);feed.addListener(listener);kick();
                 workers.execute(this::push);
                 while(!closed){
                     var frame=read();
                     switch(frame.kind){
                         case Frames.REQUEST->workers.execute(()->respond(frame.body));
+                        case Frames.HTTP_REQUEST->workers.execute(()->proxyHttp(frame.body));
                         case Frames.WATCH->{var b=frame.body;watched=b.path("session").asText("");synchronized(wake){if(b.path("reset").asBoolean())reset=true;resumeSession=b.has("after")?watched:null;resumeAfter=b.path("after").asLong(-1);resumeRevision=b.path("messageRevision").asLong(-1);resumeLiveRun=b.path("liveRun").asLong(-1);resumeLiveOffset=b.path("liveOffset").asInt(0);tail=Math.max(10,Math.min(300,b.path("tail").asInt(TAIL)));dirty=true;wake.notifyAll();}}
                         case Frames.PING->send(Frames.PONG,Json.object());
                         default->{}
                     }
                 }
-            }catch(Exception e){ /* the phone left or the frame was invalid; the link ends */ }
+            }catch(Exception e){if(channel.remote())System.err.println("Cloudflare phone link ended: "+e);}
             finally{feed.removeListener(listener);links.remove(this);close();}
         }
-        private Frame read()throws IOException{byte[] raw=Frames.read(in);if(raw.length<2)throw new IOException("Empty frame");return new Frame(raw[0]&255,reader.decode(raw,1));}
-        private void send(int kind,JsonNode body)throws IOException{synchronized(writer){Frames.write(out,writer.encode(kind,body));}}
+        private Frame read()throws IOException{byte[] raw=channel.read();if(raw.length<2)throw new IOException("Empty frame");return new Frame(raw[0]&255,reader.decode(raw,1));}
+        private void send(int kind,JsonNode body)throws IOException{synchronized(writer){channel.send(writer.encode(kind,body));}}
         private void kick(){synchronized(wake){dirty=true;wake.notifyAll();}}
-        void close(){try{socket.close();}catch(IOException ignored){}synchronized(wake){dirty=true;wake.notifyAll();}}
+        void close(){channel.close();synchronized(wake){dirty=true;wake.notifyAll();}}
         private void respond(JsonNode request){
             int id=request.path("id").asInt();
             try{var result=api(request.path("post").asBoolean()?"POST":"GET",request.path("path").asText(),request.hasNonNull("body")?request.path("body"):null);send(Frames.RESPONSE,Json.object("id",id,"status",200,"result",result));}
             catch(Exception error){try{send(Frames.RESPONSE,Json.object("id",id,"status",status(error),"error",message(error)));}catch(IOException ignored){}}
         }
+        private void proxyHttp(JsonNode request){
+            int id=request.path("id").asInt();HttpURLConnection connection=null;
+            try{
+                String path=request.path("path").asText();if(!path.startsWith("/")||path.startsWith("//"))throw new IOException("Invalid path");
+                connection=(HttpURLConnection)new URL("http://127.0.0.1:"+httpPort()+path).openConnection();
+                connection.setConnectTimeout(5_000);connection.setReadTimeout(300_000);connection.setInstanceFollowRedirects(false);
+                String method=request.path("method").asText("GET");connection.setRequestMethod(method);boolean service=path.startsWith(PhoneServices.PREFIX);
+                if(!service)connection.setRequestProperty("Authorization","Bearer "+deviceToken);
+                if(request.path("headers").isObject())for(var header:request.path("headers").properties())if(header.getKey().equalsIgnoreCase("Content-Type")||header.getKey().equalsIgnoreCase("Range")||service&&header.getKey().equalsIgnoreCase("Authorization"))connection.setRequestProperty(header.getKey(),header.getValue().asText());
+                byte[] body=request.path("body").isBinary()?request.path("body").binaryValue():new byte[0];
+                if(body.length>0){connection.setDoOutput(true);connection.setFixedLengthStreamingMode(body.length);try(var output=connection.getOutputStream()){output.write(body);}}
+                int status=connection.getResponseCode();long size=connection.getContentLengthLong();String contentType=Objects.toString(connection.getContentType(),"application/octet-stream");
+                boolean large=size>1_000_000||path.equals("/apk")||path.equals("/tethium.apk")||path.matches("/apps/[a-f0-9]{64}\\.apk");
+                if(channel.remote()&&large&&!request.path("approved").asBoolean()){
+                    send(Frames.HTTP_RESPONSE,Json.object("id",id,"status",428,"size",Math.max(0,size),"contentType",contentType,"error","Подтвердите передачу по Cloudflare","done",true));return;
+                }
+                InputStream stream=status<400?connection.getInputStream():connection.getErrorStream();
+                if(stream==null){send(Frames.HTTP_RESPONSE,Json.object("id",id,"status",status,"size",Math.max(0,size),"contentType",contentType,"done",true));return;}
+                try(stream){byte[] buffer=new byte[256<<10];boolean first=true;for(int count;(count=stream.read(buffer))>=0;){if(count==0)continue;byte[] chunk=Arrays.copyOf(buffer,count);send(Frames.HTTP_RESPONSE,Json.object("id",id,"status",status,"size",Math.max(0,size),"contentType",contentType,"contentDisposition",Objects.toString(connection.getHeaderField("Content-Disposition"),""),"body",chunk,"done",false,"first",first));first=false;}send(Frames.HTTP_RESPONSE,Json.object("id",id,"status",status,"size",Math.max(0,size),"contentType",contentType,"done",true,"first",first));}
+            }catch(Exception error){try{send(Frames.HTTP_RESPONSE,Json.object("id",id,"status",status(error),"error",message(error),"done",true));}catch(IOException ignored){}}
+            finally{if(connection!=null)connection.disconnect();}
+        }
         private void push(){
             try{
                 long lastPing=System.currentTimeMillis();
-                while(!socket.isClosed()&&!closed){
+                while(channel.open()&&!closed){
                     boolean changed,resync;
                     synchronized(wake){
                         long until=lastPing+10_000;
-                        while(!dirty&&!socket.isClosed()){long left=until-System.currentTimeMillis();if(left<=0)break;wake.wait(left);}
+                        while(!dirty&&channel.open()){long left=until-System.currentTimeMillis();if(left<=0)break;wake.wait(left);}
                         changed=dirty;resync=reset;dirty=false;reset=false;
                     }
-                    if(socket.isClosed())return;
+                    if(!channel.open())return;
                     // Ping on a fixed cadence even while deltas flow: the pong is the only traffic a quiet phone sends,
                     // and the reader's timeout would otherwise drop a busy link every 45 seconds.
                     if(System.currentTimeMillis()-lastPing>=10_000){send(Frames.PING,Json.object("now",System.currentTimeMillis()));lastPing=System.currentTimeMillis();}
@@ -249,6 +277,7 @@ public final class MobileGateway implements AutoCloseable {
         if(target==null||!target.startsWith("/")||target.startsWith("//"))throw new IllegalArgumentException("Некорректный путь");
         String path=target.split("\\?",2)[0];boolean post=method.equals("POST");
         if(path.equals("/remote/version")&&!post)return remoteVersion();
+        if(path.equals("/gateway/status")&&!post)return Json.object("relay",relay.status(),"traffic",traffic.snapshot());
         if(path.equals("/uac")&&!post)return uac.snapshot();
         if(path.equals("/uac/answer")&&post)return uac.answer(body==null?Json.object():body);
         if(path.equals("/apps")&&!post){
@@ -288,6 +317,7 @@ public final class MobileGateway implements AutoCloseable {
                 if(!file.startsWith(project)&&!file.startsWith(directory)&&!ownedMedia(file,session.path("id").asText())&&!feed.mentions(session.path("id").asText(),file))throw new IllegalArgumentException("Файл вне проекта");
                 if(!file.getFileName().toString().toLowerCase(Locale.ROOT).matches(".*\\.(md|markdown|html?|svg|png|jpe?g|gif|webp)$"))throw new IllegalArgumentException("Этот формат не поддерживается в просмотре");
             }
+            if(body.path("thumbnail").asBoolean())file=thumbnail(file);
             String key=random();
             previews.entrySet().removeIf(x->x.getValue().expires<System.currentTimeMillis());previews.put(key,new Preview(file.getParent(),System.currentTimeMillis()+3600_000));
             return Json.object("path","/preview/"+key+"/"+new URI(null,null,file.getFileName().toString(),null).toASCIIString());
@@ -311,7 +341,16 @@ public final class MobileGateway implements AutoCloseable {
         }
         throw new NoSuchElementException("Unknown endpoint");
     }
-    private static boolean allowed(String path){return path.matches("/project-groups/[a-zA-Z0-9-]+/(rename|collapsed|remove)")||path.equals("/project-groups")||path.matches("/projects/[a-zA-Z0-9-]+/(collapsed|parent)")||path.matches("/reminders/[a-zA-Z0-9-]+/(snooze|done|remove)")||path.equals("/projects")||path.equals("/projects/order")||path.equals("/backlog")||path.equals("/backlog-settings")||path.matches("/backlog/[a-zA-Z0-9-]+/(update|remove|start)")||path.equals("/resources")||path.equals("/quota/refresh")||path.equals("/quota/reset")||path.equals("/claude/auth/login")||path.equals("/sessions")||path.equals("/answer")||path.matches("/projects/[a-zA-Z0-9-]+/(files|active|sessions-order)")||path.matches("/files/[a-zA-Z0-9-]+/(rename|remove)")||path.matches("/sessions/[a-zA-Z0-9-]+/(run|interrupt|stop|queue-pause|queue-resume|queue-remove|queue-move|queue-take|queue-merge|queue-split|active|rename|settings|seen|attention|quota-auto|autonomy|schedule|pinned-file|trash|restore|purge)");}
+    private Path thumbnail(Path source)throws Exception{
+        String name=source.getFileName().toString().toLowerCase(Locale.ROOT);if(!name.matches(".*\\.(png|jpe?g|gif|webp)$"))return source;
+        long size=Files.size(source);var image=javax.imageio.ImageIO.read(source.toFile());if(image==null)return source;
+        int width=image.getWidth(),height=image.getHeight();if(width<=320&&height<=320&&size<=48_000)return source;
+        String key=sha((source.toRealPath()+":"+size+":"+Files.getLastModifiedTime(source).toMillis()).getBytes(StandardCharsets.UTF_8));Path folder=Files.createDirectories(data.resolve("thumbnails")),target=folder.resolve(key+".jpg");if(Files.isRegularFile(target))return target;
+        double scale=Math.min(1d,320d/Math.max(width,height));int w=Math.max(1,(int)Math.round(width*scale)),h=Math.max(1,(int)Math.round(height*scale));
+        var thumb=new java.awt.image.BufferedImage(w,h,java.awt.image.BufferedImage.TYPE_INT_RGB);var graphics=thumb.createGraphics();try{graphics.setColor(new java.awt.Color(24,27,32));graphics.fillRect(0,0,w,h);graphics.setRenderingHint(java.awt.RenderingHints.KEY_INTERPOLATION,java.awt.RenderingHints.VALUE_INTERPOLATION_BILINEAR);graphics.drawImage(image,0,0,w,h,null);}finally{graphics.dispose();}
+        Path temp=Files.createTempFile(folder,"thumb-",".tmp");try{var writers=javax.imageio.ImageIO.getImageWritersByFormatName("jpeg");var writer=writers.next();try(var output=javax.imageio.ImageIO.createImageOutputStream(temp.toFile())){writer.setOutput(output);var params=writer.getDefaultWriteParam();params.setCompressionMode(javax.imageio.ImageWriteParam.MODE_EXPLICIT);params.setCompressionQuality(.68f);writer.write(null,new javax.imageio.IIOImage(thumb,null,null),params);}finally{writer.dispose();}Files.move(temp,target,StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}finally{Files.deleteIfExists(temp);}return target;
+    }
+    private static boolean allowed(String path){return path.matches("/project-groups/[a-zA-Z0-9-]+/(rename|collapsed|remove)")||path.equals("/project-groups")||path.equals("/project-tree/order")||path.equals("/favorites/order")||path.matches("/projects/[a-zA-Z0-9-]+/(collapsed|parent|favorite)")||path.matches("/reminders/[a-zA-Z0-9-]+/(snooze|done|remove)")||path.equals("/projects")||path.equals("/projects/order")||path.equals("/backlog")||path.equals("/backlog-settings")||path.matches("/backlog/[a-zA-Z0-9-]+/(update|remove|start)")||path.equals("/resources")||path.equals("/quota/refresh")||path.equals("/quota/reset")||path.equals("/claude/auth/login")||path.equals("/sessions")||path.equals("/answer")||path.matches("/projects/[a-zA-Z0-9-]+/(files|active|sessions-order)")||path.matches("/files/[a-zA-Z0-9-]+/(rename|remove)")||path.matches("/sessions/[a-zA-Z0-9-]+/(run|interrupt|stop|queue-pause|queue-resume|queue-remove|queue-move|queue-take|queue-merge|queue-split|active|rename|settings|seen|attention|favorite|quota-auto|autonomy|schedule|pinned-file|trash|restore|purge)");}
     private static int status(Exception e){return e instanceof SecurityException?401:e instanceof NoSuchElementException?404:400;}
     private static String message(Exception e){return Objects.toString(e.getMessage(),"Ошибка подключения");}
     private JsonNode upload(JsonNode body)throws Exception{
@@ -403,5 +442,5 @@ public final class MobileGateway implements AutoCloseable {
     private static String random(){byte[] bytes=new byte[32];new SecureRandom().nextBytes(bytes);return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);}
     private static boolean equal(String a,String b){return MessageDigest.isEqual(a.getBytes(StandardCharsets.UTF_8),b.getBytes(StandardCharsets.UTF_8));}
     public static String sha(byte[] bytes){try{return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));}catch(Exception e){throw new IllegalStateException(e);}}
-    public void close(){closed=true;try{link.close();}catch(IOException ignored){}for(var l:List.copyOf(links))l.close();http.stop(0);workers.shutdownNow();adb.close();services.close();uac.close();}
+    public void close(){closed=true;try{link.close();}catch(IOException ignored){}for(var l:List.copyOf(links))l.close();relay.close();traffic.close();http.stop(0);workers.shutdownNow();adb.close();services.close();uac.close();}
 }

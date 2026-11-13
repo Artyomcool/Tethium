@@ -130,11 +130,14 @@ public final class WorkspaceFrame extends JFrame {
     private JsonNode pendingTake;
     private final Runnable onClose;
     private final javax.swing.Timer draftTimer;
-    record Node(String id, String title, boolean project, boolean running, String status, String path, String attention,boolean file,int pausedQueued,int backlog,boolean group) {
-        Node(String id,String title,boolean project,boolean running,String status,String path,String attention){this(id,title,project,running,status,path,attention,false,0,0,false);}
-        Node(String id,String title,boolean project,boolean running,String status,String path,String attention,boolean file){this(id,title,project,running,status,path,attention,file,0,0,false);}
-        Node(String id,String title,boolean project,boolean running,String status,String path,String attention,boolean file,int pausedQueued,int backlog){this(id,title,project,running,status,path,attention,file,pausedQueued,backlog,false);}
-        static Node group(String id,String title){return new Node(id,title,false,false,"","Группа проектов","",false,0,0,true);}
+    record Node(String id, String title, boolean project, boolean running, String status, String path, String attention,boolean file,int pausedQueued,int backlog,boolean group,boolean favoriteCopy,boolean favoriteGroup,String directSession) {
+        Node(String id,String title,boolean project,boolean running,String status,String path,String attention){this(id,title,project,running,status,path,attention,false,0,0,false,false,false,"");}
+        Node(String id,String title,boolean project,boolean running,String status,String path,String attention,boolean file){this(id,title,project,running,status,path,attention,file,0,0,false,false,false,"");}
+        Node(String id,String title,boolean project,boolean running,String status,String path,String attention,boolean file,int pausedQueued,int backlog){this(id,title,project,running,status,path,attention,file,pausedQueued,backlog,false,false,false,"");}
+        static Node group(String id,String title){return new Node(id,title,false,false,"","Группа проектов","",false,0,0,true,false,false,"");}
+        static Node favorites(){return new Node("$favorites","Избранное",false,false,"","Закреплённая группа проектов","",false,0,0,true,false,true,"");}
+        Node asFavoriteCopy(){return new Node(id,title,project,running,status,path,attention,file,pausedQueued,backlog,group,true,false,directSession);}
+        Node direct(String session){return new Node(id,title,project,running,status,path,attention,file,pausedQueued,backlog,group,favoriteCopy,favoriteGroup,session==null?"":session);}
         public String toString() { return title; }
     }
     private record Artifact(String title, Path path) { public String toString() { return title; } }
@@ -165,27 +168,37 @@ public final class WorkspaceFrame extends JFrame {
     private JTree tree() {
         var tree = new JTree(new DefaultMutableTreeNode("root")) {
             @Override public boolean getScrollableTracksViewportWidth() { return true; }
-            @Override protected void paintComponent(Graphics g){super.paintComponent(g);paintTreeIndicators(this,g);}
+            @Override protected void paintComponent(Graphics g){
+                paintTreeBackground(this,g,WorkspaceFrame.this.selected,selectedProject,selectedFile);
+                super.paintComponent(g);
+                paintTreeIndicators(this,g);
+            }
             @Override public String getToolTipText(MouseEvent event){String resource=resourceTooltip(this,event);return resource==null?super.getToolTipText(event):resource;}
         };
+        // The tree paints its own complete background and selection rows. Renderer widths change while
+        // the model, nesting and project widgets are rebuilt; using an opaque renderer for selection
+        // therefore made the highlight alternate between text width and viewport width.
+        tree.setOpaque(false);
         tree.setRootVisible(false); tree.setShowsRootHandles(true); tree.setRowHeight(28);
+        configureTreeIndent(tree);
         tree.setExpandsSelectedPaths(false);
         installReordering(tree);
         tree.addComponentListener(new ComponentAdapter(){int lastWidth;@Override public void componentResized(ComponentEvent event){if(lastWidth!=tree.getWidth()){lastWidth=tree.getWidth();tree.treeDidChange();}}});
-        tree.setBorder(new EmptyBorder(Theme.UNIT, Theme.UNIT, Theme.UNIT, Theme.UNIT)); tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
+        tree.getSelectionModel().setSelectionMode(TreeSelectionModel.SINGLE_TREE_SELECTION);
         tree.setCellRenderer(new DefaultTreeCellRenderer() {
             private final ResourceBars rowPanel = new ResourceBars();
             @Override public Component getTreeCellRendererComponent(JTree t, Object value, boolean selected, boolean expanded, boolean leaf, int row, boolean focus) {
                 var label = (JLabel) super.getTreeCellRendererComponent(t, value, selected, expanded, leaf, row, focus);
-                label.setIcon(null); setBackgroundNonSelectionColor(Theme.SIDEBAR); setBackgroundSelectionColor(Theme.SELECTED); setBorderSelectionColor(Theme.SELECTED);
+                label.setIcon(null); setBackgroundNonSelectionColor(null); setBackgroundSelectionColor(null); setBorderSelectionColor(null);
                 var user = ((DefaultMutableTreeNode) value).getUserObject();
                 if (user instanceof Node n) {
                     label.setText(n.title); label.setFont(n.project||n.group?projectFont(t):t.getFont().deriveFont(Font.PLAIN));
-                    label.setIcon(null);
+                    label.setIcon(null);label.setOpaque(false);
                     label.setForeground(n.running ? Theme.ACCENT : n.status.equals("FAILED") ? Theme.RED : n.group?Theme.MUTED:Theme.TEXT);
-                    label.setToolTipText(n.path); label.setBorder(new EmptyBorder(0, (n.project||n.group?Theme.UNIT/2:Theme.UNIT)+22+Theme.GAP, 0, Theme.UNIT));
-                    rowPanel.removeAll(); rowPanel.setBackground(selected?Theme.SELECTED:Theme.SIDEBAR); rowPanel.add(label);
-                    rowPanel.add(Box.createHorizontalStrut(n.group?Theme.UNIT:backlogWidth(label,shownBacklog(t,t.getPathForRow(row),n))+(n.pausedQueued>0?Theme.GUTTER*2:n.project?Theme.GAP:Theme.GUTTER)+(n.project&&expanded&&projectWidgets.available(projects.get(n.id),"right")?rightWidgetWidth(projects.get(n.id))+2+(n.pausedQueued==0&&!shownAttention(t,t.getPathForRow(row),n).isEmpty()?12:0):0)),BorderLayout.EAST);
+                    int left=(n.project||n.group?Theme.UNIT/2:Theme.UNIT)+22+Theme.GAP;
+                    label.setToolTipText(n.path); label.setBorder(new EmptyBorder(0,left,0,Theme.UNIT));
+                    rowPanel.removeAll();rowPanel.setOpaque(false);rowPanel.add(label);
+                    rowPanel.add(Box.createHorizontalStrut(n.group?Theme.UNIT:backlogWidth(label,shownBacklog(t,t.getPathForRow(row),n))+(n.pausedQueued>0?Theme.GUTTER*2:n.project?Theme.GAP:Theme.GUTTER)+(n.project&&(expanded||n.favoriteCopy)&&projectWidgets.available(projects.get(n.id),"right")?rightWidgetWidth(projects.get(n.id))+2+(n.pausedQueued==0&&!shownAttention(t,t.getPathForRow(row),n).isEmpty()?12:0):0)),BorderLayout.EAST);
                     // One line per fact: path, attention, paused queue, then each project widget with its error (if any).
                     var hint=new StringBuilder("<html>").append(escapeHtml(n.path));
                     if(!n.attention.isEmpty())hint.append("<br>").append(n.attention.equals("question")?"Ждёт ответа":n.attention.equals("manual")?"Отмечено: требует внимания":"Работа завершена · новый результат");
@@ -198,7 +211,7 @@ public final class WorkspaceFrame extends JFrame {
                     hint.append("</html>");rowPanel.setToolTipText(hint.toString());label.setToolTipText(hint.toString());
                     rowPanel.setPreferredSize(null); var size=rowPanel.getPreferredSize();
                     if(t.getWidth()>0)size.width=Math.max(48,t.getWidth()-((DefaultMutableTreeNode)value).getLevel()*treeIndent(t)-t.getInsets().left-t.getInsets().right);
-                    boolean below=n.project&&expanded&&projectWidgets.available(projects.get(n.id),"bottom");
+                    boolean below=n.project&&(expanded||n.favoriteCopy)&&projectWidgets.available(projects.get(n.id),"bottom");
                     rowPanel.setBorder(new EmptyBorder(0,0,below?12:ResourceBars.HEIGHT+1,0));size.height=28;
                     rowPanel.setPreferredSize(size);return rowPanel;
                 }
@@ -211,18 +224,52 @@ public final class WorkspaceFrame extends JFrame {
         });
         ToolTipManager.sharedInstance().registerComponent(tree); return tree;
     }
+    static boolean treeRowHighlighted(Node n,boolean pathSelected,String session,String project,String file){
+        if(pathSelected)return true;
+        if(n.file)return Objects.equals(n.id,file);
+        if(n.project){
+            if(!n.directSession.isBlank()&&Objects.equals(n.directSession,session))return true;
+            return n.directSession.isBlank()&&Objects.equals(n.id,project);
+        }
+        return !n.group&&Objects.equals(n.id,session);
+    }
+    static void paintTreeBackground(JTree tree,Graphics g,String session,String project,String file){
+        Rectangle clip=g.getClipBounds();if(clip==null)clip=new Rectangle(0,0,tree.getWidth(),tree.getHeight());
+        g.setColor(Theme.SIDEBAR);g.fillRect(clip.x,clip.y,clip.width,clip.height);
+        if(tree.getRowCount()==0)return;
+        int first=Math.max(0,tree.getClosestRowForLocation(0,clip.y));
+        for(int row=first;row<tree.getRowCount();row++){
+            Rectangle bounds=tree.getRowBounds(row);if(bounds==null||bounds.y>clip.y+clip.height)break;
+            var path=tree.getPathForRow(row);var value=((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject();
+            if(value instanceof Node n&&treeRowHighlighted(n,tree.isPathSelected(path),session,project,file)){
+                g.setColor(Theme.SELECTED);g.fillRect(0,bounds.y,tree.getWidth(),bounds.height);
+            }
+        }
+    }
+    static void configureTreeIndent(JTree tree){
+        // BasicTreeUI normally uses one value both for the first row's left position and
+        // for every following level (20 px here). Keep the original 24 px first-row
+        // position and disclosure gutter, but make subsequent levels only 5 px deeper.
+        // A negative left half is intentional: together with the 12 px disclosure half
+        // it produces a 5 px level step without making the arrow overlap the row content.
+        if(tree.getUI() instanceof javax.swing.plaf.basic.BasicTreeUI ui){ui.setLeftChildIndent(-7);ui.setRightChildIndent(12);}
+        tree.setBorder(new EmptyBorder(Theme.UNIT,19,Theme.UNIT,Theme.UNIT));
+    }
     private static int treeIndent(JTree tree){return tree.getUI() instanceof javax.swing.plaf.basic.BasicTreeUI ui?ui.getLeftChildIndent()+ui.getRightChildIndent():20;}
     private static Font projectFont(JTree tree){return tree.getFont().deriveFont(Font.BOLD,Math.max(11f,tree.getFont().getSize2D()-1));}
+    static boolean favoriteSelected(Node node,String session){return node.favoriteCopy&&(Objects.equals(session,node.directSession)||!node.project&&Objects.equals(session,node.id));}
     private int rightWidgetWidth(JsonNode project){return Math.min(96,projectWidgets.preferredWidth(project,"right",26));}
-    /** Drag and drop reorders projects among projects and sessions among their siblings; nothing moves between projects. */
+    /** Drag and drop reorders mixed project/group siblings or sessions; nesting itself is changed explicitly from the menu. */
     private void installReordering(JTree tree){
         tree.setDragEnabled(true);tree.setDropMode(DropMode.INSERT);
         tree.setTransferHandler(new TransferHandler(){
             @Override public int getSourceActions(JComponent c){return MOVE;}
             @Override protected java.awt.datatransfer.Transferable createTransferable(JComponent c){
                 var path=tree.getSelectionPath();if(path==null)return null;
-                if(!(((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject() instanceof Node n)||n.file||n.group)return null;
-                return new java.awt.datatransfer.StringSelection((n.project?"project:":"session:")+n.id);
+                var treeNode=(DefaultMutableTreeNode)path.getLastPathComponent();
+                if(!(treeNode.getUserObject() instanceof Node n)||n.file||n.favoriteGroup)return null;
+                if(n.favoriteCopy){var parent=(DefaultMutableTreeNode)treeNode.getParent();if(parent==null||!(parent.getUserObject() instanceof Node p&&p.favoriteGroup))return null;return new java.awt.datatransfer.StringSelection("favorite:"+n.id);}
+                return new java.awt.datatransfer.StringSelection((n.group?"group:":n.project?"project:":"session:")+n.id);
             }
             @Override public boolean canImport(TransferSupport support){return support.isDrop()&&reorderTarget(tree,support)!=null;}
             @Override public boolean importData(TransferSupport support){
@@ -231,22 +278,30 @@ public final class WorkspaceFrame extends JFrame {
             }
         });
     }
-    /** Returns {endpoint, comma-separated ids in new order} for a drop, or null when the drop would change nesting or cross projects. */
+    /** Returns {endpoint, comma-separated ids in new order} for a drop, or null when the drop would change nesting. */
     private static String[] reorderTarget(JTree tree,TransferHandler.TransferSupport support){
         String dragged;
         try{dragged=(String)support.getTransferable().getTransferData(java.awt.datatransfer.DataFlavor.stringFlavor);}catch(Exception e){return null;}
         if(dragged==null||!dragged.contains(":"))return null;
-        boolean project=dragged.startsWith("project:");String id=dragged.substring(dragged.indexOf(':')+1);
+        String type=dragged.substring(0,dragged.indexOf(':'));boolean catalog=type.equals("project")||type.equals("group");String id=dragged.substring(dragged.indexOf(':')+1);
         var drop=(JTree.DropLocation)support.getDropLocation();if(drop==null||drop.getPath()==null||drop.getChildIndex()<0)return null;
         var parent=(DefaultMutableTreeNode)drop.getPath().getLastPathComponent();
+        if(type.equals("favorite")){
+            if(!(parent.getUserObject() instanceof Node group&&group.favoriteGroup))return null;
+            DefaultMutableTreeNode source=null;for(int i=0;i<parent.getChildCount();i++){var child=(DefaultMutableTreeNode)parent.getChildAt(i);if(child.getUserObject() instanceof Node n&&n.favoriteCopy&&n.project&&n.id.equals(id))source=child;}
+            if(source==null)return null;var children=new ArrayList<DefaultMutableTreeNode>();for(int i=0;i<parent.getChildCount();i++)children.add((DefaultMutableTreeNode)parent.getChildAt(i));
+            int from=children.indexOf(source),to=drop.getChildIndex();if(to>from)to--;children.remove(source);children.add(Math.min(to,children.size()),source);
+            var ids=new ArrayList<String>();for(var child:children)if(child.getUserObject() instanceof Node n&&n.favoriteCopy&&n.project)ids.add(n.id);
+            return new String[]{"/favorites/order",String.join(",",ids)};
+        }
         DefaultMutableTreeNode source=null;
-        for(var e=((DefaultMutableTreeNode)tree.getModel().getRoot()).depthFirstEnumeration();e.hasMoreElements();){var n=(DefaultMutableTreeNode)e.nextElement();if(n.getUserObject() instanceof Node node&&node.project==project&&!node.file&&node.id.equals(id))source=n;}
+        for(var e=((DefaultMutableTreeNode)tree.getModel().getRoot()).depthFirstEnumeration();e.hasMoreElements();){var n=(DefaultMutableTreeNode)e.nextElement();if(n.getUserObject() instanceof Node node&&!node.file&&!node.favoriteCopy&&!node.favoriteGroup&&node.id.equals(id)&&((type.equals("group")&&node.group)||(type.equals("project")&&node.project)||(type.equals("session")&&!node.group&&!node.project)))source=n;}
         if(source==null||source.getParent()!=parent)return null; // only among the current siblings
         var children=new ArrayList<DefaultMutableTreeNode>();for(int i=0;i<parent.getChildCount();i++)children.add((DefaultMutableTreeNode)parent.getChildAt(i));
         int from=children.indexOf(source),to=drop.getChildIndex();if(to>from)to--;
         children.remove(source);children.add(Math.min(to,children.size()),source);
         var ids=new ArrayList<String>();
-        if(project){for(var c:children)if(c.getUserObject() instanceof Node n&&n.project)ids.add(n.id);return new String[]{"/projects/order",String.join(",",ids)};}
+        if(catalog){for(var c:children)if(c.getUserObject() instanceof Node n&&(n.project||n.group))ids.add((n.group?"group:":"project:")+n.id);return new String[]{"/project-tree/order",String.join(",",ids)};}
         var projectNode=parent;while(projectNode!=null&&!(projectNode.getUserObject() instanceof Node n&&n.project))projectNode=(DefaultMutableTreeNode)projectNode.getParent();
         if(projectNode==null)return null;
         collectSessions(projectNode,parent,children,ids);
@@ -278,11 +333,14 @@ public final class WorkspaceFrame extends JFrame {
         for(int row=Math.max(0,tree.getClosestRowForLocation(0,clip.y));row<tree.getRowCount();row++){
             Rectangle bounds=tree.getRowBounds(row);if(bounds==null||bounds.y>clip.y+clip.height)break;
             var path=tree.getPathForRow(row);var value=((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject();
-            if(!(value instanceof Node n))continue;var icon=n.group?Theme.icon("folder"):n.file?Theme.icon("attachment"):n.project?IdentityIcons.ofProject(n.id,n.title,n.path):IdentityIcons.of(false,n.title,n.path);int iconX=bounds.x+(n.project||n.group?Theme.UNIT/2:Theme.UNIT)+(22-icon.getIconWidth())/2,iconY=bounds.y+(bounds.height-icon.getIconHeight())/2;icon.paintIcon(tree,g,iconX,iconY);if(n.project)paintProjectBadge(tree,g,iconX+icon.getIconWidth()-7,iconY+icon.getIconHeight()-7,tree.isRowSelected(row));if(n.file||n.group)continue;
-            if(!n.project||!tree.isExpanded(path))ResourceBars.paint(g,x,bounds.y+bounds.height,Math.max(0,right-x),ResourceBars.share(resourceUsage,machineUsage,resourceControl,n.id,n.project));
+            if(!(value instanceof Node n))continue;
+            var icon=n.favoriteGroup?IdentityIcons.named("group-favorites"):n.group?IdentityIcons.group(n.title):n.file?Theme.icon("attachment"):n.project?IdentityIcons.ofProject(n.id,n.title,n.path):IdentityIcons.of(false,n.title,n.path);int iconX=bounds.x+(n.project||n.group?Theme.UNIT/2:Theme.UNIT)+(22-icon.getIconWidth())/2,iconY=bounds.y+(bounds.height-icon.getIconHeight())/2;icon.paintIcon(tree,g,iconX,iconY);
+            if(n.file||n.group)continue;
+            boolean favoriteBottom=n.project&&n.favoriteCopy&&projectWidgets.available(projects.get(n.id),"bottom");
+            if(!n.project||!tree.isExpanded(path)&&!favoriteBottom)ResourceBars.paint(g,x,bounds.y+bounds.height,Math.max(0,right-x),ResourceBars.share(resourceUsage,machineUsage,resourceControl,n.id,n.project));
             int deferred=shownBacklog(tree,path,n);String dotted=shownAttention(tree,path,n);
             if(deferred>0){var label=backlogBounds(tree,n,deferred,dotted,bounds);var fm=tree.getFontMetrics(tree.getFont());g.setFont(tree.getFont());g.setColor(Theme.MUTED);g.drawString("["+deferred+"]",label.x,bounds.y+(bounds.height+fm.getAscent()-fm.getDescent())/2-3);}
-            if(n.project&&tree.isExpanded(path)&&projectWidgets.available(projects.get(n.id))){
+            if(n.project&&(tree.isExpanded(path)||n.favoriteCopy)&&projectWidgets.available(projects.get(n.id))){
                 var project=projects.get(n.id);int start=bounds.x+Theme.UNIT/2+22+Theme.GAP,edge=right-(n.pausedQueued>0?28:!dotted.isEmpty()?12:0)-backlogWidth(tree,deferred);
                 if(projectWidgets.available(project,"right")){
                     int textWidth=tree.getFontMetrics(projectFont(tree)).stringWidth(n.title),widgetWidth=rightWidgetWidth(project);
@@ -301,18 +359,12 @@ public final class WorkspaceFrame extends JFrame {
             if(n.pausedQueued>0){int y=bounds.y+(bounds.height-8)/2-3;g.setColor(Theme.AMBER);g.fillRect(right-22,y,2,8);g.fillRect(right-17,y,2,8);}
         }
     }
-    /** Project identity remains the dominant icon; this tiny folder corner distinguishes its row from a session. */
-    private static void paintProjectBadge(JTree tree,Graphics graphics,int x,int y,boolean selected){
-        var g=(Graphics2D)graphics.create();try{
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setColor(selected?Theme.SELECTED:Theme.SIDEBAR);g.fillRoundRect(x-1,y-1,10,10,4,4);
-            g.setColor(Theme.MUTED);g.fillRoundRect(x,y+2,8,6,2,2);g.fillRoundRect(x+1,y,4,4,2,2);
-        }finally{g.dispose();}
-    }
     private String expansionKey(JTree tree,String project){return (tree==inactive?"inactive:":"active:")+project;}
     private void rememberProjectExpansion(JTree tree,TreePath path,boolean collapsed){
         if(changingTree||disposed)return;
-        if(((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject() instanceof Node n&&n.group){
+        if(((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject() instanceof Node n&&n.favoriteGroup){
+            sessionViews.put("$favoritesCollapsed",Json.MAPPER.valueToTree(collapsed));persistViews();
+        }else if(((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject() instanceof Node n&&n.group){
             action(()->host.post("/project-groups/"+n.id+"/collapsed",Json.object("collapsed",collapsed)));
         }else if(((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject() instanceof Node n&&n.project){
             String key=expansionKey(tree,n.id);boolean changed=collapsed?collapsedProjects.add(key):collapsedProjects.remove(key);
@@ -346,13 +398,13 @@ public final class WorkspaceFrame extends JFrame {
             tree.addTreeSelectionListener(e -> {
                 if (changingTree) return;
                 var node = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent(); if (node == null || !(node.getUserObject() instanceof Node n)) return;
-                if(n.group)return;if (n.project) selectedProject = n.id; else if(n.file)selectDocument(n.id);else selectSession(n.id);
+                if(n.group)return;if(n.project&&!n.directSession.isBlank())selectSession(n.directSession);else if (n.project) selectedProject = n.id; else if(n.file)selectDocument(n.id);else selectSession(n.id);
             });
             tree.addMouseListener(new MouseAdapter() {
                 @Override public void mouseClicked(MouseEvent e) {
                     if(!SwingUtilities.isLeftMouseButton(e))return;int row=tree.getClosestRowForLocation(e.getX(),e.getY());var bounds=tree.getRowBounds(row);if(bounds==null)return;
                     var rowPath=tree.getPathForRow(row);if(!(((DefaultMutableTreeNode)rowPath.getLastPathComponent()).getUserObject() instanceof Node n))return;
-                    if(!n.group&&shownBacklog(tree,rowPath,n)>0&&backlogBounds(tree,n,shownBacklog(tree,rowPath,n),shownAttention(tree,rowPath,n),bounds).contains(e.getPoint())){if(n.project)openBacklog(n.id,sessionIn(n.id));else openBacklog(sessions.get(n.id).path("projectId").asText(),n.id);return;}
+                    if(!n.group&&shownBacklog(tree,rowPath,n)>0&&backlogBounds(tree,n,shownBacklog(tree,rowPath,n),shownAttention(tree,rowPath,n),bounds).contains(e.getPoint())){if(n.project)openBacklog(n.id,n.directSession.isBlank()?sessionIn(n.id):n.directSession);else openBacklog(sessions.get(n.id).path("projectId").asText(),n.id);return;}
                     if(!n.group&&!n.project&&!n.file&&rowPath.equals(tree.getSelectionPath())&&bounds.y<=e.getY()&&e.getY()<bounds.y+bounds.height){
                         SwingUtilities.invokeLater(()->{if(Objects.equals(selected,n.id)&&selectedFile==null&&isActive()&&input.isShowing()&&input.isEnabled()){viewer.releaseFocus();input.requestFocusInWindow();}});
                     }
@@ -503,6 +555,7 @@ public final class WorkspaceFrame extends JFrame {
         tree.setSelectionPath(path); var n = (Node) ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
         var menu = new JPopupMenu();
         if(n.group){
+            if(n.favoriteGroup)return;
             var rename=new JMenuItem("Переименовать группу…");rename.addActionListener(e->{String title=JOptionPane.showInputDialog(this,"Название группы",n.title);if(title!=null&&!title.isBlank())action(()->host.post("/project-groups/"+n.id+"/rename",Json.object("title",title)));});menu.add(rename);
             var remove=new JMenuItem("Удалить группу…");remove.addActionListener(e->{if(JOptionPane.showConfirmDialog(this,"Удалить группу «"+n.title+"»?\nПроекты останутся и вернутся на верхний уровень.","Удаление группы",JOptionPane.YES_NO_OPTION)==JOptionPane.YES_OPTION)action(()->host.post("/project-groups/"+n.id+"/remove",Json.object()));});menu.add(remove);
             menu.show(tree,event.getX(),event.getY());return;
@@ -522,7 +575,10 @@ public final class WorkspaceFrame extends JFrame {
             var remove=new JMenuItem("Открепить файл");remove.addActionListener(e->unpinDocument(n.id));menu.add(remove);menu.show(tree,event.getX(),event.getY());return;
         }
         if(!n.project&&!n.file){var pinSession=new JMenuItem("Закрепить файл справа…");pinSession.addActionListener(e->choosePinnedFile(false));menu.add(pinSession);}
+        if(!n.project&&!n.file){var session=sessions.get(n.id);var project=projects.get(session.path("projectId").asText());boolean favorite=project!=null&&project.path("favoriteSessionId").asText().equals(n.id);var item=new JCheckBoxMenuItem("Сессия в избранном",favorite);item.setToolTipText("В проекте можно закрепить одну сессию; в избранном она показывается именем проекта");item.addActionListener(e->action(()->host.post("/sessions/"+n.id+"/favorite",Json.object("favorite",item.isSelected()))));menu.add(item);}
         if(n.project){var archive=new JMenuItem(projects.get(n.id).path("active").asBoolean(true)?"В неактивные весь проект":"Вернуть проект в активные");archive.addActionListener(e->action(()->host.post("/projects/"+n.id+"/active",Json.object("active",!projects.get(n.id).path("active").asBoolean(true)))));menu.add(archive);}
+        if(n.project){boolean favorite=projects.get(n.id).path("favorite").asBoolean();var item=new JCheckBoxMenuItem("В избранном",favorite);item.addActionListener(e->action(()->host.post("/projects/"+n.id+"/favorite",Json.object("favorite",item.isSelected()))));menu.add(item);}
+        if(n.project&&!n.directSession.isBlank()){boolean favorite=projects.get(n.id).path("favoriteSessionId").asText().equals(n.directSession);var item=new JCheckBoxMenuItem("Эта сессия в избранном",favorite);item.setToolTipText("Заменяет избранный проект или другую избранную сессию этого проекта");item.addActionListener(e->action(()->host.post("/sessions/"+n.directSession+"/favorite",Json.object("favorite",item.isSelected()))));menu.add(item);}
         if(n.project){var pin=new JMenuItem("Закрепить файл в проекте…");pin.addActionListener(e->choosePinnedFile(true));menu.add(pin);}
         if(n.project){var git=new JMenuItem("Изменения в Git…");git.addActionListener(e->GitDialog.open(this,host,n.id,projects.get(n.id).path("title").asText()));menu.add(git);}
         if(n.project){var move=new JMenuItem("Переместить проект…");move.addActionListener(e->moveProject(n.id));menu.add(move);var group=new JMenuItem("Новая группа проектов…");group.addActionListener(e->createProjectGroup());menu.add(group);}
@@ -698,7 +754,7 @@ public final class WorkspaceFrame extends JFrame {
             documents.put(id,Json.object("id",id,"projectId",pid,"title",panel.path("title"),"path",panel.path("path"),"panel",true,"config",panel));
         }
         syncCollapsed(state);
-        String signature = state.path("files").toString()+state.path("projectGroups").toString()+state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("projects").findValues("backlog") + state.path("sessions").findValues("backlog") + state.path("sessions").findValues("active") + state.path("sessions").findValues("technical") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
+        String signature = state.path("files").toString()+state.path("projectGroups").toString()+state.path("projectTreeOrder").toString()+state.path("favoriteOrder").toString()+state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("projects").findValues("backlog") + state.path("sessions").findValues("backlog") + state.path("sessions").findValues("active") + state.path("sessions").findValues("technical") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
         signature+=state.path("sessions").findValues("queuePaused").toString()+state.path("sessions").findValues("queued");
         if (!signature.equals(treeSignature)) { rebuildTrees(state); treeSignature = signature; }
         if (selectedProject == null && !projects.isEmpty()) selectedProject = projects.keySet().iterator().next();
@@ -781,12 +837,16 @@ public final class WorkspaceFrame extends JFrame {
                     boolean running=noticed.stream().anyMatch(s->s.path("running").asBoolean());
                     String attention=noticed.stream().anyMatch(s->s.path("attention").path("kind").asText().equals("question"))?"question":noticed.stream().anyMatch(s->s.path("attention").path("manual").asBoolean())?"manual":noticed.stream().anyMatch(s->!s.path("attention").path("kind").asText().isEmpty())?"finished":"";
                     int pausedQueued=noticed.stream().filter(s->s.path("queuePaused").asBoolean()).mapToInt(s->Math.max(0,s.path("queued").asInt())).sum();
-                    projectNodes.put(pid,new DefaultMutableTreeNode(new Node(pid, project.path("title").asText(), true, running, "", project.path("root").asText(),attention,false,pausedQueued,project.path("backlog").asInt())));
+                    var row=new Node(pid, project.path("title").asText(), true, running, "", project.path("root").asText(),attention,false,pausedQueued,project.path("backlog").asInt());
+                    projectNodes.put(pid,new DefaultMutableTreeNode(matching.size()==1?row.direct(matching.getFirst().path("id").asText()):row));
                     projectSessions.put(pid,matching);
                 }
-                for(var groupNode:groupNodes.values())root.add(groupNode);
-                for(var project:projects.values()){
-                    String pid=project.path("id").asText();var projectNode=projectNodes.get(pid);if(projectNode==null)continue;
+                var catalogOrder=new ArrayList<String>();for(var key:state.path("projectTreeOrder"))catalogOrder.add(key.asText());
+                for(String id:groupNodes.keySet())if(!catalogOrder.contains("group:"+id))catalogOrder.add("group:"+id);
+                for(String id:projectNodes.keySet())if(!catalogOrder.contains("project:"+id))catalogOrder.add("project:"+id);
+                for(String key:catalogOrder){
+                    if(key.startsWith("group:")){var node=groupNodes.get(key.substring(6));if(node!=null&&node.getParent()==null)root.add(node);continue;}
+                    if(!key.startsWith("project:"))continue;String pid=key.substring(8);var projectNode=projectNodes.get(pid);var project=projects.get(pid);if(projectNode==null||project==null||projectNode.getParent()!=null)continue;
                     String kind=project.path("parentKind").asText("root"),parent=project.path("parentId").asText();DefaultMutableTreeNode target=null;
                     if(kind.equals("group"))target=groupNodes.get(parent);else if(kind.equals("project"))target=projectNodes.get(parent);
                     (target==null?root:target).add(projectNode);
@@ -794,20 +854,41 @@ public final class WorkspaceFrame extends JFrame {
                 for(var project:projects.values()){
                     String pid=project.path("id").asText();var projectNode=projectNodes.get(pid);if(projectNode==null)continue;var matching=projectSessions.get(pid);boolean projectArchived=!project.path("active").asBoolean(true);
                     if(archived==projectArchived)for(var document:documents.values())if(document.path("projectId").asText().equals(pid)){var node=new DefaultMutableTreeNode(new Node(document.path("id").asText(),document.path("title").asText(),false,false,"",document.path("path").asText(),"",true));projectNode.add(node);if(document.path("id").asText().equals(selectedFile))selection=new TreePath(node.getPath());}
-                    var nodes = new LinkedHashMap<String, DefaultMutableTreeNode>();
-                    for (var s : matching) nodes.put(s.path("id").asText(), new DefaultMutableTreeNode(new Node(s.path("id").asText(), s.path("title").asText(), false, s.path("running").asBoolean()&&!s.path("technical").asBoolean(), s.path("technical").asBoolean()?"":s.path("status").asText(), s.path("directory").asText(),s.path("attention").path("kind").asText(),false,0,s.path("technical").asBoolean()?0:s.path("backlog").asInt())));
-                    for (var s : matching) { var n = nodes.get(s.path("id").asText()); var parent = nodes.get(s.path("parentId").asText()); (parent == null ? projectNode : parent).add(n); }
-                    for (var entry : nodes.entrySet()) if (entry.getKey().equals(selected)) selection = new TreePath(entry.getValue().getPath());
+                    if(matching.size()==1){if(matching.getFirst().path("id").asText().equals(selected))selection=new TreePath(projectNode.getPath());}
+                    else{
+                        var nodes = new LinkedHashMap<String, DefaultMutableTreeNode>();
+                        for (var s : matching) nodes.put(s.path("id").asText(), new DefaultMutableTreeNode(new Node(s.path("id").asText(), s.path("title").asText(), false, s.path("running").asBoolean()&&!s.path("technical").asBoolean(), s.path("technical").asBoolean()?"":s.path("status").asText(), s.path("directory").asText(),s.path("attention").path("kind").asText(),false,0,s.path("technical").asBoolean()?0:s.path("backlog").asInt())));
+                        for (var s : matching) { var n = nodes.get(s.path("id").asText()); var parent = nodes.get(s.path("parentId").asText()); (parent == null ? projectNode : parent).add(n); }
+                        for (var entry : nodes.entrySet()) if (entry.getKey().equals(selected)) selection = new TreePath(entry.getValue().getPath());
+                    }
+                }
+                if(!archived){
+                    var favorites=new DefaultMutableTreeNode(Node.favorites());
+                    var favoriteOrder=new ArrayList<String>();for(var id:state.path("favoriteOrder"))if(projects.containsKey(id.asText()))favoriteOrder.add(id.asText());
+                    for(var project:projects.values())if((project.path("favorite").asBoolean()||!project.path("favoriteSessionId").asText().isBlank())&&!favoriteOrder.contains(project.path("id").asText()))favoriteOrder.add(project.path("id").asText());
+                    for(String favoriteId:favoriteOrder){var project=projects.get(favoriteId);if(project==null)continue;
+                        String pid=project.path("id").asText(),shortcut=project.path("favoriteSessionId").asText();var original=projectNodes.get(pid);if(original==null)continue;
+                        if(!shortcut.isBlank()){
+                            JsonNode session=null;for(var candidate:projectSessions.getOrDefault(pid,List.of()))if(candidate.path("id").asText().equals(shortcut))session=candidate;
+                            if(session!=null){var row=new Node(pid,project.path("title").asText(),true,session.path("running").asBoolean()&&!session.path("technical").asBoolean(),"",project.path("root").asText(),session.path("attention").path("kind").asText(),false,session.path("queuePaused").asBoolean()?Math.max(0,session.path("queued").asInt()):0,session.path("technical").asBoolean()?0:session.path("backlog").asInt()).direct(shortcut).asFavoriteCopy();favorites.add(new DefaultMutableTreeNode(row));}
+                        }else if(project.path("favorite").asBoolean())favorites.add(favoriteCopy(original));
+                    }
+                    if(favorites.getChildCount()>0)root.insert(favorites,0);
                 }
                 // Empty groups stay visible in the active tree so a newly created group can be named,
                 // filled or removed immediately; they add no noise to the archive.
                 if(archived)for(var groupNode:groupNodes.values())if(groupNode.getChildCount()==0)root.remove(groupNode);
                 tree.setModel(new DefaultTreeModel(root));
-                for (int i = 0; i < tree.getRowCount(); i++) { var path = tree.getPathForRow(i); var n = (DefaultMutableTreeNode) path.getLastPathComponent(); if (n.getUserObject() instanceof Node node && (node.group?!projectGroups.get(node.id).path("collapsed").asBoolean():!node.project||!collapsedProjects.contains(expansionKey(tree,node.id)))) tree.expandPath(path); }
+                for (int i = 0; i < tree.getRowCount(); i++) { var path = tree.getPathForRow(i); var n = (DefaultMutableTreeNode) path.getLastPathComponent(); if (n.getUserObject() instanceof Node node && (node.favoriteGroup?!sessionViews.getOrDefault("$favoritesCollapsed",Json.MAPPER.getNodeFactory().booleanNode(false)).asBoolean():node.group?!projectGroups.get(node.id).path("collapsed").asBoolean():!node.project||!collapsedProjects.contains(expansionKey(tree,node.id)))) tree.expandPath(path); }
                 if (selection != null) tree.setSelectionPath(selection);
             }
             long count = sessions.values().stream().filter(s -> !s.path("active").asBoolean()||!projects.get(s.path("projectId").asText()).path("active").asBoolean(true)).count(); archiveToggle.setText((inactiveOpen ? "⌄ " : "› ") + "Неактивные  " + count);
         } finally { changingTree = false; }
+    }
+    private static DefaultMutableTreeNode favoriteCopy(DefaultMutableTreeNode original){
+        var node=new DefaultMutableTreeNode(((Node)original.getUserObject()).asFavoriteCopy());
+        for(int i=0;i<original.getChildCount();i++)node.add(favoriteCopy((DefaultMutableTreeNode)original.getChildAt(i)));
+        return node;
     }
     private ChatView createChatView(String id){
         var view=new ChatView(id,host);

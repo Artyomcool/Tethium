@@ -25,6 +25,7 @@ class MobileGatewayTest {
         try(var h=new HostService(data,ADAPTER);var local=new HostClient(h.descriptor());var m=new MobileGateway(data,h.feed(),0,0)){
             String p1=local.post("/projects",Json.object("path",root.resolve("one").toString())).path("id").asText();
             String p2=local.post("/projects",Json.object("path",root.resolve("two").toString())).path("id").asText();
+            String group=local.post("/project-groups",Json.object("title","Tools")).path("id").asText();
             String a=local.post("/sessions",Json.object("projectId",p1,"title","A")).path("id").asText();
             String b=local.post("/sessions",Json.object("projectId",p1,"title","B")).path("id").asText();
             String other=local.post("/sessions",Json.object("projectId",p2,"title","Other")).path("id").asText();
@@ -34,6 +35,18 @@ class MobileGatewayTest {
                 assertEquals(200,phone.request("/projects/order",Json.object("ids",List.of(p2,p1))).path("status").asInt());
                 phone.expect(Frames.STATE,f->f.has("projects")&&f.path("projects").get(0).path("id").asText().equals(p2));
                 assertEquals(p2,local.get("/state").path("projects").get(0).path("id").asText());
+                var mixed=List.of("project:"+p2,"group:"+group,"project:"+p1);assertEquals(200,phone.request("/project-tree/order",Json.object("ids",mixed)).path("status").asInt());
+                phone.expect(Frames.STATE,f->f.path("projectTreeOrder").equals(Json.MAPPER.valueToTree(mixed)));
+                assertEquals(200,phone.request("/projects/"+p1+"/favorite",Json.object("favorite",true)).path("status").asInt());
+                phone.expect(Frames.STATE,f->{for(var p:f.path("projects"))if(p.path("id").asText().equals(p1)&&p.path("favorite").asBoolean())return true;return false;});
+                assertEquals(200,phone.request("/projects/"+p2+"/favorite",Json.object("favorite",true)).path("status").asInt());
+                phone.expect(Frames.STATE,f->f.path("favoriteOrder").equals(Json.MAPPER.valueToTree(List.of(p1,p2))));
+                assertEquals(200,phone.request("/favorites/order",Json.object("ids",List.of(p2,p1))).path("status").asInt());
+                phone.expect(Frames.STATE,f->f.path("favoriteOrder").equals(Json.MAPPER.valueToTree(List.of(p2,p1))));
+                assertEquals(200,phone.request("/sessions/"+a+"/favorite",Json.object("favorite",true)).path("status").asInt());
+                phone.expect(Frames.STATE,f->{for(var p:f.path("projects"))if(p.path("id").asText().equals(p1)&&!p.path("favorite").asBoolean()&&p.path("favoriteSessionId").asText().equals(a))return true;return false;});
+                assertEquals(200,phone.request("/sessions/"+b+"/favorite",Json.object("favorite",true)).path("status").asInt());
+                phone.expect(Frames.STATE,f->{for(var p:f.path("projects"))if(p.path("id").asText().equals(p1)&&p.path("favoriteSessionId").asText().equals(b))return true;return false;});
                 assertEquals(200,phone.request("/projects/"+p1+"/sessions-order",Json.object("ids",List.of(b,a))).path("status").asInt());
                 var delta=phone.expect(Frames.STATE,f->f.path("sessionOrder").equals(Json.MAPPER.valueToTree(List.of(other,b,a))));
                 assertFalse(delta.has("sessions"),"Reordering must not resend unchanged session objects");
@@ -173,7 +186,7 @@ class MobileGatewayTest {
             var response=call(client,mobile,"/pair",Json.object("code",code,"name","probe"),null);assertEquals(200,response.statusCode());token=Json.MAPPER.readTree(response.body()).path("token").asText();
             assertEquals(401,call(client,mobile,"/pair",Json.object("code",code),null).statusCode());
             assertEquals(200,call(client,mobile,"/state",null,token).statusCode());
-            for(String path:List.of("/shutdown","/updates/shutdown","/mobile/pair","/imports/conversation","/projects","/projects/any/cross-project"))assertEquals(404,call(client,mobile,path,Json.object(),token).statusCode(),path);
+            for(String path:List.of("/shutdown","/updates/shutdown","/mobile/pair","/imports/conversation","/projects/any/cross-project"))assertEquals(404,call(client,mobile,path,Json.object(),token).statusCode(),path);
             var req=HttpRequest.newBuilder(URI.create("http://localhost:"+mobile.httpPort()+"/state")).header("Authorization","Bearer "+token).header("Origin","http://evil.invalid").GET().build();assertEquals(401,client.send(req,HttpResponse.BodyHandlers.ofString()).statusCode());
             assertTrue(local.get("/health").has("version"));
         }

@@ -32,10 +32,12 @@ final class OrderSheet {
     private int scrollStep;
     private final Runnable autoScroll=new Runnable(){public void run(){if(!dragging||scrollStep==0)return;scroll.scrollBy(0,scrollStep);handler.postDelayed(this,30);}};
 
-    static void projects(Ui ui,Connection c,JSONObject snapshot,Executor executor,Consumer<JSONObject> saved) {
-        var items=new ArrayList<Item>();var projects=snapshot.optJSONArray("projects");
-        if(projects!=null)for(int i=0;i<projects.length();i++){var p=projects.optJSONObject(i);if(p!=null)items.add(new Item(p.optString("id"),p.optString("title")));}
-        new OrderSheet(ui,c,executor,saved,"Порядок проектов","/projects/order",items);
+    static void catalog(Ui ui,Connection c,JSONObject snapshot,JSONObject chosen,Executor executor,Consumer<JSONObject> saved) {
+        String parentKind=chosen.optString("parentKind","root"),parentId=chosen.optString("parentId");var available=new LinkedHashMap<String,Item>();
+        if(parentKind.equals("root")){var groups=snapshot.optJSONArray("projectGroups");if(groups!=null)for(int i=0;i<groups.length();i++){var g=groups.optJSONObject(i);if(g!=null)available.put("group:"+g.optString("id"),new Item("group:"+g.optString("id"),"Группа · "+g.optString("title")));}}
+        var projects=snapshot.optJSONArray("projects");if(projects!=null)for(int i=0;i<projects.length();i++){var p=projects.optJSONObject(i);if(p!=null&&parentKind.equals(p.optString("parentKind","root"))&&parentId.equals(p.optString("parentId")))available.put("project:"+p.optString("id"),new Item("project:"+p.optString("id"),p.optString("title")));}
+        var items=new ArrayList<Item>();var order=snapshot.optJSONArray("projectTreeOrder");if(order!=null)for(int i=0;i<order.length();i++){var item=available.remove(order.optString(i));if(item!=null)items.add(item);}items.addAll(available.values());
+        new OrderSheet(ui,c,executor,saved,parentKind.equals("root")?"Порядок групп и проектов":"Порядок проектов рядом","/project-tree/order",items);
     }
     static void sessions(Ui ui,Connection c,JSONObject snapshot,JSONObject chosen,Executor executor,Consumer<JSONObject> saved) {
         var items=new ArrayList<Item>();var sessions=snapshot.optJSONArray("sessions");
@@ -43,6 +45,12 @@ final class OrderSheet {
         if(sessions!=null)for(int i=0;i<sessions.length();i++){var s=sessions.optJSONObject(i);
             if(s!=null&&project.equals(s.optString("projectId"))&&parent.equals(s.optString("parentId"))&&active==s.optBoolean("active"))items.add(new Item(s.optString("id"),s.optString("title")));}
         new OrderSheet(ui,c,executor,saved,active?"Порядок сессий":"Порядок неактивных сессий","/projects/"+project+"/sessions-order",items);
+    }
+    static void favorites(Ui ui,Connection c,JSONObject snapshot,Executor executor,Consumer<JSONObject> saved) {
+        var available=new LinkedHashMap<String,Item>();var projects=snapshot.optJSONArray("projects");
+        if(projects!=null)for(int i=0;i<projects.length();i++){var p=projects.optJSONObject(i);if(p!=null&&(p.optBoolean("favorite")||!p.optString("favoriteSessionId").isEmpty()))available.put(p.optString("id"),new Item(p.optString("id"),p.optString("title")));}
+        var items=new ArrayList<Item>();var order=snapshot.optJSONArray("favoriteOrder");if(order!=null)for(int i=0;i<order.length();i++){var item=available.remove(order.optString(i));if(item!=null)items.add(item);}items.addAll(available.values());
+        new OrderSheet(ui,c,executor,saved,"Порядок избранного","/favorites/order",items);
     }
     private OrderSheet(Ui ui,Connection connection,Executor executor,Consumer<JSONObject> saved,String title,String endpoint,ArrayList<Item> items) {
         this.ui=ui;this.connection=connection;this.executor=executor;this.saved=saved;this.endpoint=endpoint;this.items=items;

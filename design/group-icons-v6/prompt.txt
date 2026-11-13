@@ -1,0 +1,14 @@
+Create ONE square 1024x1024 transparent RGBA icon atlas on a fully transparent background.
+
+Use an invisible 4x4 grid of equal cells. Put exactly one complete centered icon in each of the first five cells in left-to-right, top-to-bottom order. Leave all remaining eleven cells fully empty and transparent. Do not draw a grid, labels, numbers, cards, tiles, frames, bases, circles, or background shapes.
+
+Shared style: match the supplied Tethium identity icon references closely: clean premium low-poly 3D, softly faceted surfaces, rounded friendly proportions, subtle physically plausible glow and shadow contained close to the object, readable at 22 pixels, no thin lines, no text, no brands. Each object must be isolated with 12–15% transparent gutter on every side of its cell. Nothing may cross a cell boundary. Use the same three-quarter camera angle and soft upper-left studio lighting for every icon.
+
+Cell order:
+1. group-neural — compact faceted blue-violet open project folder with a small connected three-node neural spark rising from it.
+2. group-games — compact faceted coral and amber open project folder with a tiny unmistakable gamepad shape resting in it.
+3. group-heroes — compact faceted teal and warm-gold open project folder with a small heraldic shield and plume.
+4. group-java — compact faceted moss-green and cream open project folder with a tiny steaming cup silhouette; do not use the Java logo or any lettering.
+5. group-general — compact faceted neutral silver-blue open project folder with two layered sheets visible inside.
+
+The five folder silhouettes should clearly belong to one family but remain distinguishable by both inner symbol and color. Preserve real transparency including around the soft contact shadow.

@@ -1,0 +1,141 @@
+{
+  "source": "C:\\git\\Tethium\\design\\group-icons-v6\\atlas.png",
+  "sha256": "79b8a2e0d1bb9ba5bef76a8a6462bcf7ea270557362c645d1ad652855e75d5f6",
+  "actual_size": [
+    1254,
+    1254
+  ],
+  "side": 4,
+  "items": [
+    {
+      "id": "group-neural",
+      "description": "Compact faceted blue-violet open project folder with a small connected three-node neural spark rising from it",
+      "row": 0,
+      "column": 0,
+      "source_bounds": [
+        57,
+        71,
+        294,
+        309
+      ],
+      "pixel_size": [
+        249,
+        250
+      ],
+      "pivot": [
+        0.5,
+        0.968
+      ],
+      "nominal_cell": [
+        0,
+        0,
+        314,
+        314
+      ]
+    },
+    {
+      "id": "group-games",
+      "description": "Compact faceted coral and amber open project folder with a tiny unmistakable gamepad shape resting in it",
+      "row": 0,
+      "column": 1,
+      "source_bounds": [
+        361,
+        104,
+        599,
+        309
+      ],
+      "pixel_size": [
+        250,
+        217
+      ],
+      "pivot": [
+        0.5,
+        0.9631336405529954
+      ],
+      "nominal_cell": [
+        314,
+        0,
+        627,
+        314
+      ]
+    },
+    {
+      "id": "group-heroes",
+      "description": "Compact faceted teal and warm-gold open project folder with a small heraldic shield and plume",
+      "row": 0,
+      "column": 2,
+      "source_bounds": [
+        666,
+        69,
+        901,
+        308
+      ],
+      "pixel_size": [
+        247,
+        251
+      ],
+      "pivot": [
+        0.5,
+        0.9681274900398407
+      ],
+      "nominal_cell": [
+        627,
+        0,
+        940,
+        314
+      ]
+    },
+    {
+      "id": "group-java",
+      "description": "Compact faceted moss-green and cream open project folder with a tiny steaming cup silhouette",
+      "row": 0,
+      "column": 3,
+      "source_bounds": [
+        972,
+        68,
+        1209,
+        309
+      ],
+      "pixel_size": [
+        249,
+        253
+      ],
+      "pivot": [
+        0.5,
+        0.9683794466403162
+      ],
+      "nominal_cell": [
+        940,
+        0,
+        1254,
+        314
+      ]
+    },
+    {
+      "id": "group-general",
+      "description": "Compact faceted neutral silver-blue open project folder with two layered sheets visible inside",
+      "row": 1,
+      "column": 0,
+      "source_bounds": [
+        55,
+        384,
+        297,
+        614
+      ],
+      "pixel_size": [
+        254,
+        242
+      ],
+      "pivot": [
+        0.5,
+        0.9669421487603306
+      ],
+      "nominal_cell": [
+        0,
+        314,
+        314,
+        627
+      ]
+    }
+  ]
+}

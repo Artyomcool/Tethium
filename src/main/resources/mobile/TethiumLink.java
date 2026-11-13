@@ -57,6 +57,13 @@ final class TethiumLink {
         ParcelFileDescriptor file = out.getParcelable("body");
         return new Response(out.getInt("status"), answer, new ParcelFileDescriptor.AutoCloseInputStream(file));
     }
+    /** Call only after the app has shown the byte count to the user and received an explicit tap. */
+    static Map<String,String> approveLargeTransfer(Map<String,String> headers) {
+        Map<String,String> approved = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        if (headers != null) approved.putAll(headers);
+        approved.put("X-Tethium-Approve-Large", "true");
+        return approved;
+    }
     private static ParcelFileDescriptor feed(byte[] body) throws IOException {
         ParcelFileDescriptor[] pipe = ParcelFileDescriptor.createPipe();
         new Thread(() -> {

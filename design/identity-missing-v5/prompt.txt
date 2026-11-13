@@ -1,0 +1,16 @@
+Generate ONE square transparent RGBA atlas with an invisible 4 columns x 4 rows grid. Exactly NINE small desktop identity icons occupy cells left-to-right, top-to-bottom in the order below; the remaining seven trailing cells are completely transparent and empty.
+
+Match the supplied Tethium icon references: crisp matte low-poly miniature objects, broad clearly separated planar facets, gentle bright highlights, contrasted clean shadows, fresh but restrained blue/sage/peach/copper/gold palette. Every icon must remain immediately readable after downsampling to 22 px. No text, letters, digits, labels, cards, circular backgrounds, platforms, outlines, glitter, bloom, glow, cast shadows, visible grid, or opaque background. Sharp antialiased silhouette. One centered complete object per cell with 18% transparent gutters; nothing crosses a cell boundary.
+
+Cells:
+1. Lane 1: a cobalt-blue route-switch emblem, one strong raised lane flowing forward through exactly one small pale checkpoint; compact branching-track silhouette.
+2. Lane 2: a sage-green route-switch emblem, two parallel lanes merging forward, exactly two small pale checkpoints; same family and scale as cell 1 but visibly distinct.
+3. Lane 3: a warm amber route-switch emblem, three slim lanes converging forward, exactly three small pale checkpoints; same family and scale.
+4. Lane 4: a muted mauve route-switch emblem, four slim lanes converging forward, exactly four small pale checkpoints; same family and scale.
+5. Interpreter: a compact graphite bytecode mechanism made of three stacked silver instruction plates feeding into a small amber triangular play prism; no terminal text or symbols.
+6. Reminders: an ivory low-poly notification bell integrated with a small blue clock face and one copper clapper, simple silhouette.
+7. Night watch: a deep blue faceted crescent moon cradling a tiny warm copper lantern, quiet and vigilant, no stars.
+8. Campaign: a peach pennant flag pinned into a small folded sage-and-blue strategic route map, one restrained copper route bead, no letters.
+9. Favorites: one warm golden faceted five-point star, slightly dimensional and asymmetrically lit, solid clean silhouette, no surrounding sparkles.
+
+Maximum available resolution. Genuine transparent background. Unused cells 10 through 16 must remain fully transparent.

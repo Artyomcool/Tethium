@@ -22,7 +22,7 @@ final class AppUpdates {
     static final String SELF="dev.tethium.mobile", CHANNEL="app-updates";
     static SharedPreferences prefs(Context c){return c.getSharedPreferences("app-updates",0);}
     static Connection connection(Context c)throws Exception{return connection(c,null);}
-    static Connection connection(Context c,android.net.Network network)throws Exception{var p=c.getSharedPreferences("tethium",0);return new Connection(p.getString("address",""),p.getString("token",""),p.getInt("httpPort",8766),network);}
+    static Connection connection(Context c,android.net.Network network)throws Exception{return Connection.from(c,network);}
     static void schedule(Context c){
         var scheduler=c.getSystemService(JobScheduler.class);
         if(scheduler.getPendingJob(7021)==null)scheduler.schedule(new JobInfo.Builder(7021,new ComponentName(c,UpdateJob.class)).setRequiredNetworkType(JobInfo.NETWORK_TYPE_UNMETERED).setPeriodic(15*60_000L).setPersisted(true).build());
@@ -42,11 +42,12 @@ final class AppUpdates {
         File dir=new File(c.getCacheDir(),"updates");if(!dir.isDirectory()&&!dir.mkdirs())throw new IOException("Нет места для APK");return new File(dir,hash+".apk");
     }
     private static String hash(File f)throws Exception{var digest=MessageDigest.getInstance("SHA-256");try(var in=new FileInputStream(f)){byte[] b=new byte[65536];int n;while((n=in.read(b))!=-1)digest.update(b,0,n);}var out=new StringBuilder();for(byte b:digest.digest())out.append(String.format(Locale.ROOT,"%02x",b&255));return out.toString();}
-    static File download(Context c,Connection conn,JSONObject app)throws Exception{
+    static File download(Context c,Connection conn,JSONObject app)throws Exception{return download(c,conn,app,false);}
+    static File download(Context c,Connection conn,JSONObject app,boolean approvedRemote)throws Exception{
         File target=target(c,app);String expected=app.getString("sha256");
         if(!target.isFile()||!hash(target).equals(expected)){
             String path=app.getString("path");if(!path.equals("/apk")&&!path.matches("/apps/[a-f0-9]{64}\\.apk"))throw new IOException("Некорректный адрес APK");
-            File part=new File(target+".part");var request=conn.open(path);
+            File part=new File(target+".part");var request=conn.open(path);if(approvedRemote)request.setRequestProperty("X-Tethium-Approve-Large","true");
             try{if(request.getResponseCode()!=200)throw new IOException("Не удалось скачать APK");try(var in=request.getInputStream();var out=new FileOutputStream(part)){byte[] b=new byte[65536];int n;long total=0;while((n=in.read(b))!=-1){if(Thread.currentThread().isInterrupted())throw new InterruptedIOException();total+=n;if(total>1_000_000_000L)throw new IOException("APK больше 1 ГБ");out.write(b,0,n);}}
                 if(!hash(part).equals(expected))throw new IOException("APK изменился при загрузке; обновите каталог");verify(c,part,app);Files.move(part.toPath(),target.toPath(),StandardCopyOption.REPLACE_EXISTING);
             }finally{request.disconnect();part.delete();}
@@ -92,6 +93,7 @@ final class AppUpdates {
             if(old==null||version(old)>=app.getLong("versionCode")||!automatic(c,pkg)||pending(c,pkg))continue;
             if(app.getString("sha256").equals(prefs(c).getString("failed."+pkg,"")))continue;
             try{
+                if(conn.remote()){prefs(c).edit().putString("status."+pkg,"Доступно · скачивание по нажатию вне домашней сети").apply();if(!app.getString("sha256").equals(prefs(c).getString("notified."+pkg,""))){notify(c,pkg,"Доступно обновление «"+app.optString("title",pkg)+"»");prefs(c).edit().putString("notified."+pkg,app.getString("sha256")).apply();}continue;}
                 File file=download(c,conn,app);prefs(c).edit().putString("status."+pkg,"Обновление скачано").apply();
                 // Never restart the chat while the user is typing. Other installs may run in foreground.
                 if(c.getPackageManager().canRequestPackageInstalls()&&(!pkg.equals(SELF)||background&&!foreground))install(c,app,file,true);
@@ -125,7 +127,7 @@ final class AppUpdates {
                         if(!newer){open(a,pkg);return;}
                         if(!a.getPackageManager().canRequestPackageInstalls()){a.startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:"+a.getPackageName())));return;}
                         info.setText("Скачиваем «"+app.optString("title",pkg)+"»…");
-                        ui.async("install:"+pkg,"Скачиваем…",IO,()->{File file=download(a,conn,app);install(a,app,file,false);return true;},done->{info.setText("Ожидаем установку · подтверждение появится здесь");refresh[0].run();},()->refresh[0].run());
+                        ui.async("install:"+pkg,"Скачиваем…",IO,()->{File file=download(a,conn,app,true);install(a,app,file,false);return true;},done->{info.setText("Ожидаем установку · подтверждение появится здесь");refresh[0].run();},()->refresh[0].run());
                     }catch(Exception e){info.setText(Objects.toString(e.getMessage(),"Ошибка установки"));}
                 });if(ui.pending("install:"+pkg)||confirmation.isEmpty()&&pending(a,pkg)){install.setEnabled(false);install.setText(ui.pending("install:"+pkg)?"Скачиваем…":"Устанавливаем…");}row.addView(install);list.addView(row);if(old!=null&&newer)list.addView(ui.button("Открыть установленную",()->open(a,pkg)));ui.line(list);
             }

@@ -110,6 +110,13 @@ public final class SessionStore implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS session_order(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,position INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS project_groups(id TEXT PRIMARY KEY,title TEXT NOT NULL,position INTEGER NOT NULL,collapsed INTEGER NOT NULL DEFAULT 0)");
             s.execute("CREATE TABLE IF NOT EXISTS project_hierarchy(project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,parent_kind TEXT NOT NULL,parent_id TEXT NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS project_tree_order(node_key TEXT PRIMARY KEY,position INTEGER NOT NULL)");
+            // Position stays nullable so the previous core can still insert favorites after a rollback.
+            s.execute("CREATE TABLE IF NOT EXISTS project_favorites(project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE,position INTEGER)");
+            boolean favoriteSession=false,favoritePosition=false;try(var columns=s.executeQuery("PRAGMA table_info(project_favorites)")){while(columns.next()){favoriteSession|=columns.getString("name").equals("session_id");favoritePosition|=columns.getString("name").equals("position");}}
+            if(!favoriteSession)s.execute("ALTER TABLE project_favorites ADD COLUMN session_id TEXT REFERENCES sessions(id) ON DELETE CASCADE");
+            if(!favoritePosition)s.execute("ALTER TABLE project_favorites ADD COLUMN position INTEGER");
+            s.execute("UPDATE project_favorites SET position=rowid WHERE position IS NULL");
         }
     }
 
@@ -398,8 +405,10 @@ public final class SessionStore implements AutoCloseable {
             q.setString(1, root);
             try (var rows = q.executeQuery()) { if (rows.next()) return rows.getString(1); }
         }
+        projectTreeOrder();
         String id = UUID.randomUUID().toString();
         execute("INSERT INTO projects(id,root) VALUES(?,?)", id, root);
+        execute("INSERT INTO project_tree_order(node_key,position) VALUES(?,?)","project:"+id,nextProjectTreePosition());
         return id;
     }
     public synchronized Session create(String projectId, String parentId, String title, Path directory) throws Exception {
@@ -647,11 +656,49 @@ public final class SessionStore implements AutoCloseable {
         }
         return Map.copyOf(result);
     }
+    public synchronized Set<String> favoriteProjects() throws SQLException {
+        var result=new LinkedHashSet<String>();
+        try(var q=connection.createStatement();var rows=q.executeQuery("SELECT project_id FROM project_favorites WHERE session_id IS NULL ORDER BY position,rowid")){while(rows.next())result.add(rows.getString(1));}
+        return Collections.unmodifiableSet(result);
+    }
+    public synchronized Map<String,String> favoriteSessions() throws SQLException {
+        var result=new LinkedHashMap<String,String>();
+        try(var q=connection.createStatement();var rows=q.executeQuery("SELECT project_id,session_id FROM project_favorites WHERE session_id IS NOT NULL ORDER BY position,rowid")){while(rows.next())result.put(rows.getString(1),rows.getString(2));}
+        return Collections.unmodifiableMap(result);
+    }
+    /** Project ids in the independent order of the pinned Favorites group. */
+    public synchronized List<String> favoriteOrder() throws SQLException {
+        var result=new ArrayList<String>();
+        try(var q=connection.createStatement();var rows=q.executeQuery("SELECT project_id FROM project_favorites ORDER BY position,rowid")){while(rows.next())result.add(rows.getString(1));}
+        return List.copyOf(result);
+    }
+    private int nextFavoritePosition() throws SQLException {
+        try(var q=connection.createStatement();var rows=q.executeQuery("SELECT COALESCE(MAX(position),-1)+1 FROM project_favorites")){return rows.next()?rows.getInt(1):0;}
+    }
+    public synchronized void projectFavorite(String projectId,boolean favorite)throws SQLException{
+        if(projects().stream().noneMatch(project->project.id().equals(projectId)))throw new IllegalArgumentException("Проект не найден");
+        if(favorite)execute("INSERT INTO project_favorites(project_id,session_id,position) VALUES(?,NULL,?) ON CONFLICT(project_id) DO UPDATE SET session_id=NULL",projectId,nextFavoritePosition());else execute("DELETE FROM project_favorites WHERE project_id=? AND session_id IS NULL",projectId);
+    }
+    public synchronized void sessionFavorite(String sessionId,boolean favorite)throws SQLException{
+        Session session=get(sessionId);
+        if(favorite)execute("INSERT INTO project_favorites(project_id,session_id,position) VALUES(?,?,?) ON CONFLICT(project_id) DO UPDATE SET session_id=excluded.session_id",session.projectId(),sessionId,nextFavoritePosition());else execute("DELETE FROM project_favorites WHERE project_id=? AND session_id=?",session.projectId(),sessionId);
+    }
+    public synchronized void reorderFavorites(List<String> projectIds)throws Exception{
+        transaction(()->{
+            var current=new ArrayList<>(favoriteOrder());
+            for(String id:projectIds)if(!current.contains(id))throw new IllegalArgumentException("Проект не находится в избранном: "+id);
+            var merged=merge(current,projectIds);
+            for(int i=0;i<merged.size();i++)execute("UPDATE project_favorites SET position=? WHERE project_id=?",i,merged.get(i));
+            return null;
+        });
+    }
     public synchronized ProjectGroup createProjectGroup(String title) throws SQLException {
         String clean=title==null?"":title.strip();if(clean.isEmpty())throw new IllegalArgumentException("Название группы не может быть пустым");
+        projectTreeOrder();
         String id=UUID.randomUUID().toString();int position=0;
         try(var q=connection.createStatement();var rows=q.executeQuery("SELECT COALESCE(MAX(position),-1)+1 FROM project_groups")){if(rows.next())position=rows.getInt(1);}
         execute("INSERT INTO project_groups(id,title,position) VALUES(?,?,?)",id,clean,position);
+        execute("INSERT INTO project_tree_order(node_key,position) VALUES(?,?)","group:"+id,nextProjectTreePosition());
         return new ProjectGroup(id,clean,position,false);
     }
     public synchronized void renameProjectGroup(String id,String title)throws SQLException{
@@ -662,7 +709,20 @@ public final class SessionStore implements AutoCloseable {
         try(var q=connection.prepareStatement("UPDATE project_groups SET collapsed=? WHERE id=?")){q.setBoolean(1,collapsed);q.setString(2,id);if(q.executeUpdate()!=1)throw new IllegalArgumentException("Группа не найдена");}
     }
     public synchronized void removeProjectGroup(String id)throws Exception{
-        transaction(()->{execute("DELETE FROM project_hierarchy WHERE parent_kind='group' AND parent_id=?",id);execute("DELETE FROM project_groups WHERE id=?",id);return null;});
+        transaction(()->{execute("DELETE FROM project_hierarchy WHERE parent_kind='group' AND parent_id=?",id);execute("DELETE FROM project_tree_order WHERE node_key=?","group:"+id);execute("DELETE FROM project_groups WHERE id=?",id);return null;});
+    }
+    /** One stable order for project and group nodes. Parentage is stored separately; filtering this list gives sibling order. */
+    public synchronized List<String> projectTreeOrder() throws SQLException {
+        var existing=new LinkedHashSet<String>();int next=0;
+        try(var q=connection.createStatement();var rows=q.executeQuery("SELECT node_key,position FROM project_tree_order ORDER BY position,rowid")){while(rows.next()){existing.add(rows.getString(1));next=Math.max(next,rows.getInt(2)+1);}}
+        for(var group:projectGroups()){String key="group:"+group.id();if(existing.add(key))execute("INSERT INTO project_tree_order(node_key,position) VALUES(?,?)",key,next++);}
+        for(var project:projects()){String key="project:"+project.id();if(existing.add(key))execute("INSERT INTO project_tree_order(node_key,position) VALUES(?,?)",key,next++);}
+        var result=new ArrayList<String>();
+        try(var q=connection.createStatement();var rows=q.executeQuery("SELECT node_key FROM project_tree_order ORDER BY position,rowid")){while(rows.next())result.add(rows.getString(1));}
+        return List.copyOf(result);
+    }
+    private int nextProjectTreePosition() throws SQLException {
+        try(var q=connection.createStatement();var rows=q.executeQuery("SELECT COALESCE(MAX(position),-1)+1 FROM project_tree_order")){return rows.next()?rows.getInt(1):0;}
     }
     public synchronized void projectParent(String projectId,String kind,String parentId)throws Exception{
         transaction(()->{
@@ -1133,6 +1193,22 @@ public final class SessionStore implements AutoCloseable {
             var current = new ArrayList<String>(); for (var p : projects()) current.add(p.id());
             var merged = merge(current, ids);
             for (int i = 0; i < merged.size(); i++) execute("INSERT INTO project_order VALUES(?,?) ON CONFLICT(project_id) DO UPDATE SET position=excluded.position", merged.get(i), i);
+            reorderProjectTree(ids.stream().map(id->"project:"+id).toList());
+            return null;
+        });
+    }
+    /** Reorders a visible sibling subset in the mixed project/group catalog without changing its parentage. */
+    public synchronized void reorderProjectTree(List<String> keys) throws Exception {
+        transaction(()->{
+            var current=new ArrayList<>(projectTreeOrder());var known=new HashSet<>(current);
+            for(String key:keys)if(!known.contains(key))throw new IllegalArgumentException("Неизвестный узел дерева: "+key);
+            var merged=merge(current,keys);
+            for(int i=0;i<merged.size();i++)execute("INSERT INTO project_tree_order(node_key,position) VALUES(?,?) ON CONFLICT(node_key) DO UPDATE SET position=excluded.position",merged.get(i),i);
+            int projectsAt=0,groupsAt=0;
+            for(String key:merged){
+                if(key.startsWith("project:"))execute("INSERT INTO project_order(project_id,position) VALUES(?,?) ON CONFLICT(project_id) DO UPDATE SET position=excluded.position",key.substring(8),projectsAt++);
+                else if(key.startsWith("group:"))execute("UPDATE project_groups SET position=? WHERE id=?",groupsAt++,key.substring(6));
+            }
             return null;
         });
     }

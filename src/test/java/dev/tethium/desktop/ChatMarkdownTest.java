@@ -36,4 +36,9 @@ class ChatMarkdownTest {
         assertFalse(html.contains("action"), html);
         assertTrue(html.contains("— Обычная реплика агента"), html);
     }
+    @Test void codexVisualizeMarkerBecomesAFileLink() {
+        String marker="\uE200visualize\uE202{\"path\":\"C:\\\\git\\\\Tethium\\\\preview image.html\",\"title\":\"16 вариантов\"}\uE201";
+        String expanded=ChatMarkdown.visualizeLinks(marker);assertFalse(expanded.contains("visualize"),expanded);assertTrue(expanded.contains("[16 вариантов](C:/git/Tethium/preview%20image.html)"),expanded);
+        String html=new ChatMarkdown().render(marker);assertTrue(html.contains("href=\"C:/git/Tethium/preview%20image.html\""),html);
+    }
 }

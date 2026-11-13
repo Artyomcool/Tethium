@@ -38,4 +38,16 @@ class ProjectRowFactsTest {
         tree.collapsePath(new TreePath(project.getPath()));
         assertEquals("manual", WorkspaceFrame.shownAttention(tree, new TreePath(project.getPath()), projectRow));
     }
+    @Test void theCurrentSessionIsHighlightedInItsFavoriteCopyToo() {
+        var direct=row("project",true,"",0).direct("session").asFavoriteCopy();
+        var child=row("session",false,"",0).asFavoriteCopy();
+        assertTrue(WorkspaceFrame.favoriteSelected(direct,"session"));
+        assertTrue(WorkspaceFrame.favoriteSelected(child,"session"));
+        assertFalse(WorkspaceFrame.favoriteSelected(direct,"another"));
+        assertFalse(WorkspaceFrame.favoriteSelected(row("session",false,"",0),"session"));
+        assertTrue(WorkspaceFrame.treeRowHighlighted(direct,false,"session",null,null));
+        assertTrue(WorkspaceFrame.treeRowHighlighted(child,false,"session",null,null));
+        assertTrue(WorkspaceFrame.treeRowHighlighted(row("project",true,"",0),false,null,"project",null));
+        assertTrue(WorkspaceFrame.treeRowHighlighted(new WorkspaceFrame.Node("file","file",false,false,"","","",true),false,null,null,"file"));
+    }
 }

@@ -11,7 +11,7 @@ import java.util.Arrays;
 public final class Frames {
     private Frames() {}
     public static final int PROTOCOL = 1;
-    public static final int HELLO = 1, WELCOME = 2, PAIR = 3, PAIRED = 4, BYE = 5, REQUEST = 6, RESPONSE = 7, WATCH = 8, STATE = 9, CONVERSATION = 10, LIVE = 11, PING = 12, PONG = 13;
+    public static final int HELLO = 1, WELCOME = 2, PAIR = 3, PAIRED = 4, BYE = 5, REQUEST = 6, RESPONSE = 7, WATCH = 8, STATE = 9, CONVERSATION = 10, LIVE = 11, PING = 12, PONG = 13, HTTP_REQUEST = 14, HTTP_RESPONSE = 15, HTTP_CANCEL = 16;
     public static final int MAX_FRAME = 32 << 20;
     private static final int COMPRESS_FROM = 64, LEVEL = 3;
     public static byte[] pack(byte[] raw) {

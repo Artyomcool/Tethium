@@ -1,0 +1,11 @@
+[
+  {"id":"session-lane-1","description":"blue single-route switch track with one checkpoint"},
+  {"id":"session-lane-2","description":"sage twin-route switch track with two checkpoints"},
+  {"id":"session-lane-3","description":"amber three-route switch track with three checkpoints"},
+  {"id":"session-lane-4","description":"mauve four-route switch track with four checkpoints"},
+  {"id":"session-interpreter","description":"compact bytecode interpreter with play prism and stacked instruction plates"},
+  {"id":"session-reminders","description":"ivory notification bell combined with a small blue clock face"},
+  {"id":"session-night-watch","description":"deep blue crescent moon cradling a warm copper lantern"},
+  {"id":"session-campaign","description":"peach pennant flag pinned into a folded strategic route map"},
+  {"id":"group-favorites","description":"single warm golden faceted five-point favorite star"}
+]

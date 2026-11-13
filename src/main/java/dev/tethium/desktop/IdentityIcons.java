@@ -29,6 +29,7 @@ final class IdentityIcons {
             if(!path.isBlank())name=path.substring(path.lastIndexOf('/')+1);
         }
         String normalized=normalize(name);
+        if(!project)normalized=category(normalized);
         String mapped=NAMES.getProperty((project?"project.":"session.")+normalized);
         if(mapped!=null)return mapped;
         // Unknown names get a stable generated identity from their hash; only the untouched default session keeps the plain glyph.
@@ -36,9 +37,17 @@ final class IdentityIcons {
         if(!project&&normalized.equals(DEFAULT_SESSION))return "svg:session-chat";
         return "hash:"+(project?"project/":"")+normalized;
     }
+    /** A title suffix after the first colon describes the concrete task, not the session role. */
+    static String category(String normalized) {
+        int colon=normalized.indexOf(':');
+        return colon>0?normalized.substring(0,colon).strip():normalized;
+    }
     static Icon of(boolean project,String title,String directory) {
         return CACHE.computeIfAbsent(asset(project,title,directory),IdentityIcons::load);
     }
+    static String groupAsset(String title) { return NAMES.getProperty("group."+normalize(title),"group-general"); }
+    static Icon group(String title) { return named(groupAsset(title)); }
+    static Icon named(String asset) { return CACHE.computeIfAbsent(asset,IdentityIcons::load); }
     /** Project icons come from the project itself (.tethium/icon.png, served by the host); without one the hashed pattern is used. */
     private record ProjectIcon(String version,Icon icon) {}
     private static final Map<String,ProjectIcon> PROJECT_ICONS=new ConcurrentHashMap<>();
