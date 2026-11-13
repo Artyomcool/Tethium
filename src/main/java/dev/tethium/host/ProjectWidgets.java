@@ -9,14 +9,16 @@ import java.awt.image.BufferedImage;
 import java.util.*;
 import javax.imageio.ImageIO;
 
-/** The project owns the entire row; Tethium transports its rendered SVG unchanged. */
+/** A project owns the SVG source; clients receive only metadata plus a separately cached binary PNG. */
 final class ProjectWidgets {
     /** Widgets live with the rest of the project's Tethium files in .tethium/; the old root-level names still work. */
     static final String BOTTOM=".tethium/widget-bottom.svg", RIGHT=".tethium/widget-right.svg";
     static final String LEGACY_BOTTOM=".tethium-widget-bottom.svg", LEGACY_RIGHT=".tethium-widget-right.svg";
-    private record Cached(long checked,long modified,long size,JsonNode value){}
+    record Rendered(JsonNode metadata,byte[] png){}
+    private record Cached(long checked,long modified,long size,JsonNode value,byte[] png){}
     private final Map<Path,Cached> cache=new HashMap<>();
     synchronized JsonNode read(Path root){return Json.object("bottom",readFile(locate(root,BOTTOM,LEGACY_BOTTOM)),"right",readFile(locate(root,RIGHT,LEGACY_RIGHT)));}
+    synchronized byte[] png(Path root,String slot){Path file=switch(slot){case "bottom"->locate(root,BOTTOM,LEGACY_BOTTOM);case "right"->locate(root,RIGHT,LEGACY_RIGHT);default->throw new IllegalArgumentException("Unknown widget slot");};readFile(file);var value=cache.get(file);return value==null?new byte[0]:value.png;}
     private static Path locate(Path root,String preferred,String legacy){Path file=root.resolve(preferred);return Files.isRegularFile(file)||!Files.isRegularFile(root.resolve(legacy))?file:root.resolve(legacy);}
     private JsonNode readFile(Path file){
         long now=System.currentTimeMillis();var old=cache.get(file);
@@ -24,16 +26,16 @@ final class ProjectWidgets {
         if(!Files.isRegularFile(file)){cache.remove(file);return Json.MAPPER.nullNode();}
         try{
             long modified=Files.getLastModifiedTime(file).toMillis(),size=Files.size(file);
-            if(old!=null&&modified==old.modified&&size==old.size){cache.put(file,new Cached(now,modified,size,old.value));return old.value;}
+            if(old!=null&&modified==old.modified&&size==old.size){cache.put(file,new Cached(now,modified,size,old.value,old.png));return old.value;}
             if(size>256_000)throw new IOException("Виджет больше 256 КБ");
-            byte[] bytes=Files.readAllBytes(file);var value=render(bytes,modified);
-            cache.put(file,new Cached(now,modified,size,value));return value;
+            byte[] bytes=Files.readAllBytes(file);var rendered=render(bytes,modified);
+            cache.put(file,new Cached(now,modified,size,rendered.metadata,rendered.png));return rendered.metadata;
         }catch(Exception error){
             var value=old==null?Json.object():old.value.deepCopy();((com.fasterxml.jackson.databind.node.ObjectNode)value).put("error","Не удалось обновить "+file.getFileName()+": "+error.getMessage());
-            cache.put(file,new Cached(now,-1,-1,value));return value;
+            cache.put(file,new Cached(now,-1,-1,value,old==null?new byte[0]:old.png));return value;
         }
     }
-    static JsonNode render(byte[] bytes,long modified)throws Exception{
+    static Rendered render(byte[] bytes,long modified)throws Exception{
         // No external resources: the same self-contained row works on the remote client too.
         var factory=javax.xml.parsers.DocumentBuilderFactory.newInstance();factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl",true);factory.setFeature("http://xml.org/sax/features/external-general-entities",false);factory.setFeature("http://xml.org/sax/features/external-parameter-entities",false);
         var xml=factory.newDocumentBuilder().parse(new ByteArrayInputStream(bytes));
@@ -53,6 +55,6 @@ final class ProjectWidgets {
         var image=new BufferedImage(Math.max(1,(int)Math.ceil(size.width*scale)),Math.max(1,(int)Math.ceil(size.height*scale)),BufferedImage.TYPE_INT_ARGB);
         var g=image.createGraphics();g.setRenderingHint(java.awt.RenderingHints.KEY_ANTIALIASING,java.awt.RenderingHints.VALUE_ANTIALIAS_ON);g.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);g.setRenderingHint(java.awt.RenderingHints.KEY_FRACTIONALMETRICS,java.awt.RenderingHints.VALUE_FRACTIONALMETRICS_ON);g.scale(scale,scale);svg.render(null,g);g.dispose();var out=new ByteArrayOutputStream();ImageIO.write(image,"png",out);
         String description="";var titles=xml.getElementsByTagName("title");if(titles.getLength()>0)description=titles.item(0).getTextContent();var desc=xml.getElementsByTagName("desc");if(desc.getLength()>0)description+="\n"+desc.item(0).getTextContent();
-        return Json.object("svg",source,"png",Base64.getEncoder().encodeToString(out.toByteArray()),"width",size.width,"height",size.height,"description",description,"updatedAt",modified,"version","svg2-"+HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes)));
+        return new Rendered(Json.object("width",size.width,"height",size.height,"description",description,"updatedAt",modified,"version","svg2-"+HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256").digest(bytes))),out.toByteArray());
     }
 }

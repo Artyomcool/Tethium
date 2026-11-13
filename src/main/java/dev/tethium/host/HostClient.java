@@ -54,6 +54,10 @@ public class HostClient implements AutoCloseable {
     }
     public JsonNode get(String path) throws Exception { return call(path, null); }
     public JsonNode post(String path, Object body) throws Exception { return call(path, Json.MAPPER.valueToTree(body)); }
+    public byte[] bytes(String path)throws Exception{
+        reconnect();var endpoint=descriptor;
+        try{return requestBytes(endpoint,path);}catch(IOException failure){reconnect();if(endpoint!=descriptor)return requestBytes(descriptor,path);throw failure;}
+    }
     public HttpURLConnection fileConnection(String path)throws Exception{
         if(!path.startsWith("/file-manager/"))throw new IOException("Некорректный путь передачи");
         reconnect();var endpoint=descriptor;var c=(HttpURLConnection)URI.create("http://127.0.0.1:"+endpoint.path("port").asInt()+path).toURL().openConnection();
@@ -79,6 +83,10 @@ public class HostClient implements AutoCloseable {
         var value = Json.parse(response.body());
         if (response.statusCode() != 200) throw new ApiException(response.statusCode(), value.path("error").asText("Ошибка ядра: " + response.statusCode()));
         return value;
+    }
+    private byte[] requestBytes(JsonNode endpoint,String path)throws Exception{
+        String base="http://127.0.0.1:"+endpoint.path("port").asInt();var request=HttpRequest.newBuilder(URI.create(base+path)).timeout(Duration.ofSeconds(30)).header("Authorization","Bearer "+endpoint.path("token").asText()).GET().build();var response=client.send(request,HttpResponse.BodyHandlers.ofByteArray());
+        if(response.statusCode()!=200)throw new ApiException(response.statusCode(),"Binary asset error: "+response.statusCode());return response.body();
     }
     @Override public void close() { client.close(); }
 }

@@ -149,6 +149,8 @@ public final class HostService implements AutoCloseable {
             var auth = exchange.getRequestHeaders().getFirst("Authorization");
             if (auth == null || !MessageDigest.isEqual(("Bearer " + token).getBytes(StandardCharsets.UTF_8), auth.getBytes(StandardCharsets.UTF_8))) { send(exchange, 401, Json.object("error", "Unauthorized")); return; }
             if (exchange.getRequestHeaders().containsKey("Origin")) { send(exchange, 403, Json.object("error", "Browser origins are not allowed")); return; }
+            try { var asset=binaryAsset(exchange.getRequestURI());if(asset!=null){sendAsset(exchange,asset);return;} }
+            catch(Exception e){send(exchange,e instanceof NoSuchElementException?404:400,Json.object("error",Objects.toString(e.getMessage(),"Binary asset error")));return;}
             try { if(fileManager.binary(exchange))return; }
             catch(Exception e){send(exchange,400,Json.object("error",Objects.toString(e.getMessage(),"Ошибка передачи")));return;}
             String method = exchange.getRequestMethod();
@@ -178,7 +180,6 @@ public final class HostService implements AutoCloseable {
             case "/history/page" -> historyPage(query(uri,"session"),Integer.parseInt(query(uri,"first")),Integer.parseInt(query(uri,"count")),"true".equals(query(uri,"gallery")));
             case "/messages" -> messagesBefore(query(uri,"session"),query(uri,"before")==null?Long.MAX_VALUE:Long.parseLong(query(uri,"before")),query(uri,"count")==null?100:Integer.parseInt(query(uri,"count")));
             case "/trash" -> trashList();
-            case "/project-icon" -> ProjectIcons.read(Path.of(store.projects().stream().filter(p->p.id().equals(query(uri,"project"))).findFirst().orElseThrow().root()));
             case "/git" -> ProjectGit.read(Path.of(store.projects().stream().filter(p->p.id().equals(query(uri,"project"))).findFirst().orElseThrow().root()),query(uri,"op"),query(uri,"path"),query(uri,"commit"));
             case "/project" -> GitHubProjects.status(Path.of(store.projects().stream().filter(p->p.id().equals(query(uri,"project"))).findFirst().orElseThrow().root()));
             case "/usage" -> usage.report(query(uri,"period"),query(uri,"project"),query(uri,"session"));
@@ -206,7 +207,9 @@ public final class HostService implements AutoCloseable {
             public void removeListener(Runnable listener) { changeListeners.remove(listener); }
             public JsonNode get(String target) throws Exception { return Json.MAPPER.valueToTree(dispatch("GET", URI.create(target), null)); }
             public JsonNode post(String path, JsonNode body) throws Exception { return Json.MAPPER.valueToTree(dispatch("POST", URI.create(path), body)); }
+            public dev.tethium.mobile.MobileGateway.Asset asset(String target)throws Exception{return binaryAsset(URI.create(target));}
             public JsonNode catalog() throws Exception { return Json.MAPPER.valueToTree(snapshot(null, false)); }
+            public JsonNode session(String id) throws Exception { return sessionJson(store.get(id)); }
             public JsonNode conversationMeta(String id) throws Exception {
                 store.get(id);
                 return Json.object("queued", store.queued(id), "artifacts", store.artifacts(id), "media", store.mediaHistory(id), "messageRevision", store.messageRevision(id), "lastSequence", store.lastSequence(id),
@@ -222,6 +225,27 @@ public final class HostService implements AutoCloseable {
                 return Json.object("run", started, "offset", from, "length", length, "text", live.text.substring(from, length), "timestamp", started);
             }
         };
+    }
+    private dev.tethium.mobile.MobileGateway.Asset binaryAsset(URI uri)throws Exception{
+        String path=uri.getPath();
+        if(path.equals("/project-icon.png")){
+            var project=store.projects().stream().filter(p->p.id().equals(query(uri,"project"))).findFirst().orElseThrow();String requested=query(uri,"size");int size=requested==null?88:Integer.parseInt(requested);var png=ProjectIcons.read(Path.of(project.root()),size);
+            if(png.bytes().length==0)throw new NoSuchElementException("Project icon not found");return new dev.tethium.mobile.MobileGateway.Asset(png.bytes(),"project-icon:"+png.version()+":"+size,"image/png");
+        }
+        if(path.equals("/project-widget.png")){
+            var project=store.projects().stream().filter(p->p.id().equals(query(uri,"project"))).findFirst().orElseThrow();String slot=query(uri,"slot");if(!Set.of("bottom","right").contains(slot))throw new IllegalArgumentException("Unknown widget slot");Path root=Path.of(project.root());var metadata=projectWidgets.read(root).path(slot);byte[] png=projectWidgets.png(root,slot);
+            if(png.length==0)throw new NoSuchElementException("Project widget not found");return new dev.tethium.mobile.MobileGateway.Asset(png,"project-widget:"+metadata.path("version").asText()+":"+slot,"image/png");
+        }
+        if(path.equals("/history-thumbnail.png")){
+            String session=query(uri,"session"),requested=query(uri,"media");long mediaId=Long.parseLong(requested==null?"-1":requested);JsonNode found=null;for(var row:store.mediaHistory(session))if(row.path("mediaId").asLong()==mediaId){found=row;break;}
+            if(found==null)throw new NoSuchElementException("History image not found");Path thumbnail=Path.of(found.path("thumbnailFile").asText()).toRealPath();if(!Files.isRegularFile(thumbnail))throw new NoSuchElementException("History thumbnail not found");byte[] bytes=Files.readAllBytes(thumbnail);String type=Objects.toString(Files.probeContentType(thumbnail),"image/png");
+            return new dev.tethium.mobile.MobileGateway.Asset(bytes,"history-thumbnail:"+mediaId+":"+bytes.length+":"+Files.getLastModifiedTime(thumbnail).toMillis(),type);
+        }
+        return null;
+    }
+    private static void sendAsset(HttpExchange exchange,dev.tethium.mobile.MobileGateway.Asset asset)throws IOException{
+        String etag="\""+asset.etag().replace("\"","")+"\"";exchange.getResponseHeaders().set("ETag",etag);exchange.getResponseHeaders().set("Cache-Control","private, max-age=0, must-revalidate");if(etag.equals(exchange.getRequestHeaders().getFirst("If-None-Match"))){exchange.sendResponseHeaders(304,-1);return;}
+        exchange.getResponseHeaders().set("Content-Type",asset.contentType());exchange.sendResponseHeaders(200,asset.bytes().length);exchange.getResponseBody().write(asset.bytes());
     }
     private final Object resetLock=new Object();
     private Object command(String path,JsonNode body)throws Exception{
@@ -490,8 +514,8 @@ public final class HostService implements AutoCloseable {
         var index=historyIndex(id,gallery);var entries=index.path("entries");var result=Json.MAPPER.createArrayNode();
         for(int i=first;i<Math.min(entries.size(),first+count);i++){
             var entry=(com.fasterxml.jackson.databind.node.ObjectNode)entries.get(i).deepCopy();int offset=entry.path("offset").asInt(),length=entry.path("length").asInt();String text;
-            if(entry.path("kind").asText().equals("gallery")){for(var image:entry.path("images"))((com.fasterxml.jackson.databind.node.ObjectNode)image).put("thumbnail",Base64.getEncoder().encodeToString(Files.readAllBytes(Path.of(image.path("thumbnailFile").asText()))));text="";}
-            else if(entry.path("kind").asText().equals("image")){entry.put("thumbnail",Base64.getEncoder().encodeToString(Files.readAllBytes(Path.of(entry.path("thumbnailFile").asText()))));text="";}
+            if(entry.path("kind").asText().equals("gallery")){text="";}
+            else if(entry.path("kind").asText().equals("image")){text="";}
             else if(entry.path("live").asBoolean()){var live=running.get(id);if(live==null)return Json.object("stale",true);String all;synchronized(live.text){all=live.text.toString();}text=dev.tethium.core.HistoryChunks.piece(all,offset,length);}
             else text=store.historyChunk(id,entry.path("sequence").asLong(),offset,length);
             entry.put("index",i);entry.put("text",text);result.add(entry);
@@ -576,7 +600,7 @@ public final class HostService implements AutoCloseable {
                 if(quotaFailure&&codexQuota(run)){usage.waiting(id,true);store.jobStatus(job.id(),"QUEUED");quota.refresh();return;}
                 store.jobStatus(job.id(), result.status().name());
                 if(result.status()==AgentAdapter.Status.FAILED&&!run.stopping)blockAutonomy(id,"Запуск завершился с ошибкой: "+result.text());
-                for(String recipient:store.resultRecipients(job)){store.append(recipient, "session", "TETHIUM", "Результат сессии «" + store.get(id).title() + "» (" + result.status() + "):\n" + result.text());store.wakeAutonomy(recipient);}
+                for(String recipient:store.resultRecipients(job)){String title=store.get(id).title(),text="Результат ("+result.status()+"):\n"+result.text();store.appendSessionUpdate(recipient,sessionUpdateKey(id,run),"Результат сессии «"+title+"» ("+result.status()+"):\n"+result.text(),text);store.wakeAutonomy(recipient);}
             }
         } catch (Exception e) {
             try {
@@ -699,7 +723,7 @@ public final class HostService implements AutoCloseable {
                             store.completeRun(saved.runId(),id,AgentAdapter.Provider.of(saved.spec().path("provider").asText(null)),result,saved.deliveredThrough());
                             if(failover!=null)applyExecutorFailover(id,store.job(saved.jobId()),failover);else store.jobStatus(saved.jobId(),quotaBlocked?"QUEUED":result.status().name());
                             if(failover==null&&!quotaBlocked&&!run.stopping&&result.status()==AgentAdapter.Status.FAILED)blockAutonomy(id,"Запуск завершился с ошибкой: "+result.text());
-                            if(failover==null&&!quotaBlocked)for(String recipient:store.resultRecipients(store.job(saved.jobId()))){store.append(recipient,"session","TETHIUM","Результат сессии «"+store.get(id).title()+"» ("+result.status()+"):\n"+result.text());store.wakeAutonomy(recipient);}
+                            if(failover==null&&!quotaBlocked)for(String recipient:store.resultRecipients(store.job(saved.jobId()))){String title=store.get(id).title(),text="Результат ("+result.status()+"):\n"+result.text();store.appendSessionUpdate(recipient,sessionUpdateKey(id,run),"Результат сессии «"+title+"» ("+result.status()+"):\n"+result.text(),text);store.wakeAutonomy(recipient);}
                             store.workerFinished(saved.runId());return null;
                         });
                     }
@@ -865,7 +889,7 @@ public final class HostService implements AutoCloseable {
                         if (!store.get(target).projectId().equals(source.projectId())) throw new IllegalArgumentException("Сессия другого проекта");
                         if (target.equals(caller)) throw new IllegalArgumentException("Используйте другую сессию");
                         if (name.equals("session_delegate")) { response = Json.object("job_id", store.enqueue(target, caller, args.path("prompt").asText())); schedule(target); }
-                        else { store.append(target, "session", "TETHIUM", "От «" + source.title() + "»:\n" + args.path("text").asText()); response = Json.object("ok", true); }
+                        else { String text=args.path("text").asText();store.appendSessionUpdate(target,sessionUpdateKey(caller,owner),"От «" + source.title() + "»:\n" + text,text); response = Json.object("ok", true); }
                     }
                     default -> throw new IllegalArgumentException("Unknown tool");
                 }
@@ -873,6 +897,7 @@ public final class HostService implements AutoCloseable {
             }
         };
     }
+    private static String sessionUpdateKey(String source,Running run){return source+":"+run.activity.snapshot().path("startedAt").asLong();}
     private static JsonNode tool(String name, String description, String... fields) {
         var properties = Json.object(); for (String field : fields) properties.set(field, Json.object("type", "string"));
         return Json.object("name", name, "description", description, "inputSchema", Json.object("type", "object", "properties", properties, "required", fields, "additionalProperties", false),

@@ -209,6 +209,17 @@ class MobileGatewayTest {
             assertEquals(401,call(client,m,"/state",null,null).statusCode());assertEquals(200,client.send(HttpRequest.newBuilder(URI.create("http://localhost:"+m.httpPort()+"/")).GET().build(),HttpResponse.BodyHandlers.ofString()).statusCode());
         }
     }
+    @Test void projectIconUsesARealEtagAndReturnsNoBodyWhenUnchanged()throws Exception{
+        Path project=Files.createDirectories(root.resolve("project")),icon=project.resolve(".tethium/icon.png");Files.createDirectories(icon.getParent());javax.imageio.ImageIO.write(new java.awt.image.BufferedImage(256,128,java.awt.image.BufferedImage.TYPE_INT_ARGB),"png",icon.toFile());Files.writeString(project.resolve(".tethium/widget-bottom.svg"),"<svg xmlns='http://www.w3.org/2000/svg' width='120' height='16'><text x='0' y='12'>37%</text></svg>");
+        try(var h=new HostService(root.resolve("data"),ADAPTER);var local=new HostClient(h.descriptor());var m=new MobileGateway(root.resolve("data"),h.feed(),0,0);var client=HttpClient.newHttpClient()){
+            String p=local.post("/projects",Json.object("path",project.toString())).path("id").asText();String token=Json.parse(call(client,m,"/pair",Json.object("code",code(m)),null).body()).path("token").asText();URI uri=URI.create("http://localhost:"+m.httpPort()+"/project-icon.png?project="+p+"&size=64");
+            assertThrows(HostClient.ApiException.class,()->local.get("/project-icon?project="+p));var projectState=local.get("/state").path("projects").get(0);assertFalse(projectState.path("widget").path("bottom").has("png"));assertFalse(projectState.path("widget").path("bottom").has("svg"));
+            var first=client.send(HttpRequest.newBuilder(uri).header("Authorization","Bearer "+token).build(),HttpResponse.BodyHandlers.ofByteArray());assertEquals(200,first.statusCode());String etag=first.headers().firstValue("ETag").orElseThrow();assertTrue(first.body().length>0);
+            var image=javax.imageio.ImageIO.read(new ByteArrayInputStream(first.body()));assertEquals(64,image.getWidth());assertEquals(32,image.getHeight());
+            var unchanged=client.send(HttpRequest.newBuilder(uri).header("Authorization","Bearer "+token).header("If-None-Match",etag).build(),HttpResponse.BodyHandlers.ofByteArray());assertEquals(304,unchanged.statusCode());assertEquals(0,unchanged.body().length);
+            var widget=client.send(HttpRequest.newBuilder(URI.create("http://localhost:"+m.httpPort()+"/project-widget.png?project="+p+"&slot=bottom")).header("Authorization","Bearer "+token).build(),HttpResponse.BodyHandlers.ofByteArray());assertEquals(200,widget.statusCode());assertNotNull(javax.imageio.ImageIO.read(new ByteArrayInputStream(widget.body())));
+        }
+    }
     @Test void pinnedDocumentCanBeOpenedRemotelyWithoutAnAgentSession()throws Exception{
         Path project=Files.createDirectories(root.resolve("project"));Files.writeString(project.resolve("readme.md"),"| A | B |\n|---|---|\n| one | two |\n");
         try(var h=new HostService(root.resolve("data"),ADAPTER);var local=new HostClient(h.descriptor());var m=new MobileGateway(root.resolve("data"),h.feed(),0,0);var client=HttpClient.newHttpClient()){
@@ -240,12 +251,13 @@ class MobileGatewayTest {
             local.post("/sessions/"+s+"/stop",Json.object());local.post("/sessions/"+s+"/draft",Json.object("draft","laptop draft"));
             String token=pairOverLink(m);
             var image=new java.awt.image.BufferedImage(32,24,java.awt.image.BufferedImage.TYPE_INT_RGB);var bytes=new java.io.ByteArrayOutputStream();javax.imageio.ImageIO.write(image,"png",bytes);
-            var body=Json.object("data",Base64.getEncoder().encodeToString(bytes.toByteArray()));
-            assertEquals(401,call(client,m,"/attachment",body,null).statusCode());
+            URI upload=URI.create("http://localhost:"+m.httpPort()+"/attachment.png");
+            assertEquals(401,client.send(HttpRequest.newBuilder(upload).header("Content-Type","image/png").POST(HttpRequest.BodyPublishers.ofByteArray(bytes.toByteArray())).build(),HttpResponse.BodyHandlers.ofByteArray()).statusCode());
+            var first=client.send(HttpRequest.newBuilder(upload).header("Authorization","Bearer "+token).header("Content-Type","image/png").POST(HttpRequest.BodyPublishers.ofByteArray(bytes.toByteArray())).build(),HttpResponse.BodyHandlers.ofByteArray());assertEquals(201,first.statusCode());String attachment=first.headers().firstValue("X-Tethium-Attachment-Id").orElseThrow();
+            var duplicate=client.send(HttpRequest.newBuilder(upload).header("Authorization","Bearer "+token).header("Content-Type","image/png").POST(HttpRequest.BodyPublishers.ofByteArray(bytes.toByteArray())).build(),HttpResponse.BodyHandlers.ofByteArray());assertEquals(201,duplicate.statusCode());assertEquals(attachment,duplicate.headers().firstValue("X-Tethium-Attachment-Id").orElseThrow());
+            assertEquals(400,client.send(HttpRequest.newBuilder(upload).header("Authorization","Bearer "+token).header("Content-Type","image/png").POST(HttpRequest.BodyPublishers.ofByteArray("not PNG".getBytes())).build(),HttpResponse.BodyHandlers.ofByteArray()).statusCode());
             try(var phone=hello(m,token)){
-                var uploaded=phone.request("/attachment",body);assertEquals(200,uploaded.path("status").asInt());String attachment=uploaded.path("result").path("id").asText();
-                assertEquals(attachment,phone.request("/attachment",body).path("result").path("id").asText());
-                assertEquals(400,phone.request("/attachment",Json.object("data",Base64.getEncoder().encodeToString("not PNG".getBytes()))).path("status").asInt());
+        assertNotEquals(200,phone.request("/attachment",Json.object("data","removed")).path("status").asInt());
                 assertEquals(400,phone.request("/sessions/"+s+"/run",Json.object("prompt","bad","attachments",List.of("../secret"))).path("status").asInt());
                 var send=Json.object("prompt","look","attachments",List.of(attachment),"requestId","image-once");
                 assertEquals(200,phone.request("/sessions/"+s+"/run",send).path("status").asInt());assertEquals(200,phone.request("/sessions/"+s+"/run",send).path("status").asInt());

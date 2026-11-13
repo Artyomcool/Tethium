@@ -21,6 +21,7 @@ import java.util.concurrent.*;
  * Windows remote. No TLS and no JSON on the link by decision; the desktop's administrative bearer never leaves loopback.
  */
 public final class MobileGateway implements AutoCloseable {
+    public record Asset(byte[] bytes,String etag,String contentType){}
     /** In-process access to the host: change signal plus the pieces the link streams. */
     public interface Feed {
         default dev.tethium.files.FileManager files(){return null;}
@@ -31,7 +32,9 @@ public final class MobileGateway implements AutoCloseable {
         void removeListener(Runnable listener);
         JsonNode get(String target) throws Exception;
         JsonNode post(String path, JsonNode body) throws Exception;
+        default Asset asset(String target)throws Exception{throw new NoSuchElementException("Unknown binary asset");}
         JsonNode catalog() throws Exception;
+        default JsonNode session(String id) throws Exception { for(var value:catalog().path("sessions"))if(value.path("id").asText().equals(id))return value;return Json.object(); }
         JsonNode conversationMeta(String session) throws Exception;
         JsonNode messagesAfter(String session, long after, int limit) throws Exception;
         JsonNode messagesBefore(String session, long before, int limit) throws Exception;
@@ -141,6 +144,7 @@ public final class MobileGateway implements AutoCloseable {
         private final Runnable listener=this::kick;
         private final Map<String,String> sentCatalog=new HashMap<>(),sentSessions=new HashMap<>(),sentMeta=new HashMap<>();
         private boolean catalogSent; private String convSession=""; private long sentSequence=-1,sentMessageRevision=-1,liveRun=-1; private int liveOffset;
+        private boolean wire2; private String sentDetail="";
         private String resumeSession; private long resumeAfter=-1,resumeRevision=-1,resumeLiveRun=-1; private int resumeLiveOffset,tail=TAIL;
         Link(LinkChannel channel){this.channel=channel;}
         private record Frame(int kind,JsonNode body){}
@@ -150,10 +154,11 @@ public final class MobileGateway implements AutoCloseable {
                 var first=read();
                 if(first.body.path("protocol").asInt()!=Frames.PROTOCOL){send(Frames.BYE,Json.object("error","Обновите приложение Tethium на телефоне"));return;}
                 if(first.kind==Frames.PAIR){try{send(Frames.PAIRED,pair(first.body));}catch(SecurityException denied){send(Frames.BYE,Json.object("error",denied.getMessage()));}return;}
-                deviceToken=first.body.path("token").asText();
+                deviceToken=first.body.path("token").asText();boolean requestedWire2=first.body.path("wire").asInt()>=PhoneWire.VERSION;
                 if(first.kind!=Frames.HELLO||!authorized(deviceToken)){send(Frames.BYE,Json.object("error","Подключите телефон по QR на ноутбуке"));return;}
                 if(channel.remote())traffic.relayConnection();
-                send(Frames.WELCOME,Json.object("protocol",Frames.PROTOCOL,"httpPort",httpPort(),"transport",channel.remote()?"cloudflare":"lan","relay",relay.device(sha(deviceToken.getBytes(StandardCharsets.UTF_8))),"traffic",traffic.snapshot()));
+                send(Frames.WELCOME,Json.object("protocol",Frames.PROTOCOL,"wire",requestedWire2?PhoneWire.VERSION:1,"httpPort",httpPort(),"transport",channel.remote()?"cloudflare":"lan","relay",relay.device(sha(deviceToken.getBytes(StandardCharsets.UTF_8))),"traffic",traffic.snapshot()));
+                wire2=requestedWire2;
                 if(channel.lanAddress()!=null)adb.phone(channel.lanAddress());
                 channel.idleTimeout(45_000);links.add(this);feed.addListener(listener);kick();
                 workers.execute(this::push);
@@ -170,8 +175,8 @@ public final class MobileGateway implements AutoCloseable {
             }catch(Exception e){if(channel.remote())System.err.println("Cloudflare phone link ended: "+e);}
             finally{feed.removeListener(listener);links.remove(this);close();}
         }
-        private Frame read()throws IOException{byte[] raw=channel.read();if(raw.length<2)throw new IOException("Empty frame");return new Frame(raw[0]&255,reader.decode(raw,1));}
-        private void send(int kind,JsonNode body)throws IOException{synchronized(writer){channel.send(writer.encode(kind,body));}}
+        private Frame read()throws IOException{byte[] raw=channel.read();if(raw.length<2)throw new IOException("Empty frame");int kind=raw[0]&255;return new Frame(kind,wire2?PhoneWire.decode(kind,reader.decode(raw,1)):reader.decode(raw,1));}
+        private void send(int kind,JsonNode body)throws IOException{synchronized(writer){channel.send(writer.encode(kind,wire2?PhoneWire.encode(kind,body):body));}}
         private void kick(){synchronized(wake){dirty=true;wake.notifyAll();}}
         void close(){channel.close();synchronized(wake){dirty=true;wake.notifyAll();}}
         private void respond(JsonNode request){
@@ -187,7 +192,7 @@ public final class MobileGateway implements AutoCloseable {
                 connection.setConnectTimeout(5_000);connection.setReadTimeout(300_000);connection.setInstanceFollowRedirects(false);
                 String method=request.path("method").asText("GET");connection.setRequestMethod(method);boolean service=path.startsWith(PhoneServices.PREFIX);
                 if(!service)connection.setRequestProperty("Authorization","Bearer "+deviceToken);
-                if(request.path("headers").isObject())for(var header:request.path("headers").properties())if(header.getKey().equalsIgnoreCase("Content-Type")||header.getKey().equalsIgnoreCase("Range")||service&&header.getKey().equalsIgnoreCase("Authorization"))connection.setRequestProperty(header.getKey(),header.getValue().asText());
+                if(request.path("headers").isObject())for(var header:request.path("headers").properties())if(header.getKey().equalsIgnoreCase("Content-Type")||header.getKey().equalsIgnoreCase("Range")||header.getKey().equalsIgnoreCase("If-None-Match")||service&&header.getKey().equalsIgnoreCase("Authorization"))connection.setRequestProperty(header.getKey(),header.getValue().asText());
                 byte[] body=request.path("body").isBinary()?request.path("body").binaryValue():new byte[0];
                 if(body.length>0){connection.setDoOutput(true);connection.setFixedLengthStreamingMode(body.length);try(var output=connection.getOutputStream()){output.write(body);}}
                 int status=connection.getResponseCode();long size=connection.getContentLengthLong();String contentType=Objects.toString(connection.getContentType(),"application/octet-stream");
@@ -195,9 +200,10 @@ public final class MobileGateway implements AutoCloseable {
                 if(channel.remote()&&large&&!request.path("approved").asBoolean()){
                     send(Frames.HTTP_RESPONSE,Json.object("id",id,"status",428,"size",Math.max(0,size),"contentType",contentType,"error","Подтвердите передачу по Cloudflare","done",true));return;
                 }
-                InputStream stream=status<400?connection.getInputStream():connection.getErrorStream();
-                if(stream==null){send(Frames.HTTP_RESPONSE,Json.object("id",id,"status",status,"size",Math.max(0,size),"contentType",contentType,"done",true));return;}
-                try(stream){byte[] buffer=new byte[256<<10];boolean first=true;for(int count;(count=stream.read(buffer))>=0;){if(count==0)continue;byte[] chunk=Arrays.copyOf(buffer,count);send(Frames.HTTP_RESPONSE,Json.object("id",id,"status",status,"size",Math.max(0,size),"contentType",contentType,"contentDisposition",Objects.toString(connection.getHeaderField("Content-Disposition"),""),"body",chunk,"done",false,"first",first));first=false;}send(Frames.HTTP_RESPONSE,Json.object("id",id,"status",status,"size",Math.max(0,size),"contentType",contentType,"done",true,"first",first));}
+                String disposition=Objects.toString(connection.getHeaderField("Content-Disposition"),""),etag=Objects.toString(connection.getHeaderField("ETag"),""),attachmentId=Objects.toString(connection.getHeaderField("X-Tethium-Attachment-Id"),"");int width=connection.getHeaderFieldInt("X-Tethium-Width",0),height=connection.getHeaderFieldInt("X-Tethium-Height",0);
+                InputStream stream=status==304?null:status<400?connection.getInputStream():connection.getErrorStream();
+                if(stream==null){send(Frames.HTTP_RESPONSE,Json.object("id",id,"status",status,"size",Math.max(0,size),"contentType",contentType,"contentDisposition",disposition,"etag",etag,"attachmentId",attachmentId,"width",width,"height",height,"done",true));return;}
+                try(stream){byte[] buffer=new byte[256<<10];boolean first=true;for(int count;(count=stream.read(buffer))>=0;){if(count==0)continue;byte[] chunk=Arrays.copyOf(buffer,count);send(Frames.HTTP_RESPONSE,Json.object("id",id,"status",status,"size",Math.max(0,size),"contentType",contentType,"contentDisposition",disposition,"etag",etag,"attachmentId",attachmentId,"width",width,"height",height,"body",chunk,"done",false,"first",first));first=false;}send(Frames.HTTP_RESPONSE,Json.object("id",id,"status",status,"size",Math.max(0,size),"contentType",contentType,"contentDisposition",disposition,"etag",etag,"attachmentId",attachmentId,"width",width,"height",height,"done",true,"first",first));}
             }catch(Exception error){try{send(Frames.HTTP_RESPONSE,Json.object("id",id,"status",status(error),"error",message(error),"done",true));}catch(IOException ignored){}}
             finally{if(connection!=null)connection.disconnect();}
         }
@@ -224,21 +230,22 @@ public final class MobileGateway implements AutoCloseable {
         }
         private void pushCatalog()throws Exception{
             var catalog=(ObjectNode)feed.catalog().deepCopy();var sessions=catalog.remove("sessions");
+            if(wire2)for(var project:catalog.path("projects"))for(String slot:List.of("bottom","right")){var widget=project.path("widget").path(slot);if(widget instanceof ObjectNode object){object.remove("png");object.remove("svg");}}
             catalog.set("uac",uac.snapshot());
             var sessionOrder=Json.MAPPER.createArrayNode();if(sessions!=null)for(var session:sessions)sessionOrder.add(session.path("id").asText());catalog.set("sessionOrder",sessionOrder);
             var delta=Json.object();boolean any=!catalogSent;
             for(var e:catalog.properties()){String text=e.getValue().toString();if(!text.equals(sentCatalog.get(e.getKey()))){sentCatalog.put(e.getKey(),text);delta.set(e.getKey(),e.getValue());if(!e.getKey().equals("revision"))any=true;}}
             var changed=Json.MAPPER.createArrayNode();var seen=new HashSet<String>();
-            if(sessions!=null)for(var s:sessions){String id=s.path("id").asText();seen.add(id);String text=s.toString();if(!text.equals(sentSessions.get(id))){sentSessions.put(id,text);changed.add(s);any=true;}}
+            if(sessions!=null)for(var s:sessions){String id=s.path("id").asText();seen.add(id);var value=wire2?PhoneWire.sessionSummary(s):s;String text=value.toString();if(!text.equals(sentSessions.get(id))){sentSessions.put(id,text);changed.add(value);any=true;}}
             var removed=Json.MAPPER.createArrayNode();for(var id:List.copyOf(sentSessions.keySet()))if(!seen.contains(id)){sentSessions.remove(id);removed.add(id);any=true;}
             if(!any)return;
-            if(!catalogSent){delta.put("full",true);delta.set("sessions",sessions==null?Json.MAPPER.createArrayNode():sessions);catalogSent=true;}
-            else{if(!changed.isEmpty())delta.set("sessions",changed);if(!removed.isEmpty())delta.set("removedSessions",removed);}
+            if(!catalogSent){delta.put("full",true);if(wire2)delta.set("sessionRows",changed);else delta.set("sessions",sessions==null?Json.MAPPER.createArrayNode():sessions);catalogSent=true;}
+            else{if(!changed.isEmpty())delta.set(wire2?"sessionRows":"sessions",changed);if(!removed.isEmpty())delta.set("removedSessions",removed);}
             send(Frames.STATE,delta);
         }
         private void pushConversation()throws Exception{
             String s=watched;if(s.isEmpty()){convSession="";return;}
-            if(!s.equals(convSession)){convSession=s;sentSequence=-1;sentMessageRevision=-1;sentMeta.clear();liveRun=-1;liveOffset=0;}
+            if(!s.equals(convSession)){convSession=s;sentSequence=-1;sentMessageRevision=-1;sentMeta.clear();sentDetail="";liveRun=-1;liveOffset=0;}
             JsonNode meta;try{meta=feed.conversationMeta(s);}catch(Exception unknown){return;}
             var frame=Json.object("session",s);boolean any=false;
             long revision=meta.path("messageRevision").asLong(),last=meta.path("lastSequence").asLong();
@@ -254,6 +261,7 @@ public final class MobileGateway implements AutoCloseable {
                 var more=feed.messagesAfter(s,sentSequence,1000);frame.set("messages",more);sentSequence=Math.max(last,lastSequence(more));any=true;
             }
             for(String key:List.of("queued","requests","artifacts","media")){String text=meta.path(key).toString();if(!text.equals(sentMeta.get(key))){sentMeta.put(key,text);frame.set(key,meta.path(key));any=true;}}
+            if(wire2){var detail=PhoneWire.sessionDetail(feed.session(s));String text=detail.toString();if(!text.equals(sentDetail)){sentDetail=text;frame.set("detail",detail);any=true;}}
             if(any)send(Frames.CONVERSATION,frame);
         }
         private void pushLive()throws Exception{
@@ -287,7 +295,6 @@ public final class MobileGateway implements AutoCloseable {
             }
             return catalog;
         }
-        if(path.equals("/attachment")&&post)return upload(body);
         if(path.equals("/service-token")&&post)return services.mint(body);
         if(path.equals("/artifact/download")&&post){
             var snapshot=feed.get("/state?session="+URLEncoder.encode(body.path("session").asText(),StandardCharsets.UTF_8)+"&history=window");JsonNode artifact=null;for(var a:snapshot.path("conversation").path("artifacts"))if(a.path("id").asText().equals(body.path("artifact").asText()))artifact=a;
@@ -322,7 +329,7 @@ public final class MobileGateway implements AutoCloseable {
             previews.entrySet().removeIf(x->x.getValue().expires<System.currentTimeMillis());previews.put(key,new Preview(file.getParent(),System.currentTimeMillis()+3600_000));
             return Json.object("path","/preview/"+key+"/"+new URI(null,null,file.getFileName().toString(),null).toASCIIString());
         }
-        if(!post&&(path.equals("/state")||path.equals("/project-icon")||path.equals("/git")||path.equals("/backlog")||path.equals("/reminders")||path.equals("/models")||path.equals("/resources")||path.equals("/usage")||path.equals("/history/index")||path.equals("/history/page")||path.equals("/messages")||path.equals("/trash")))return feed.get(target);
+        if(!post&&(path.equals("/state")||path.equals("/git")||path.equals("/backlog")||path.equals("/reminders")||path.equals("/models")||path.equals("/resources")||path.equals("/usage")||path.equals("/history/index")||path.equals("/history/page")||path.equals("/messages")||path.equals("/trash")))return feed.get(target);
         if(post&&allowed(path)){
             var b=body instanceof ObjectNode object?object:Json.object();
             // Chat attachments use validated uploads, separate from file-manager/project paths.
@@ -353,8 +360,7 @@ public final class MobileGateway implements AutoCloseable {
     private static boolean allowed(String path){return path.matches("/project-groups/[a-zA-Z0-9-]+/(rename|collapsed|remove)")||path.equals("/project-groups")||path.equals("/project-tree/order")||path.equals("/favorites/order")||path.matches("/projects/[a-zA-Z0-9-]+/(collapsed|parent|favorite)")||path.matches("/reminders/[a-zA-Z0-9-]+/(snooze|done|remove)")||path.equals("/projects")||path.equals("/projects/order")||path.equals("/backlog")||path.equals("/backlog-settings")||path.matches("/backlog/[a-zA-Z0-9-]+/(update|remove|start)")||path.equals("/resources")||path.equals("/quota/refresh")||path.equals("/quota/reset")||path.equals("/claude/auth/login")||path.equals("/sessions")||path.equals("/answer")||path.matches("/projects/[a-zA-Z0-9-]+/(files|active|sessions-order)")||path.matches("/files/[a-zA-Z0-9-]+/(rename|remove)")||path.matches("/sessions/[a-zA-Z0-9-]+/(run|interrupt|stop|queue-pause|queue-resume|queue-remove|queue-move|queue-take|queue-merge|queue-split|active|rename|settings|seen|attention|favorite|quota-auto|autonomy|schedule|pinned-file|trash|restore|purge)");}
     private static int status(Exception e){return e instanceof SecurityException?401:e instanceof NoSuchElementException?404:400;}
     private static String message(Exception e){return Objects.toString(e.getMessage(),"Ошибка подключения");}
-    private JsonNode upload(JsonNode body)throws Exception{
-        byte[] bytes=Base64.getDecoder().decode(body.path("data").asText());
+    private JsonNode upload(byte[] bytes)throws Exception{
         if(bytes.length==0||bytes.length>12_000_000)throw new IllegalArgumentException("Изображение должно быть меньше 12 МБ");
         int width,height;
         try(var in=javax.imageio.ImageIO.createImageInputStream(new ByteArrayInputStream(bytes))){
@@ -390,8 +396,10 @@ public final class MobileGateway implements AutoCloseable {
             if(path.equals("/pair")&&method.equals("POST")){json(e,200,pair(body(e)));return;}
             String auth=e.getRequestHeaders().getFirst("Authorization");
             if(auth==null||!auth.startsWith("Bearer ")||!authorized(auth.substring(7)))throw new SecurityException("Подключите телефон по QR на ноутбуке");
+            if(path.equals("/attachment.png")&&method.equals("POST")){byte[] bytes=e.getRequestBody().readNBytes(17_000_001);if(bytes.length>17_000_000)throw new IOException("Изображение слишком большое");var uploaded=upload(bytes);e.getResponseHeaders().set("X-Tethium-Attachment-Id",uploaded.path("id").asText());e.getResponseHeaders().set("X-Tethium-Width",uploaded.path("width").asText());e.getResponseHeaders().set("X-Tethium-Height",uploaded.path("height").asText());e.sendResponseHeaders(201,-1);return;}
             if(feed.files()!=null&&feed.files().binary(e))return;
             if(method.equals("GET")){
+                if(Set.of("/project-icon.png","/project-widget.png","/history-thumbnail.png").contains(path)){var asset=feed.asset(target);if(asset==null){e.sendResponseHeaders(404,-1);return;}cachedAsset(e,asset);return;}
                 if(path.matches("/apps/[a-f0-9]{64}\\.apk")){Path apk=appCatalog.file(path.substring(6,70));e.getResponseHeaders().set("Content-Type","application/vnd.android.package-archive");e.sendResponseHeaders(200,Files.size(apk));Files.copy(apk,e.getResponseBody());return;}
                 if(path.equals("/update")){resource(e,"/mobile/release.json","application/json");return;}
                 if(path.equals("/apk")){resource(e,"/mobile/tethium.apk","application/vnd.android.package-archive");return;}
@@ -400,11 +408,12 @@ public final class MobileGateway implements AutoCloseable {
                 }
             }
             if(!method.equals("GET")&&!method.equals("POST")){e.sendResponseHeaders(405,-1);return;}
-            json(e,200,api(method,target,method.equals("POST")?body(e,path.equals("/attachment")?17_000_000:2_000_000):null));
+            json(e,200,api(method,target,method.equals("POST")?body(e):null));
         }catch(Exception error){json(e,status(error),Json.object("error",message(error)));}}
     }
     /** Screenshots sent with messages and images the agent made are kept by Tethium, outside the project. */
     private volatile String remoteVersionKey="",remoteVersionSha="";
+    private static void cachedAsset(HttpExchange e,Asset asset)throws IOException{String etag="\""+asset.etag().replace("\"","")+"\"";e.getResponseHeaders().set("ETag",etag);e.getResponseHeaders().set("Cache-Control","private, max-age=0, must-revalidate");if(etag.equals(e.getRequestHeaders().getFirst("If-None-Match"))){e.sendResponseHeaders(304,-1);return;}e.getResponseHeaders().set("Content-Type",asset.contentType());e.sendResponseHeaders(200,asset.bytes().length);e.getResponseBody().write(asset.bytes());}
     /** The SHA-256 of the plain-jar Remote archive this laptop serves; Remote compares it with its own to offer an update. */
     private JsonNode remoteVersion()throws Exception{
         Path zip=data.getParent().resolve("releases/tethium-remote-jvm.zip");if(!Files.isRegularFile(zip))return Json.object("jvm","");

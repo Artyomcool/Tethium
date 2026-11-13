@@ -1,7 +1,6 @@
 package dev.tethium.desktop;
 import org.junit.jupiter.api.Test;
 import java.awt.image.BufferedImage;
-import java.util.Base64;
 import static org.junit.jupiter.api.Assertions.*;
 class IdentityIconsTest {
     @Test void unknownNamesGetHashedPatternsAndOnlyTheDefaultSessionKeepsTheGlyph() {
@@ -43,15 +42,16 @@ class IdentityIconsTest {
     }
     @Test void projectIconFromTheProjectReplacesTheHashedPatternUntilItsVersionChanges() throws Exception {
         var image=new BufferedImage(40,30,BufferedImage.TYPE_INT_ARGB);var out=new java.io.ByteArrayOutputStream();javax.imageio.ImageIO.write(image,"png",out);
-        String png=Base64.getEncoder().encodeToString(out.toByteArray());
         var fallback=IdentityIcons.ofProject("p1","Future","C:/git/Future");
-        assertTrue(IdentityIcons.projectIconStale("p1","100:1"));
-        IdentityIcons.registerProjectIcon("p1","100:1",png);
+        assertTrue(IdentityIcons.beginProjectIconLoad("p1","100:1"));
+        assertTrue(IdentityIcons.registerProjectIcon("p1","100:1",out.toByteArray()));
         assertFalse(IdentityIcons.projectIconStale("p1","100:1"));assertTrue(IdentityIcons.projectIconStale("p1","100:2"),"a changed file is fetched again");
         var own=IdentityIcons.ofProject("p1","Future","C:/git/Future");
         assertNotSame(fallback,own);assertEquals(22,own.getIconWidth());assertEquals(22,own.getIconHeight());
-        IdentityIcons.registerProjectIcon("p1","100:3","");
-        assertSame(fallback,IdentityIcons.ofProject("p1","Future","C:/git/Future"),"an unreadable icon falls back to the hashed pattern");
+        assertTrue(IdentityIcons.beginProjectIconLoad("p1","100:3"));assertFalse(IdentityIcons.beginProjectIconLoad("p1","100:3"),"one version is fetched once at a time");
+        assertFalse(IdentityIcons.registerProjectIcon("p1","100:3",new byte[0]));
+        assertSame(own,IdentityIcons.ofProject("p1","Future","C:/git/Future"),"a transient unreadable response does not erase the working icon");
+        assertTrue(IdentityIcons.beginProjectIconLoad("p1","100:3"),"a failed response can be retried");IdentityIcons.projectIconLoadFailed("p1","100:3");
         assertFalse(IdentityIcons.projectIconStale("p1",""));assertSame(fallback,IdentityIcons.ofProject("p1","Future","C:/git/Future"),"a removed file drops the cached icon");
     }
 }

@@ -28,7 +28,7 @@ final class Connection {
     static final class Frame { final int kind; final JSONObject body; Frame(int kind,JSONObject body){this.kind=kind;this.body=body;} }
     final String address,token; final int httpPort;
     private final String host; private final int port; private final Network network;private final BooleanSupplier home;
-    private volatile String relayUrl="",relayTicket="",relaySecret="";private volatile boolean remote;
+    private volatile String relayUrl="",relayTicket="",relaySecret="";private volatile boolean remote,wire2;
     private volatile Listener listener; private volatile boolean started; private volatile String watched=""; private volatile JSONObject watchBody;
     private Thread worker; private FrameChannel channel; private Tbin.Writer writer; private final Object writeLock=new Object();
     private volatile CountDownLatch ready=new CountDownLatch(1);
@@ -84,8 +84,9 @@ final class Connection {
         Log.i(TAG,"connecting route="+(useRelay?"cloudflare":"lan")+" home="+atHome+" relayReady="+relayReady);
         FrameChannel current=useRelay?new RelayFrameChannel(relayUrl,relayTicket,relaySecret,network):new LanFrameChannel(host,port,network);var w=new Tbin.Writer();var r=new Tbin.Reader();
         try{
-            current.send(w.encode(HELLO,json("protocol",PROTOCOL,"token",token,"name",Build.MANUFACTURER+" "+Build.MODEL)));
+            current.send(w.encode(HELLO,json("protocol",PROTOCOL,"wire",PhoneWire.VERSION,"token",token,"name",Build.MANUFACTURER+" "+Build.MODEL)));
             var hello=read(current,r,current.remote()?8_000:0);if(hello.kind!=WELCOME)throw new ApiException(401,hello.body.optString("error","Ноутбук отклонил подключение"));
+            wire2=hello.body.optInt("wire")>=PhoneWire.VERSION;
             if(current instanceof LanFrameChannel lan)lan.timeout(45_000);
             JSONObject relay=hello.body.optJSONObject("relay");if(relay!=null&&!relay.optString("secret").isBlank()){relayUrl=relay.optString("url");relayTicket=relay.optString("ticket");relaySecret=relay.optString("secret");}
             remote=current.remote();Log.i(TAG,"connected route="+(remote?"cloudflare":"lan"));
@@ -108,7 +109,7 @@ final class Connection {
             }
         }finally{
             synchronized(writeLock){if(channel==current){channel=null;writer=null;}}
-            remote=false;
+            remote=false;wire2=false;
             ready=new CountDownLatch(1);
             current.close();
             for(var future:pending.values())future.completeExceptionally(new IOException("Нет связи с ноутбуком"));pending.clear();
@@ -149,19 +150,19 @@ final class Connection {
         var url=new URL("http://"+host+":"+httpPort+path);var c=(HttpURLConnection)(network==null?url.openConnection():network.openConnection(url));
         c.setConnectTimeout(5000);c.setReadTimeout(30_000);c.setInstanceFollowRedirects(false);if(!token.isEmpty())c.setRequestProperty("Authorization","Bearer "+token);return c;
     }
-    private void send(int kind,JSONObject body)throws IOException{synchronized(writeLock){if(channel==null||!channel.open())throw new IOException("Нет связи с ноутбуком");channel.send(writer.encode(kind,body));}}
+    private void send(int kind,JSONObject body)throws IOException{synchronized(writeLock){if(channel==null||!channel.open())throw new IOException("Нет связи с ноутбуком");channel.send(writer.encode(kind,wire2?PhoneWire.encode(kind,body):body));}}
     private static void write(DataOutputStream o,Tbin.Writer w,int kind,JSONObject body)throws IOException{byte[] raw=w.encode(kind,body);byte[] data=pack(raw);o.writeInt(data.length);o.write(data);o.flush();}
     private static Frame read(DataInputStream in,Tbin.Reader r)throws IOException{
         int size=in.readInt();if(size<2||size>MAX_FRAME+5)throw new IOException("Bad frame length");byte[] data=new byte[size];in.readFully(data);byte[] raw=unpack(data);
         if(raw.length<2)throw new IOException("Empty frame");
-        try{Object body=r.decode(raw,1);return new Frame(raw[0]&255,body instanceof JSONObject o?o:new JSONObject());}catch(JSONException e){throw new IOException("Повреждённый кадр");}
+        try{int kind=raw[0]&255;return new Frame(kind,PhoneWire.decode(kind,r.decode(raw,1)));}catch(JSONException e){throw new IOException("Повреждённый кадр");}
     }
     private static Frame read(FrameChannel channel,Tbin.Reader reader)throws IOException{
         return read(channel,reader,0);
     }
     private static Frame read(FrameChannel channel,Tbin.Reader reader,long timeoutMillis)throws IOException{
         byte[] raw=channel.read(timeoutMillis);if(raw.length<2)throw new IOException("Empty frame");
-        try{Object body=reader.decode(raw,1);return new Frame(raw[0]&255,body instanceof JSONObject o?o:new JSONObject());}catch(JSONException e){throw new IOException("Повреждённый кадр");}
+        try{int kind=raw[0]&255;return new Frame(kind,PhoneWire.decode(kind,reader.decode(raw,1)));}catch(JSONException e){throw new IOException("Повреждённый кадр");}
     }
     private void httpResponse(JSONObject frame){RelayHttpResponse response=httpPending.get(frame.optInt("id"));if(response!=null){response.accept(frame);if(frame.optBoolean("done"))httpPending.remove(frame.optInt("id"));}}
 
@@ -172,7 +173,7 @@ final class Connection {
             if(connected)return;ensure();try{if(!ready.await(Math.max(1,getConnectTimeout()),TimeUnit.MILLISECONDS)||!Connection.this.connected())throw new IOException("Нет связи с ноутбуком");}catch(InterruptedException e){Thread.currentThread().interrupt();throw new InterruptedIOException();}
             int id=ids.incrementAndGet();response=new RelayHttpResponse();httpPending.put(id,response);
             boolean approved="true".equalsIgnoreCase(getRequestProperty("X-Tethium-Approve-Large"));if(requestBody.size()>1_000_000&&!approved){response.accept(json("id",id,"status",428,"size",requestBody.size(),"contentType","application/json","error","Подтвердите передачу по Cloudflare","done",true));connected=true;httpPending.remove(id);return;}
-            var headers=json();String type=getRequestProperty("Content-Type"),range=getRequestProperty("Range"),authorization=getRequestProperty("Authorization");try{if(type!=null)headers.put("Content-Type",type);if(range!=null)headers.put("Range",range);if(path.startsWith("/svc/")&&authorization!=null)headers.put("Authorization",authorization);}catch(JSONException ignored){}
+            var headers=json();String type=getRequestProperty("Content-Type"),range=getRequestProperty("Range"),etag=getRequestProperty("If-None-Match"),authorization=getRequestProperty("Authorization");try{if(type!=null)headers.put("Content-Type",type);if(range!=null)headers.put("Range",range);if(etag!=null)headers.put("If-None-Match",etag);if(path.startsWith("/svc/")&&authorization!=null)headers.put("Authorization",authorization);}catch(JSONException ignored){}
             var frame=json("id",id,"path",path,"method",getRequestMethod(),"headers",headers,"approved",approved);if(requestBody.size()>0)try{frame.put("body",requestBody.toByteArray());}catch(JSONException ignored){}
             try{send(HTTP_REQUEST,frame);connected=true;}catch(IOException e){httpPending.remove(id);response.fail(e);throw e;}
         }
@@ -182,7 +183,7 @@ final class Connection {
         public String getContentType(){try{return head().optString("contentType","application/octet-stream");}catch(IOException e){return null;}}
         public long getContentLengthLong(){try{return head().optLong("size",-1);}catch(IOException e){return -1;}}
         public int getContentLength(){long n=getContentLengthLong();return n<0||n>Integer.MAX_VALUE?-1:(int)n;}
-        public String getHeaderField(String name){try{if(name.equalsIgnoreCase("Content-Type"))return getContentType();if(name.equalsIgnoreCase("Content-Length")){long n=getContentLengthLong();return n<0?null:Long.toString(n);}if(name.equalsIgnoreCase("Content-Disposition"))return head().optString("contentDisposition",null);}catch(Exception ignored){}return null;}
+        public String getHeaderField(String name){try{if(name.equalsIgnoreCase("Content-Type"))return getContentType();if(name.equalsIgnoreCase("Content-Length")){long n=getContentLengthLong();return n<0?null:Long.toString(n);}if(name.equalsIgnoreCase("Content-Disposition"))return head().optString("contentDisposition",null);if(name.equalsIgnoreCase("ETag"))return head().optString("etag",null);if(name.equalsIgnoreCase("X-Tethium-Attachment-Id"))return head().optString("attachmentId",null);if(name.equalsIgnoreCase("X-Tethium-Width"))return Integer.toString(head().optInt("width"));if(name.equalsIgnoreCase("X-Tethium-Height"))return Integer.toString(head().optInt("height"));}catch(Exception ignored){}return null;}
         public Map<String,List<String>> getHeaderFields(){var fields=new LinkedHashMap<String,List<String>>();String type=getContentType();if(type!=null)fields.put("Content-Type",List.of(type));long size=getContentLengthLong();if(size>=0){fields.put("Content-Length",List.of(Long.toString(size)));if(getResponseCodeQuiet()==428)fields.put("X-Tethium-Required-Bytes",List.of(Long.toString(size)));}String disposition=getHeaderField("Content-Disposition");if(disposition!=null&&!disposition.isBlank())fields.put("Content-Disposition",List.of(disposition));return Collections.unmodifiableMap(fields);}
         private int getResponseCodeQuiet(){try{return getResponseCode();}catch(IOException e){return -1;}}
         public OutputStream getOutputStream()throws IOException{if(connected)throw new IOException("Already connected");setDoOutput(true);return requestBody;}

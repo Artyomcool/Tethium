@@ -154,7 +154,7 @@ final class VirtualHistory implements AutoCloseable {
     private String imageHtml(JsonNode row)throws Exception{
         var folder=java.nio.file.Files.createDirectories(dev.tethium.host.AppPaths.data().resolve("chat-thumbnails"));
         String key=java.util.UUID.nameUUIDFromBytes(row.path("file").asText().getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();var thumbnail=folder.resolve(key+".png");
-        if(!java.nio.file.Files.isRegularFile(thumbnail)&&!row.path("thumbnail").asText().isBlank())java.nio.file.Files.write(thumbnail,java.util.Base64.getDecoder().decode(row.path("thumbnail").asText()));
+        if(!java.nio.file.Files.isRegularFile(thumbnail)){String path="/history-thumbnail.png?session="+java.net.URLEncoder.encode(session,java.nio.charset.StandardCharsets.UTF_8)+"&media="+row.path("mediaId").asLong();java.nio.file.Files.write(thumbnail,host.bytes(path));}
         String target=fileLink(row.path("file").asText());
         return "<a href='"+Theme.escape(target)+"'><img src='"+thumbnail.toUri()+"' data-original='"+Theme.escape(target)+"' width='"+row.path("width").asInt(160)+"' height='"+row.path("height").asInt(100)+"' border='0'></a>";
     }

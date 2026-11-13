@@ -745,8 +745,8 @@ public final class WorkspaceFrame extends JFrame {
         projectGroups.clear();for(var group:state.path("projectGroups"))projectGroups.put(group.path("id").asText(),group);
         projects.clear(); for (var p : state.path("projects")) projects.put(p.path("id").asText(), p);
         for (var p : state.path("projects")) { String pid = p.path("id").asText(), version = p.path("icon").asText();
-            if (IdentityIcons.projectIconStale(pid, version)) io.submit(() -> { try { var icon = host.get("/project-icon?project=" + pid); IdentityIcons.registerProjectIcon(pid, icon.path("version").asText(), icon.path("png").asText()); SwingUtilities.invokeLater(() -> { active.repaint(); inactive.repaint(); }); } catch (Exception e) { IdentityIcons.registerProjectIcon(pid, version, ""); } }); }
-        projectWidgets.update(projects.values());active.repaint();inactive.repaint();
+            if (IdentityIcons.beginProjectIconLoad(pid, version)) io.submit(() -> { try { var icon = host.bytes("/project-icon.png?project=" + pid + "&size=88"); if(IdentityIcons.registerProjectIcon(pid, version, icon))SwingUtilities.invokeLater(() -> { active.repaint(); inactive.repaint(); }); } catch (Exception e) { IdentityIcons.projectIconLoadFailed(pid,version); } }); }
+        projectWidgets.update(projects.values(),host,io,()->SwingUtilities.invokeLater(()->{active.repaint();inactive.repaint();}));active.repaint();inactive.repaint();
         sessions.clear(); for (var s : state.path("sessions")) sessions.put(s.path("id").asText(), s);
         documents.clear();for(var d:state.path("files"))documents.put(d.path("id").asText(),d);
         if(!host.remote())for(var project:projects.values())if(project.path("panel").isObject()){

@@ -100,6 +100,7 @@ public final class SessionStore implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS compaction_notices(run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,item_id TEXT NOT NULL,phase TEXT NOT NULL,PRIMARY KEY(run_id,item_id,phase))");
             s.execute("CREATE TABLE IF NOT EXISTS compaction_messages(run_id TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,item_id TEXT NOT NULL,message_sequence INTEGER NOT NULL REFERENCES messages(sequence) ON DELETE CASCADE,started_at INTEGER NOT NULL,PRIMARY KEY(run_id,item_id))");
             s.execute("CREATE TABLE IF NOT EXISTS message_revisions(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,revision INTEGER NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS session_updates(target_session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,update_key TEXT NOT NULL,message_sequence INTEGER NOT NULL REFERENCES messages(sequence) ON DELETE CASCADE,PRIMARY KEY(target_session_id,update_key))");
             s.execute("CREATE TABLE IF NOT EXISTS project_cross_project(project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,enabled INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS session_technical(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,enabled INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS backlog_tasks(id TEXT PRIMARY KEY,project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,title TEXT NOT NULL,prompt TEXT NOT NULL,priority INTEGER NOT NULL,min_quota INTEGER,min_free_cpu INTEGER,target TEXT NOT NULL,session_id TEXT,session_title TEXT,source_id TEXT,state TEXT NOT NULL,job_id TEXT,created_at INTEGER NOT NULL)");
@@ -1110,6 +1111,18 @@ public final class SessionStore implements AutoCloseable {
     }
     public synchronized void append(String sessionId, String role, String provider, String text) throws SQLException {
         append(sessionId,role,provider,text,System.currentTimeMillis());
+    }
+    /** One source run owns one growing card in every recipient session. Status notes and its final result stay together. */
+    public synchronized void appendSessionUpdate(String target,String updateKey,String firstText,String continuation)throws Exception{
+        transaction(()->{
+            long sequence=0;String current=null;
+            try(var q=connection.prepareStatement("SELECT u.message_sequence,m.text FROM session_updates u JOIN messages m ON m.sequence=u.message_sequence AND m.session_id=u.target_session_id WHERE u.target_session_id=? AND u.update_key=?")){
+                q.setString(1,target);q.setString(2,updateKey);try(var r=q.executeQuery()){if(r.next()){sequence=r.getLong(1);current=r.getString(2);}}
+            }
+            if(sequence==0){append(target,"session","TETHIUM",firstText);execute("INSERT INTO session_updates VALUES(?,?,?)",target,updateKey,lastSequence(target));}
+            else{execute("UPDATE messages SET text=? WHERE sequence=? AND session_id=?",current+"\n\n"+continuation,sequence,target);messagesChanged(target);}
+            return null;
+        });
     }
     private void append(String sessionId,String role,String provider,String text,long timestamp)throws SQLException{
         execute("INSERT INTO messages(session_id,role,provider,text,created_at) VALUES(?,?,?,?,?)",sessionId,role,provider,text,Math.max(0,timestamp));

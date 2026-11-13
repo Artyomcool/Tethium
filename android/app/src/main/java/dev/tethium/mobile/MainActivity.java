@@ -108,29 +108,38 @@ public final class MainActivity extends Activity {
     private void scheduleRender(){if(renderQueued||input==null)return;renderQueued=true;main.postDelayed(()->{renderQueued=false;render();},80);}
     private void applyState(JSONObject delta,boolean full){
         try{
+            var compact=delta.optJSONArray("sessionRows");if(compact!=null){var expanded=new JSONArray();for(int i=0;i<compact.length();i++)expanded.put(PhoneWire.sessionSummary(compact.getJSONArray(i)));delta.put("sessions",expanded);delta.remove("sessionRows");}
             if(full){var next=new JSONObject();var names=delta.keys();while(names.hasNext()){String k=names.next();if(!k.equals("full"))next.put(k,delta.get(k));}snapshot=next;return;}
             var sessions=array(snapshot,"sessions");var names=delta.keys();
             while(names.hasNext()){String k=names.next();if(k.equals("sessions")||k.equals("removedSessions")||k.equals("full"))continue;snapshot.put(k,delta.get(k));}
-            var changed=delta.optJSONArray("sessions");if(changed!=null)for(int i=0;i<changed.length();i++){var s=changed.getJSONObject(i);String id=s.optString("id");int at=-1;for(int j=0;j<sessions.length();j++)if(id.equals(sessions.optJSONObject(j).optString("id"))){at=j;break;}if(at>=0)sessions.put(at,s);else sessions.put(s);}
+            var changed=delta.optJSONArray("sessions");if(changed!=null)for(int i=0;i<changed.length();i++){var s=changed.getJSONObject(i);String id=s.optString("id");int at=-1;for(int j=0;j<sessions.length();j++)if(id.equals(sessions.optJSONObject(j).optString("id"))){at=j;break;}if(at>=0){var existing=sessions.getJSONObject(at);merge(existing,s);sessions.put(at,existing);}else sessions.put(s);}
             var removed=delta.optJSONArray("removedSessions");if(removed!=null&&removed.length()>0){var gone=new HashSet<String>();for(int i=0;i<removed.length();i++)gone.add(removed.optString(i));var kept=new JSONArray();for(int j=0;j<sessions.length();j++)if(!gone.contains(sessions.optJSONObject(j).optString("id")))kept.put(sessions.optJSONObject(j));sessions=kept;}
             snapshot.put("sessions",SessionOrder.apply(sessions,snapshot.optJSONArray("sessionOrder")));
-        }catch(JSONException ignored){}finally{loadProjectIcons();if(browserOrderChanged!=null)browserOrderChanged.run();}
+        }catch(JSONException ignored){}finally{loadProjectIcons(false);if(browserOrderChanged!=null)browserOrderChanged.run();}
     }
     /** Fetches the projects' own icons from the laptop when their version changes; the list redraws once one arrives. */
     private final Set<String> iconRequests=new HashSet<>();
-    private void loadProjectIcons(){
-        var projects=array(snapshot,"projects");var c=connection;if(c==null)return;
+    private void loadProjectIcons(boolean all){
+        var projects=array(snapshot,"projects");var c=connection;if(c==null)return;String selectedProject=session().optString("projectId");
         for(int i=0;i<projects.length();i++){
-            var p=projects.optJSONObject(i);if(p==null)continue;String id=p.optString("id"),root=p.optString("root"),version=p.optString("icon");
-            if(identityIcons==null||identityIcons.customCurrent(root,version)||!iconRequests.add(id+":"+version))continue;
-            if(version.isEmpty()){identityIcons.custom(root,"",null);continue;}
-            io.execute(()->{try{var icon=c.request("/project-icon?project="+id,null);byte[] bytes=android.util.Base64.decode(icon.optString("png"),android.util.Base64.DEFAULT);var image=android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.length);
-                main.post(()->{identityIcons.custom(root,icon.optString("version",version),image);if(browserOrderChanged!=null)browserOrderChanged.run();scheduleRender();});}catch(Exception ignored){main.post(()->iconRequests.remove(id+":"+version));}});
+            var p=projects.optJSONObject(i);if(p==null)continue;String id=p.optString("id"),root=p.optString("root"),version=p.optString("icon");if(!all&&!id.equals(selectedProject))continue;
+            String requestKey=id+":"+version;if(identityIcons==null||identityIcons.customCurrent(root,version)||!iconRequests.add(requestKey))continue;
+            if(version.isEmpty()){identityIcons.custom(root,"",null);iconRequests.remove(requestKey);continue;}
+            cachedPng("project-"+id,"/project-icon.png?project="+id+"&size=64",version,image->{iconRequests.remove(requestKey);identityIcons.custom(root,version,image);if(browserOrderChanged!=null)browserOrderChanged.run();scheduleRender();},()->iconRequests.remove(requestKey));
         }
+    }
+    private void cachedPng(String name,String path,String version,java.util.function.Consumer<Bitmap> ready,Runnable failed){
+        File folder=new File(getCacheDir(),"network-images"),cached=new File(folder,name.replaceAll("[^a-zA-Z0-9_.-]","_")+".png");String versionKey="networkImageVersion."+name,etagKey="networkImageEtag."+name;var c=connection;if(c==null)return;
+        if(cached.isFile()&&version.equals(prefs.getString(versionKey,""))){var image=BitmapFactory.decodeFile(cached.getAbsolutePath());if(image!=null)ready.accept(image);}
+        io.execute(()->{java.net.HttpURLConnection request=null;try{folder.mkdirs();request=c.open(path);String etag=prefs.getString(etagKey,"");if(cached.isFile()&&!etag.isEmpty())request.setRequestProperty("If-None-Match",etag);int status=request.getResponseCode();
+            if(status==200){byte[] bytes=Connection.read(request.getInputStream());File temporary=new File(folder,cached.getName()+".tmp");try(var output=new FileOutputStream(temporary)){output.write(bytes);}if(!temporary.renameTo(cached)){try(var output=new FileOutputStream(cached)){output.write(bytes);}temporary.delete();}String next=request.getHeaderField("ETag");prefs.edit().putString(versionKey,version).putString(etagKey,next==null?"":next).apply();}
+            else if(status==304&&cached.isFile())prefs.edit().putString(versionKey,version).apply();else throw new IOException("Image HTTP "+status);var image=BitmapFactory.decodeFile(cached.getAbsolutePath());if(image==null)throw new IOException("Повреждённое изображение");main.post(()->ready.accept(image));
+        }catch(Exception error){android.util.Log.w("TethiumImages","Cannot load "+path,error);prefs.edit().remove(etagKey).apply();main.post(failed);}finally{if(request!=null)request.disconnect();}});
     }
     private Runnable browserOrderChanged;
     private void applyConversation(JSONObject frame){
         try{
+            var detail=frame.optJSONArray("detail");if(detail!=null){var value=PhoneWire.sessionDetail(detail);var sessions=array(snapshot,"sessions");for(int i=0;i<sessions.length();i++){var s=sessions.optJSONObject(i);if(s!=null&&selected.equals(s.optString("id"))){merge(s,value);break;}}}
             var messages=frame.optJSONArray("messages");
             if(frame.optBoolean("reset")){history=new JSONArray();historyMore=frame.optBoolean("hasMore");historyChanged=true;}
             if(messages!=null){long last=history.length()==0?-1:history.optJSONObject(history.length()-1).optLong("sequence");for(int i=0;i<messages.length();i++){var m=messages.getJSONObject(i);if(m.optLong("sequence")>last){history.put(m);last=m.optLong("sequence");}}}
@@ -138,6 +147,7 @@ public final class MainActivity extends Activity {
             conv.put("messages",history);
         }catch(JSONException ignored){}
     }
+    private static void merge(JSONObject target,JSONObject changes)throws JSONException{var names=changes.keys();while(names.hasNext()){String key=names.next();target.put(key,changes.get(key));}}
     private void applyLive(JSONObject frame){
         long run=frame.optLong("run");int offset=frame.optInt("offset");String text=frame.optString("text");
         if(run!=liveRun||offset==0){liveRun=run;liveText.setLength(0);liveText.append(text);}
@@ -219,7 +229,7 @@ public final class MainActivity extends Activity {
         String[] order={projectTreeSignature()+identityIcons.generation()};Runnable refresh=()->{
             // Folding changed elsewhere (the laptop, Remote) is applied to the shown groups, without rebuilding the list.
             var values=array(snapshot,"projects");for(int i=0;i<values.length();i++){var p=values.optJSONObject(i);if(p==null)continue;String id=p.optString("id");var fold=folders.get(id);boolean closed=p.optBoolean("collapsed");if(fold!=null&&System.currentTimeMillis()-touched.getOrDefault(id,0L)>5000&&!Boolean.valueOf(closed).equals(folded.get(id))){folded.put(id,closed);fold.accept(closed);}}
-            String next=projectTreeSignature()+identityIcons.generation();if(next.equals(order[0]))return;order[0]=next;int y=sc.getScrollY();fill.run();sc.post(()->sc.scrollTo(0,y));};browserOrderChanged=refresh;dialog.setOnDismissListener(d->{if(browserOrderChanged==refresh)browserOrderChanged=null;});}
+            String next=projectTreeSignature()+identityIcons.generation();if(next.equals(order[0]))return;order[0]=next;int y=sc.getScrollY();fill.run();sc.post(()->sc.scrollTo(0,y));};browserOrderChanged=refresh;loadProjectIcons(true);dialog.setOnDismissListener(d->{if(browserOrderChanged==refresh)browserOrderChanged=null;});}
     private String projectTreeSignature(){return SessionOrder.signature(snapshot)+array(snapshot,"projectGroups")+array(snapshot,"projectTreeOrder")+array(snapshot,"favoriteOrder")+array(snapshot,"projects");}
     private void appendFavorites(LinearLayout list,JSONArray projects,JSONArray sessions,String filter,Dialog dialog){
         var body=ui.col();
@@ -302,7 +312,11 @@ public final class MainActivity extends Activity {
     private ImageView projectWidget(String projectId,String slot){
         return new ImageView(this){
             String version="";
-            final Runnable refresh=()->{JSONObject widget=new JSONObject();var values=array(snapshot,"projects");for(int i=0;i<values.length();i++){var p=values.optJSONObject(i);if(p.optString("id").equals(projectId))widget=object(object(p,"widget"),slot);}String next=widget.optString("version");if(!next.equals(version)){version=next;try{byte[] bytes=android.util.Base64.decode(widget.optString("png"),android.util.Base64.DEFAULT);setImageBitmap(android.graphics.BitmapFactory.decodeByteArray(bytes,0,bytes.length));}catch(Exception ignored){setImageDrawable(null);}}setVisibility(next.isEmpty()?View.GONE:View.VISIBLE);setContentDescription(widget.optString("description"));main.postDelayed(this.refresh,2000);};
+            final Runnable refresh=()->{
+                JSONObject widget=new JSONObject();var values=array(snapshot,"projects");for(int i=0;i<values.length();i++){var p=values.optJSONObject(i);if(p.optString("id").equals(projectId))widget=object(object(p,"widget"),slot);}
+                String next=widget.optString("version");if(!next.equals(version)){version=next;if(next.isEmpty())setImageDrawable(null);else cachedPng("widget-"+projectId+"-"+slot,"/project-widget.png?project="+projectId+"&slot="+slot,next,image->{if(next.equals(version))setImageBitmap(image);},()->{if(next.equals(version)){version="";setImageDrawable(null);}});}
+                setVisibility(next.isEmpty()?View.GONE:View.VISIBLE);setContentDescription(widget.optString("description"));main.postDelayed(this.refresh,2000);
+            };
             {setScaleType(ImageView.ScaleType.FIT_START);setAdjustViewBounds(true);}
             @Override protected void onAttachedToWindow(){super.onAttachedToWindow();refresh.run();}
             @Override protected void onDetachedFromWindow(){main.removeCallbacks(refresh);super.onDetachedFromWindow();}
@@ -378,7 +392,23 @@ public final class MainActivity extends Activity {
 
     private void pickImage(){if(busy||pendingUrgent!=null||selected.isEmpty())return;var intent=new Intent(Intent.ACTION_OPEN_DOCUMENT);intent.setType("image/*");intent.addCategory(Intent.CATEGORY_OPENABLE);intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);startActivityForResult(intent,41);}
     @Override protected void onActivityResult(int request,int result,Intent data){super.onActivityResult(request,result,data);if(request==41&&result==RESULT_OK&&data!=null){if(data.getClipData()!=null){for(int i=0;i<data.getClipData().getItemCount();i++)upload(data.getClipData().getItemAt(i).getUri());}else if(data.getData()!=null)upload(data.getData());}}
-    private void upload(Uri uri){if(selected.isEmpty()||busy||pendingUrgent!=null)return;if(draftAttachments.length()+uploading>=12){Toast.makeText(this,"К одному сообщению можно прикрепить до 12 изображений",Toast.LENGTH_LONG).show();return;}String id=selected;var c=connection;uploading++;controls();Toast.makeText(this,"Добавляем изображение…",Toast.LENGTH_SHORT).show();io.execute(()->{try{byte[] original;try(var in=getContentResolver().openInputStream(uri);var out=new ByteArrayOutputStream()){byte[] b=new byte[16384];int n;while((n=in.read(b))!=-1){if(out.size()+n>24_000_000)throw new IOException("Изображение больше 24 МБ");out.write(b,0,n);}original=out.toByteArray();}var bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(original,0,original.length,bounds);if(bounds.outWidth<=0||bounds.outHeight<=0)throw new IOException("Не удалось прочитать изображение");var options=new BitmapFactory.Options();while(Math.max(bounds.outWidth,bounds.outHeight)/Math.max(1,options.inSampleSize)>4096)options.inSampleSize=options.inSampleSize==0?2:options.inSampleSize*2;Bitmap bitmap=BitmapFactory.decodeByteArray(original,0,original.length,options);if(bitmap==null)throw new IOException("Не удалось открыть изображение");byte[] bytes;try(var out=new ByteArrayOutputStream()){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);bytes=out.toByteArray();}finally{bitmap.recycle();}var uploaded=c.request("/attachment",Connection.json("data",android.util.Base64.encodeToString(bytes,android.util.Base64.NO_WRAP)));File thumbnail=new File(getFilesDir(),uploaded.getString("id")+".png");try(var out=new FileOutputStream(thumbnail)){out.write(bytes);}main.post(()->{try{var items=new JSONArray(prefs.getString("attachments."+id,"[]"));items.put(uploaded);prefs.edit().putString("attachments."+id,items.toString()).apply();if(selected.equals(id)){draftAttachments=items;renderAttachments();}}catch(Exception e){error(e);}finally{uploading--;controls();}});}catch(Exception e){main.post(()->{uploading--;controls();});error(e);}});}
+    private void upload(Uri uri){
+        if(selected.isEmpty()||busy||pendingUrgent!=null)return;
+        if(draftAttachments.length()+uploading>=12){Toast.makeText(this,"К одному сообщению можно прикрепить до 12 изображений",Toast.LENGTH_LONG).show();return;}
+        String id=selected;var c=connection;uploading++;controls();Toast.makeText(this,"Добавляем изображение…",Toast.LENGTH_SHORT).show();
+        io.execute(()->{java.net.HttpURLConnection request=null;try{
+            byte[] original;try(var in=getContentResolver().openInputStream(uri);var out=new ByteArrayOutputStream()){byte[] b=new byte[16384];int n;while((n=in.read(b))!=-1){if(out.size()+n>24_000_000)throw new IOException("Изображение больше 24 МБ");out.write(b,0,n);}original=out.toByteArray();}
+            var bounds=new BitmapFactory.Options();bounds.inJustDecodeBounds=true;BitmapFactory.decodeByteArray(original,0,original.length,bounds);if(bounds.outWidth<=0||bounds.outHeight<=0)throw new IOException("Не удалось прочитать изображение");
+            var options=new BitmapFactory.Options();while(Math.max(bounds.outWidth,bounds.outHeight)/Math.max(1,options.inSampleSize)>4096)options.inSampleSize=options.inSampleSize==0?2:options.inSampleSize*2;
+            Bitmap bitmap=BitmapFactory.decodeByteArray(original,0,original.length,options);if(bitmap==null)throw new IOException("Не удалось открыть изображение");
+            byte[] bytes;try(var out=new ByteArrayOutputStream()){bitmap.compress(Bitmap.CompressFormat.PNG,100,out);bytes=out.toByteArray();}finally{bitmap.recycle();}
+            request=c.open("/attachment.png");request.setRequestMethod("POST");request.setDoOutput(true);request.setFixedLengthStreamingMode(bytes.length);request.setRequestProperty("Content-Type","image/png");request.setRequestProperty("X-Tethium-Approve-Large","true");try(var out=request.getOutputStream()){out.write(bytes);}
+            int status=request.getResponseCode();if(status!=201)throw new IOException(request.getResponseMessage());String attachment=request.getHeaderField("X-Tethium-Attachment-Id");if(attachment==null||attachment.isEmpty())throw new IOException("Ноутбук не вернул идентификатор изображения");
+            var uploaded=Connection.json("id",attachment,"width",Integer.parseInt(request.getHeaderField("X-Tethium-Width")),"height",Integer.parseInt(request.getHeaderField("X-Tethium-Height")));
+            File thumbnail=new File(getFilesDir(),attachment+".png");try(var out=new FileOutputStream(thumbnail)){out.write(bytes);}
+            main.post(()->{try{var items=new JSONArray(prefs.getString("attachments."+id,"[]"));items.put(uploaded);prefs.edit().putString("attachments."+id,items.toString()).apply();if(selected.equals(id)){draftAttachments=items;renderAttachments();}}catch(Exception e){error(e);}finally{uploading--;controls();}});
+        }catch(Exception e){main.post(()->{uploading--;controls();});error(e);}finally{if(request!=null)request.disconnect();}});
+    }
     private void renderAttachments(){if(attachments==null)return;attachments.removeAllViews();if(draftAttachments.length()==0)return;var line=ui.row();ui.pad(line,8,8);for(int i=0;i<draftAttachments.length();i++){var item=draftAttachments.optJSONObject(i);String id=item.optString("id");var tile=ui.col();var image=new ImageView(this);var options=new BitmapFactory.Options();options.inSampleSize=8;image.setImageBitmap(BitmapFactory.decodeFile(new File(getFilesDir(),id+".png").toString(),options));image.setScaleType(ImageView.ScaleType.CENTER_CROP);image.setOnClickListener(v->ImagePreview.show(this,ui,new File(getFilesDir(),id+".png")));image.setContentDescription("Вложенное изображение");tile.addView(image,new LinearLayout.LayoutParams(dp(64),dp(48)));tile.addView(ui.icon("close","Убрать изображение",()->{if(busy||pendingUrgent!=null)return;var rest=new JSONArray();for(int j=0;j<draftAttachments.length();j++)if(!id.equals(draftAttachments.optJSONObject(j).optString("id")))rest.put(draftAttachments.optJSONObject(j));draftAttachments=rest;saveDraft();renderAttachments();controls();}),new LinearLayout.LayoutParams(dp(64),dp(48)));line.addView(tile);}var sc=new HorizontalScrollView(this);sc.addView(line);attachments.addView(sc);}
 
     private void quota(){

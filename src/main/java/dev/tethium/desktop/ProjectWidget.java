@@ -1,50 +1,37 @@
 package dev.tethium.desktop;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.github.weisj.jsvg.SVGDocument;
-import com.github.weisj.jsvg.parser.*;
+import dev.tethium.host.HostClient;
 import java.awt.*;
-import javax.imageio.ImageIO;
 import java.io.ByteArrayInputStream;
+import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.*;
+import javax.imageio.ImageIO;
 
+/** Project widget metadata stays in state; pixels are fetched as a separately cached binary asset. */
 final class ProjectWidget {
-    private record Graphic(SVGDocument svg,Image fallback,double width,double height){}
-    private final Map<String,Graphic> graphics=new HashMap<>();
-    private static String key(JsonNode widget){return widget.path("version").asText()+(widget.hasNonNull("svg")?":svg":":png");}
-    void update(Iterable<JsonNode> projects){
+    private record Graphic(String version,Image image,double width,double height){}
+    private final Map<String,Graphic> graphics=new ConcurrentHashMap<>();
+    private final Set<String> pending=ConcurrentHashMap.newKeySet();
+    private static String id(JsonNode project,String slot){return project.path("id").asText()+":"+slot;}
+    void update(Iterable<JsonNode> projects,HostClient host,ExecutorService io,Runnable repaint){
         var live=new HashSet<String>();
         for(var project:projects)for(String slot:java.util.List.of("bottom","right")){
-            var widget=project.path("widget").path(slot);if(widget.path("version").asText().isEmpty())continue;String key=key(widget);live.add(key);
-            if(!graphics.containsKey(key))try{
-                String source=widget.path("svg").asText();
-                if(!source.isEmpty()){
-                    var svg=new SVGLoader().load(new ByteArrayInputStream(source.getBytes(StandardCharsets.UTF_8)),null,LoaderContext.builder().build());
-                    if(svg!=null)graphics.put(key,new Graphic(svg,null,svg.size().width,svg.size().height));
-                }else{
-                    // Older host compatibility during GUI-first updates.
-                    var image=ImageIO.read(new ByteArrayInputStream(Base64.getDecoder().decode(widget.path("png").asText())));
-                    if(image!=null)graphics.put(key,new Graphic(null,image,image.getWidth(),image.getHeight()));
-                }
-            }catch(Exception ignored){}
-        }graphics.keySet().retainAll(live);
+            var widget=project.path("widget").path(slot);String version=widget.path("version").asText(),id=id(project,slot);if(version.isEmpty())continue;live.add(id);
+            var current=graphics.get(id);if(current!=null&&current.version.equals(version)||!pending.add(id+":"+version))continue;
+            String path="/project-widget.png?project="+URLEncoder.encode(project.path("id").asText(),StandardCharsets.UTF_8)+"&slot="+slot;
+            io.submit(()->{try{var image=ImageIO.read(new ByteArrayInputStream(host.bytes(path)));if(image!=null){graphics.put(id,new Graphic(version,image,image.getWidth(null),image.getHeight(null)));repaint.run();}}catch(Exception ignored){}finally{pending.remove(id+":"+version);}});
+        }
+        graphics.keySet().retainAll(live);pending.removeIf(key->{int colon=key.lastIndexOf(':');return colon>0&&!live.contains(key.substring(0,colon));});
     }
-    private Graphic graphic(JsonNode project,String slot){return project==null?null:graphics.get(key(project.path("widget").path(slot)));}
+    private Graphic graphic(JsonNode project,String slot){if(project==null)return null;var value=graphics.get(id(project,slot));return value!=null&&value.version.equals(project.path("widget").path(slot).path("version").asText())?value:null;}
     boolean available(JsonNode project){return available(project,"bottom")||available(project,"right");}
     boolean available(JsonNode project,String slot){return graphic(project,slot)!=null;}
     int preferredWidth(JsonNode project,String slot,int height){var graphic=graphic(project,slot);return graphic==null?0:(int)Math.ceil(graphic.width*height/graphic.height);}
     void paint(Graphics graphics,JsonNode project,String slot,int x,int y,int width,int height){
-        var graphic=graphic(project,slot);if(graphic==null||width<=0||height<=0)return;
-        double scale=Math.min(width/graphic.width,height/graphic.height);
-        var g=(Graphics2D)graphics.create();
-        try{
-            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
-            g.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING,RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-            g.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS,RenderingHints.VALUE_FRACTIONALMETRICS_ON);
-            g.translate(x,y+(height-graphic.height*scale)/2);g.scale(scale,scale);
-            if(graphic.svg!=null)graphic.svg.render(null,g);
-            else{g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,RenderingHints.VALUE_INTERPOLATION_BICUBIC);g.drawImage(graphic.fallback,0,0,null);}
-        }finally{g.dispose();}
+        var graphic=graphic(project,slot);if(graphic==null||width<=0||height<=0)return;double scale=Math.min(width/graphic.width,height/graphic.height);var g=(Graphics2D)graphics.create();
+        try{g.setRenderingHint(RenderingHints.KEY_INTERPOLATION,RenderingHints.VALUE_INTERPOLATION_BICUBIC);int drawWidth=Math.max(1,(int)Math.round(graphic.width*scale)),drawHeight=Math.max(1,(int)Math.round(graphic.height*scale));g.drawImage(graphic.image,x,y+(height-drawHeight)/2,drawWidth,drawHeight,null);}finally{g.dispose();}
     }
 }

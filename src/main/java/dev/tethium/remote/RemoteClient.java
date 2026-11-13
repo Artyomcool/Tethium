@@ -28,15 +28,17 @@ public final class RemoteClient extends HostClient {
             if(path.contains("?session=")){session=path.substring(path.indexOf("?session=")+9).split("&")[0];artifactIds.clear();for(var a:value.path("conversation").path("artifacts"))artifactIds.put(a.path("path").asText(),a.path("id").asText());}
         }return value;
     }
+    @Override public byte[] bytes(String path)throws Exception{var c=connection.open(path);try{int status=c.getResponseCode();if(status!=200)throw new HostClient.ApiException(status,"Binary asset error: "+status);try(var in=c.getInputStream()){return in.readAllBytes();}}finally{c.disconnect();}}
     private synchronized void saveDraft(String id,JsonNode value)throws IOException{drafts.put(id,value);Path temp=Files.createTempFile(data,"draft-",".tmp");try{Json.MAPPER.writeValue(temp.toFile(),drafts);Files.move(temp,data.resolve("drafts.json"),StandardCopyOption.REPLACE_EXISTING,StandardCopyOption.ATOMIC_MOVE);}finally{Files.deleteIfExists(temp);}}
     @Override public JsonNode post(String path,Object body)throws Exception{
         var value=(ObjectNode)Json.MAPPER.valueToTree(body);String[] parts=path.split("/");String id=parts.length>2?parts[2]:"";
         if(path.endsWith("/draft")){saveDraft(id,value);return Json.object("ok",true);}
         if(path.endsWith("/run")||path.endsWith("/interrupt")){
-            var attachments=Json.MAPPER.createArrayNode();for(var p:value.path("images")){var upload=connection.json("/attachment",Json.object("data",Base64.getEncoder().encodeToString(Files.readAllBytes(Path.of(p.asText())))));attachments.add(upload.path("id").asText());}value.remove("images");value.set("attachments",attachments);value.put("preserveDesktopDraft",true);
+            var attachments=Json.MAPPER.createArrayNode();for(var p:value.path("images"))attachments.add(upload(Path.of(p.asText())));value.remove("images");value.set("attachments",attachments);value.put("preserveDesktopDraft",true);
         }
         var result=connection.json(path,value);if(path.endsWith("/queue-take"))saveDraft(id,Json.object("draft",result.path("draft").asText(),"images",drafts.getOrDefault(id,Json.object()).path("images")));if(path.endsWith("/run")||path.endsWith("/interrupt"))saveDraft(id,Json.object("draft","","images",List.of()));return result;
     }
+    private String upload(Path file)throws Exception{var c=connection.open("/attachment.png");try{long size=Files.size(file);if(size>17_000_000)throw new IOException("Image is too large");c.setRequestMethod("POST");c.setDoOutput(true);c.setFixedLengthStreamingMode(size);c.setRequestProperty("Content-Type","image/png");try(var out=c.getOutputStream()){Files.copy(file,out);}int status=c.getResponseCode();if(status!=201)throw new HostClient.ApiException(status,"Image upload error: "+status);String id=c.getHeaderField("X-Tethium-Attachment-Id");if(id==null||!id.matches("[a-f0-9]{64}"))throw new IOException("Invalid attachment id");return id;}finally{c.disconnect();}}
     public synchronized URI preview(Path path)throws Exception{
         String id=artifactIds.get(path.toString());var response=connection.json("/preview",id==null?Json.object("session",session,"file",path.toString()):Json.object("session",session,"artifact",id));
         return servePreview(response);

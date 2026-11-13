@@ -51,6 +51,8 @@ final class IdentityIcons {
     /** Project icons come from the project itself (.tethium/icon.png, served by the host); without one the hashed pattern is used. */
     private record ProjectIcon(String version,Icon icon) {}
     private static final Map<String,ProjectIcon> PROJECT_ICONS=new ConcurrentHashMap<>();
+    private static final Set<String> PROJECT_ICON_LOADS=ConcurrentHashMap.newKeySet();
+    private static final Map<String,String> PROJECT_ICON_WANTED=new ConcurrentHashMap<>();
     static Icon ofProject(String id,String title,String directory) {
         var own=id==null?null:PROJECT_ICONS.get(id);
         return own!=null&&own.icon!=null?own.icon:of(true,title,directory);
@@ -58,17 +60,27 @@ final class IdentityIcons {
     /** True when the host reports a different icon version than the one already loaded (or none while the host has one). */
     static boolean projectIconStale(String id,String version) {
         var own=PROJECT_ICONS.get(id);
-        if(version==null||version.isEmpty()){if(own!=null)PROJECT_ICONS.remove(id);return false;}
+        if(version==null||version.isEmpty()){if(own!=null)PROJECT_ICONS.remove(id);PROJECT_ICON_WANTED.remove(id);PROJECT_ICON_LOADS.removeIf(key->key.startsWith(id+"\n"));return false;}
         return own==null||!own.version.equals(version);
     }
-    /** Builds every sidebar size from the project's PNG; an empty payload records the version without an icon. */
-    static void registerProjectIcon(String id,String version,String base64) {
+    /** Starts one load for the requested version. A failed load remains stale and can be retried. */
+    static boolean beginProjectIconLoad(String id,String version) {
+        if(!projectIconStale(id,version))return false;
+        PROJECT_ICON_WANTED.put(id,version);
+        return PROJECT_ICON_LOADS.add(id+"\n"+version);
+    }
+    static void projectIconLoadFailed(String id,String version) { PROJECT_ICON_LOADS.remove(id+"\n"+version); }
+    /** Builds every sidebar size from the project's PNG. Invalid bytes never replace a working icon or poison retries. */
+    static boolean registerProjectIcon(String id,String version,byte[] bytes) {
+        PROJECT_ICON_LOADS.remove(id+"\n"+version);
+        if(!version.equals(PROJECT_ICON_WANTED.get(id)))return false;
         Icon icon=null;
-        if(base64!=null&&!base64.isEmpty())try{
-            var source=ImageIO.read(new java.io.ByteArrayInputStream(Base64.getDecoder().decode(base64)));
+        if(bytes!=null&&bytes.length>0)try{
+            var source=ImageIO.read(new java.io.ByteArrayInputStream(bytes));
             if(source!=null){var images=new ArrayList<Image>();for(int size:new int[]{22,28,33,44,66,88})images.add(fit(source,size));icon=new ImageIcon(new BaseMultiResolutionImage(images.toArray(Image[]::new)));}
         }catch(Exception ignored){}
-        PROJECT_ICONS.put(id,new ProjectIcon(version,icon));
+        if(icon==null)return false;
+        PROJECT_ICONS.put(id,new ProjectIcon(version,icon));return true;
     }
     /** Shrinks in halving steps before the final resample: one bicubic pass from a large original drops detail into aliasing noise. */
     private static Image fit(java.awt.image.BufferedImage source,int size) {
