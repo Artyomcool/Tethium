@@ -68,6 +68,7 @@ public final class HostService implements AutoCloseable {
         volatile String phase = "В очереди";
     }
     private record Pending(String id, String sessionId, String method, JsonNode params, CompletableFuture<JsonNode> answer, WorkerExecution worker, long sequence) {}
+    private record ExecutorFailover(BacklogExecutor.Choice choice,boolean preserveSession) {}
 
     public HostService(Path data) throws Exception { this(data, List.of(new CodexAdapter(), new ClaudeAdapter()), new CodexQuotaService(new CodexAccountClient(data)::readRateLimits,new CodexAccountClient(data)::consumeReset,new ClaudeAccountClient()::readUsage), false, null); }
     public HostService(Path data, AgentAdapter adapter) throws Exception { this(data, adapter, new CodexQuotaService(null)); }
@@ -103,6 +104,7 @@ public final class HostService implements AutoCloseable {
             try { startMobile(); } catch(Exception e) { System.err.println("Mobile gateway: " + e); }
         }
         if(adapter instanceof CodexAdapter&&!Boolean.getBoolean("tethium.probe"))quotaMonitor.scheduleWithFixedDelay(()->{try{String codexHome=System.getenv("CODEX_HOME");NativeUsageImport.read(store,usage,(codexHome==null?Path.of(System.getProperty("user.home"),".codex"):Path.of(codexHome)).resolve("sessions"));}catch(Exception e){if(!closed)System.err.println("Usage import: "+e.getMessage());}},0,5,TimeUnit.MINUTES);
+        recoverClaudeQuotaFailures();
         if(!Boolean.getBoolean("tethium.probe"))for(var saved:store.workerRuns()){
             var run=new Running(saved.spec().path("startedAt").asLong(System.currentTimeMillis()));run.workerRun=saved;run.provider=AgentAdapter.Provider.of(saved.spec().path("provider").asText(null));running.put(saved.sessionId(),run);
             workers.submit(()->observeRestoredWorker(saved.sessionId(),run));
@@ -544,16 +546,25 @@ public final class HostService implements AutoCloseable {
             try (var tools = new SessionToolsServer(store, id, tools(id,run))) {
                 var preferences = store.executionPreferences(id,job.id());
                 var result = new SessionRunner(store).run(id, executor, job.prompt(), tools.uri(), tools.token(), event -> observe(id, run, event), run.cancellation, preferences.path("model").asText(null), preferences.path("access").asText(), (method, params, cancel) -> request(id, run, method, params, cancel), preferences.path("reasoningEffort").asText(null));
-                if(!run.stopping&&!run.cancellation.isCancelled()&&result.status()==AgentAdapter.Status.FAILED&&codexQuota(run)&&(run.quotaBlocked||quotaError(result.text()))){usage.waiting(id,true);store.jobStatus(job.id(),"QUEUED");quota.refresh();return;}
+                boolean quotaFailure=!run.stopping&&!run.cancellation.isCancelled()&&result.status()==AgentAdapter.Status.FAILED&&(run.quotaBlocked||quotaError(result.text()));
+                var failover=quotaFailure?claudeQuotaFailover(id,job,run.provider):null;
+                if(failover!=null){applyExecutorFailover(id,job,failover);return;}
+                if(quotaFailure&&codexQuota(run)){usage.waiting(id,true);store.jobStatus(job.id(),"QUEUED");quota.refresh();return;}
                 store.jobStatus(job.id(), result.status().name());
                 if(result.status()==AgentAdapter.Status.FAILED&&!run.stopping)blockAutonomy(id,"Запуск завершился с ошибкой: "+result.text());
                 for(String recipient:store.resultRecipients(job)){store.append(recipient, "session", "TETHIUM", "Результат сессии «" + store.get(id).title() + "» (" + result.status() + "):\n" + result.text());store.wakeAutonomy(recipient);}
             }
         } catch (Exception e) {
             try {
-                if (job != null) {boolean blocked=!run.stopping&&!run.cancellation.isCancelled()&&codexQuota(run)&&(run.quotaBlocked||quotaError(e.getMessage()));if(blocked){usage.waiting(id,true);quota.refresh();}store.jobStatus(job.id(), blocked?"QUEUED":run.cancellation.isCancelled() ? "CANCELLED" : "FAILED");}
-                if(!run.stopping&&!run.cancellation.isCancelled()&&!usage.waitState(id).path("waiting").asBoolean())blockAutonomy(id,"Ошибка исполнения: "+e.getMessage());
-                store.append(id, "system", "TETHIUM", run.cancellation.isCancelled() ? "Запуск остановлен." : "Ошибка " + (run.provider == null ? "исполнителя" : run.provider.title) + ": " + e.getMessage());
+                boolean switched=false;
+                if (job != null) {
+                    boolean quotaFailure=!run.stopping&&!run.cancellation.isCancelled()&&(run.quotaBlocked||quotaError(e.getMessage()));
+                    var failover=quotaFailure?claudeQuotaFailover(id,job,run.provider):null;
+                    if(failover!=null){applyExecutorFailover(id,job,failover);switched=true;}
+                    else{boolean blocked=quotaFailure&&codexQuota(run);if(blocked){usage.waiting(id,true);quota.refresh();}store.jobStatus(job.id(),blocked?"QUEUED":run.cancellation.isCancelled()?"CANCELLED":"FAILED");}
+                }
+                if(!switched&&!run.stopping&&!run.cancellation.isCancelled()&&!usage.waitState(id).path("waiting").asBoolean())blockAutonomy(id,"Ошибка исполнения: "+e.getMessage());
+                if(!switched)store.append(id, "system", "TETHIUM", run.cancellation.isCancelled() ? "Запуск остановлен." : "Ошибка " + (run.provider == null ? "исполнителя" : run.provider.title) + ": " + e.getMessage());
             } catch (Exception ignored) { }
         } finally {
             if (acquired) slots.release();
@@ -561,15 +572,53 @@ public final class HostService implements AutoCloseable {
             try { for(var project:store.projects())for(var session:store.list(project.id()))schedule(session.id()); } catch (Exception ignored) { }
         }
     }
-    private static boolean quotaError(String text){return text!=null&&(text.contains("usageLimitExceeded")||text.toLowerCase(Locale.ROOT).contains("usage limit")||text.toLowerCase(Locale.ROOT).contains("weekly limit"));}
+    private static boolean quotaError(String text){if(text==null)return false;String value=text.toLowerCase(Locale.ROOT);return text.contains("usageLimitExceeded")||value.contains("usage_limit_reached")||value.contains("usage limit")||value.contains("weekly limit");}
+    private ExecutorFailover claudeQuotaFailover(String id,SessionStore.Job job,AgentAdapter.Provider provider)throws Exception{
+        if(provider!=AgentAdapter.Provider.CLAUDE||!adapters.containsKey(AgentAdapter.Provider.CODEX)||!store.executorFailoverAllowed(job.id()))return null;
+        var prefs=store.executionPreferences(id,job.id());
+        var current=new BacklogExecutor.Choice(provider,prefs.path("model").asText(null),prefs.path("reasoningEffort").asText(null));
+        var replacement=current.counterpart();
+        if(replacement==null){String model=modelsForBacklog(id);if(model==null||model.isBlank())model="gpt-6.1-sol";replacement=new BacklogExecutor.Choice(AgentAdapter.Provider.CODEX,model,BacklogExecutor.compatibleEffort(AgentAdapter.Provider.CODEX,current.effort()));}
+        return new ExecutorFailover(replacement,store.backlogJob(job.id()));
+    }
+    private void applyExecutorFailover(String id,SessionStore.Job job,ExecutorFailover failover)throws Exception{
+        store.transaction(()->{
+            var choice=failover.choice();
+            store.jobExecution(job.id(),choice.provider().name(),choice.model(),choice.effort());
+            if(!failover.preserveSession()){
+                var prefs=store.preferences(id);
+                store.preferences(id,choice.model(),prefs.path("access").asText(),choice.effort(),choice.provider().name());
+            }
+            store.jobStatus(job.id(),"QUEUED");
+            store.recoverAutonomyFromExecutorFailure(id);
+            String action=failover.preserveSession()?"Задание переключено на ":"Сессия и задание переключены на ";
+            store.append(id,"system","TETHIUM","Квота Claude закончилась. "+action+choice.label()+", работа продолжена автоматически."+(failover.preserveSession()?" Настройки сессии сохранены.":""));
+            return null;
+        });
+    }
+    private void recoverClaudeQuotaFailures(){
+        try{
+            for(var failed:store.failedClaudeWorkers()){
+                if(!store.acceptsWork(failed.sessionId())||!workerHasQuotaFailure(failed.runId()))continue;
+                var job=store.job(failed.jobId());var failover=claudeQuotaFailover(failed.sessionId(),job,AgentAdapter.Provider.CLAUDE);
+                if(failover!=null)applyExecutorFailover(failed.sessionId(),job,failover);
+            }
+        }catch(Exception e){System.err.println("Claude quota recovery: "+e.getMessage());}
+    }
+    private boolean workerHasQuotaFailure(String runId)throws Exception{
+        Path directory=data.resolve("workers").resolve(runId);if(!Files.exists(directory.resolve("journal.db")))return false;
+        try(var journal=new dev.tethium.worker.WorkerJournal(directory)){
+            long cursor=0;
+            while(true){var entries=journal.after(cursor);if(entries.isEmpty())return false;for(var entry:entries){cursor=entry.sequence();if(entry.kind().equals("event")&&quotaError(entry.value().toString()))return true;}}
+        }
+    }
     private static void narrate(Running run, AgentAdapter.Event event) {
         synchronized (run.text) { run.text.append(run.narrator.piece(event)); }
     }
-    /** Only the Codex account quota is observed by the host; other executors report limit errors as ordinary failures. */
     private static boolean codexQuota(Running run){return run.provider==null||run.provider==AgentAdapter.Provider.CODEX;}
     private void observe(String id,Running run,AgentAdapter.Event event){
         narrate(run, event);
-        if(codexQuota(run)&&(event.type().equals("error")||event.type().equals("finished"))&&quotaError(event.raw().toString()))run.quotaBlocked=true;
+        if((event.type().equals("error")||event.type().equals("finished"))&&quotaError(event.raw().toString()))run.quotaBlocked=true;
         if(event.type().equals("thread/tokenUsage/updated")){try{var payload=event.raw().path("params");var tokenUsage=payload.path("tokenUsage");usage.sample(id,store.get(id).projectId(),payload.path("threadId").asText(),System.currentTimeMillis(),tokenUsage.path("total"),tokenUsage.path("last"),run.provider==null?null:run.provider.name());}catch(Exception e){System.err.println("Usage sample: "+e.getMessage());}}
         if(event.type().equals("rate_limit_event")){try{var windows=Json.MAPPER.createArrayNode();event.raw().path("rate_limit_info").path("unifiedWindows").properties().forEach(w->{long minutes=w.getKey().equals("seven_day")?10080:w.getKey().equals("five_hour")?300:0;if(minutes>0&&w.getValue().path("resetsAt").asLong()>0)windows.add(Json.object("kind",w.getKey(),"durationMinutes",minutes,"resetsAt",w.getValue().path("resetsAt").asLong()));});if(!windows.isEmpty())usage.snapshot(Json.object("updatedAt",System.currentTimeMillis(),"buckets",List.of(Json.object("id","claude","label","Claude","windows",windows))));}catch(Exception e){System.err.println("Rate limit event: "+e.getMessage());}}
         String phase=run.activity.accept(event);if(!run.stopping&&phase!=null)run.phase=phase;bump();
@@ -611,16 +660,18 @@ public final class HostService implements AutoCloseable {
                     });
                     var result=run.worker.await(()->closed,()->!draining);
                     if(result==null)return;
-                    boolean quotaBlocked=!run.stopping&&result.status()==AgentAdapter.Status.FAILED&&codexQuota(run)&&(run.quotaBlocked||quotaError(result.text()));
+                    boolean quotaFailure=!run.stopping&&result.status()==AgentAdapter.Status.FAILED&&(run.quotaBlocked||quotaError(result.text()));
+                    var failover=quotaFailure?claudeQuotaFailover(id,store.job(run.workerRun.jobId()),run.provider):null;
+                    boolean quotaBlocked=quotaFailure&&codexQuota(run);
                     if(quotaBlocked){usage.waiting(id,true);quota.refresh();}
                     synchronized(this){
                         if(closed)return;
                         store.transaction(()->{
                             var saved=run.workerRun;
                             store.completeRun(saved.runId(),id,AgentAdapter.Provider.of(saved.spec().path("provider").asText(null)),result,saved.deliveredThrough());
-                            store.jobStatus(saved.jobId(),quotaBlocked?"QUEUED":result.status().name());
-                            if(!quotaBlocked&&!run.stopping&&result.status()==AgentAdapter.Status.FAILED)blockAutonomy(id,"Запуск завершился с ошибкой: "+result.text());
-                            if(!quotaBlocked)for(String recipient:store.resultRecipients(store.job(saved.jobId()))){store.append(recipient,"session","TETHIUM","Результат сессии «"+store.get(id).title()+"» ("+result.status()+"):\n"+result.text());store.wakeAutonomy(recipient);}
+                            if(failover!=null)applyExecutorFailover(id,store.job(saved.jobId()),failover);else store.jobStatus(saved.jobId(),quotaBlocked?"QUEUED":result.status().name());
+                            if(failover==null&&!quotaBlocked&&!run.stopping&&result.status()==AgentAdapter.Status.FAILED)blockAutonomy(id,"Запуск завершился с ошибкой: "+result.text());
+                            if(failover==null&&!quotaBlocked)for(String recipient:store.resultRecipients(store.job(saved.jobId()))){store.append(recipient,"session","TETHIUM","Результат сессии «"+store.get(id).title()+"» ("+result.status()+"):\n"+result.text());store.wakeAutonomy(recipient);}
                             store.workerFinished(saved.runId());return null;
                         });
                     }

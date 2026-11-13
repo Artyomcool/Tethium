@@ -24,6 +24,7 @@ public final class SessionStore implements AutoCloseable {
         public ImportedMessage(String sourceId,String role,String text){this(sourceId,role,text,0);}
     }
     public record WorkerRun(String runId, String sessionId, String jobId, long deliveredThrough, JsonNode spec, long cursor) {}
+    public record FailedWorkerRun(String runId, String sessionId, String jobId) {}
     private final Connection connection;
     /** For tables kept next to the store's (core.Reminders): used only while holding this store's lock, so they join its transactions. */
     Connection sharedConnection(){return connection;}
@@ -154,6 +155,15 @@ public final class SessionStore implements AutoCloseable {
     }
     public synchronized void jobExecution(String job,String provider,String model,String effort)throws SQLException{
         execute("INSERT INTO job_execution VALUES(?,?,?,?) ON CONFLICT(job_id) DO UPDATE SET provider=excluded.provider,model=excluded.model,effort=excluded.effort",job,provider,model,effort);
+    }
+    /** A deferred task may explicitly prohibit substitution, or pin one executor. Ordinary jobs may always fail over. */
+    public synchronized boolean executorFailoverAllowed(String job)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT COALESCE(e.auto_switch,1),e.provider FROM backlog_tasks b LEFT JOIN backlog_execution e ON e.task_id=b.id WHERE b.job_id=?")){
+            q.setString(1,job);try(var r=q.executeQuery()){return !r.next()||(r.getBoolean(1)&&(r.getString(2)==null||r.getString(2).isBlank()));}
+        }
+    }
+    public synchronized boolean backlogJob(String job)throws SQLException{
+        try(var q=connection.prepareStatement("SELECT 1 FROM backlog_tasks WHERE job_id=?")){q.setString(1,job);try(var r=q.executeQuery()){return r.next();}}
     }
     /** A deferred task's choice belongs to its job, never to the user's session preferences. */
     public synchronized JsonNode executionPreferences(String session,String job)throws SQLException{
@@ -314,6 +324,10 @@ public final class SessionStore implements AutoCloseable {
     }
     public synchronized void enableAutomaticQuota(String id)throws SQLException{execute("INSERT INTO quota_wait(session_id,auto_resume) VALUES(?,1) ON CONFLICT(session_id) DO UPDATE SET auto_resume=1",id);}
     public synchronized void wakeAutonomy(String id)throws SQLException{execute("UPDATE session_autonomy SET state='active',reason='' WHERE session_id=? AND state='waiting'",id);}
+    /** A quota substitution continues the same goal; it must only undo the host's generic executor-failure block. */
+    public synchronized void recoverAutonomyFromExecutorFailure(String id)throws SQLException{
+        execute("UPDATE session_autonomy SET state='active',reason='',updated_at=? WHERE session_id=? AND state='blocked' AND reason LIKE 'Запуск завершился с ошибкой:%'",System.currentTimeMillis(),id);
+    }
 
     public synchronized JsonNode periodicSchedule(String id)throws SQLException{
         try(var q=connection.prepareStatement("SELECT * FROM session_schedules WHERE session_id=?")){
@@ -496,6 +510,13 @@ public final class SessionStore implements AutoCloseable {
         try(var q=connection.createStatement();var r=q.executeQuery("SELECT * FROM worker_runs WHERE finished=0 ORDER BY rowid")){
             while(r.next())result.add(new WorkerRun(r.getString("run_id"),r.getString("session_id"),r.getString("job_id"),r.getLong("delivered_through"),Json.parse(r.getString("spec")),r.getLong("cursor")));
         }return result;
+    }
+    /** Finished Claude workers whose latest session run and owning job both still represent a failure. */
+    public synchronized List<FailedWorkerRun> failedClaudeWorkers()throws SQLException{
+        var result=new ArrayList<FailedWorkerRun>();
+        String sql="SELECT w.run_id,w.session_id,w.job_id FROM worker_runs w JOIN runs r ON r.id=w.run_id JOIN jobs j ON j.id=w.job_id WHERE w.finished=1 AND r.provider='CLAUDE' AND r.status='FAILED' AND j.status='FAILED' AND r.rowid=(SELECT MAX(r2.rowid) FROM runs r2 WHERE r2.session_id=r.session_id)";
+        try(var q=connection.createStatement();var r=q.executeQuery(sql)){while(r.next())result.add(new FailedWorkerRun(r.getString(1),r.getString(2),r.getString(3)));}
+        return result;
     }
     public synchronized void workerCursor(String runId,long cursor)throws SQLException{execute("UPDATE worker_runs SET cursor=MAX(cursor,?) WHERE run_id=?",cursor,runId);}
     public synchronized void workerFinished(String runId)throws SQLException{execute("UPDATE worker_runs SET finished=1 WHERE run_id=?",runId);}
