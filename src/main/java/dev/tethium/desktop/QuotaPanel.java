@@ -19,15 +19,18 @@ final class QuotaPanel extends JPanel {
     void machineUsage(JsonNode value){machine.update(value);}
     private JsonNode state = Json.object();
     private String signature = "";
-    private final Runnable resetAction;
+    private final Runnable resetAction,claudeAuthAction;
     private static final DateTimeFormatter RESET = DateTimeFormatter.ofPattern("dd.MM, HH:mm");
 
     QuotaPanel(Runnable refreshAction) {
-        this(refreshAction,()->{},()->{});
+        this(refreshAction,()->{},()->{},()->{});
     }
     QuotaPanel(Runnable refreshAction,Runnable resetAction,Runnable usageAction) {
+        this(refreshAction,resetAction,usageAction,()->{});
+    }
+    QuotaPanel(Runnable refreshAction,Runnable resetAction,Runnable usageAction,Runnable claudeAuthAction) {
         super(new BorderLayout(0, 2)); setName("quota.panel"); setOpaque(false);
-        this.resetAction=resetAction;
+        this.resetAction=resetAction;this.claudeAuthAction=claudeAuthAction;
         setBorder(BorderFactory.createCompoundBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BORDER), new EmptyBorder(0, Theme.GUTTER, Theme.GAP, Theme.INSET)));
         var header = new JPanel(new BorderLayout(Theme.GAP, 0)); header.setOpaque(false);
         title.setFont(title.getFont().deriveFont(Font.PLAIN, 11f)); title.setForeground(Theme.MUTED); title.setIcon(Theme.icon("quota-gauge")); title.setIconTextGap(Theme.GAP); header.add(title);
@@ -61,10 +64,11 @@ final class QuotaPanel extends JPanel {
         windows.removeAll(); boolean refreshing = state.path("refreshing").asBoolean();
         refresh.setEnabled(!refreshing); refresh.setToolTipText(refreshing ? "Обновляем квоту…" : "Обновить квоты аккаунтов Codex и Claude");
         if (refreshing && isDisplayable()) animation.start(); else { animation.stop(); angle = 0; }
-        int row = 0; boolean stale = stale();
+        int row = 0; boolean stale = stale(),authRequired=state.path("authRequired").path("claude").asBoolean(),authShown=false;
         var count = state.path("resetCredits").path("availableCount");
         for (var bucket : state.path("buckets")) {
             String id = bucket.path("id").asText(); boolean codex = id.equals("codex");
+            if(authRequired&&id.startsWith("claude")){if(!authShown){addClaudeAuth(row++);authShown=true;}continue;}
             for (var window : bucket.path("windows")) {
                 int left = window.path("remainingPercent").asInt();
                 boolean week = window.path("durationMinutes").asLong() == 10080, credits = codex && week && count.isNumber();
@@ -90,6 +94,7 @@ final class QuotaPanel extends JPanel {
                 var c = cell(0, row, 1); c.gridwidth = 3; windows.add(line, c); row++;
             }
         }
+        if(authRequired&&!authShown)addClaudeAuth(row++);
         if (row == 0) {
             notice.setText(state.path("state").asText().equals("loading") ? "Получаем квоту…" : "Квота недоступна");
             notice.setForeground(Theme.MUTED);
@@ -104,6 +109,14 @@ final class QuotaPanel extends JPanel {
         if (stale) tooltip += " Устаревшие данные.";
         if (!state.path("error").asText().isBlank()) tooltip += " " + state.path("error").asText();
         title.setToolTipText(tooltip); timestamp.setToolTipText(tooltip); notice.setToolTipText(tooltip); setToolTipText(tooltip); revalidate(); repaint();
+    }
+    private void addClaudeAuth(int row){
+        boolean running=state.path("authLogin").path("running").asBoolean();
+        var line=new JLabel(running?"Claude · открываем авторизацию…":"Claude · нужна авторизация");
+        line.setName("quota.auth");line.setFont(line.getFont().deriveFont(Font.BOLD,11f));line.setForeground(running?Theme.MUTED:Theme.ACCENT);
+        line.setToolTipText(running?"Окно входа Claude уже открывается в браузере":"Нажмите, чтобы открыть вход Claude CLI в браузере");
+        if(!running){line.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));line.addMouseListener(new java.awt.event.MouseAdapter(){public void mouseClicked(java.awt.event.MouseEvent e){claudeAuthAction.run();}});}
+        var c=cell(0,row,1);c.gridwidth=3;windows.add(line,c);
     }
     private static GridBagConstraints cell(int column, int row, double weight) {
         var c = new GridBagConstraints(); c.gridx = column; c.gridy = row; c.weightx = weight; c.anchor = column == 2 ? GridBagConstraints.EAST : GridBagConstraints.WEST;

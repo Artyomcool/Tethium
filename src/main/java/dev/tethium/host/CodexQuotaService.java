@@ -22,7 +22,7 @@ public final class CodexQuotaService implements AutoCloseable {
     private final long refreshCooldown;
     private JsonNode buckets = Json.MAPPER.createArrayNode(), claudeBuckets = Json.MAPPER.createArrayNode();
     private long updatedAt, requestedAt;
-    private boolean refreshing, closed;
+    private boolean refreshing, closed, claudeAuthRequired;
     private String error = "", claudeError = "";
 
     public CodexQuotaService(Reader reader) {
@@ -44,7 +44,8 @@ public final class CodexQuotaService implements AutoCloseable {
         return Json.object("buckets", all, "updatedAt", updatedAt, "refreshing", refreshing,
                 "state", executor == null ? "unavailable" : !codexOk && !claudeOk ? "error" : updatedAt == 0 ? "loading" : all.isEmpty() ? "unavailable" : "ready",
                 "error", problems,"resetCredits",resetCredits,"resetSupported",resetter!=null,
-                "sources", Json.object("codex", reader == null ? "unavailable" : !error.isEmpty() ? "error" : "ready", "claude", claude == null ? "unavailable" : !claudeError.isEmpty() ? "error" : "ready"));
+                "authRequired",Json.object("claude",claudeAuthRequired),
+                "sources", Json.object("codex", reader == null ? "unavailable" : !error.isEmpty() ? "error" : "ready", "claude", claude == null ? "unavailable" : claudeAuthRequired ? "auth-required" : !claudeError.isEmpty() ? "error" : "ready"));
     }
     public synchronized void refresh() {
         long now = System.currentTimeMillis();
@@ -64,9 +65,10 @@ public final class CodexQuotaService implements AutoCloseable {
                 if (claude != null) {
                     try {
                         var response = ClaudeAccountClient.normalize(claude.read());
-                        synchronized (this) { if (!closed) { claudeBuckets = response; claudeError = ""; success = true; } }
+                        synchronized (this) { if (!closed) { claudeBuckets = response; claudeError = ""; claudeAuthRequired=false; success = true; } }
                     } catch (Exception e) {
-                        synchronized (this) { if (!closed) claudeError = "Не удалось получить квоту Claude: " + Objects.toString(e.getMessage(), e.toString()); }
+                        boolean auth=authenticationRequired(e);
+                        synchronized (this) { if (!closed) {claudeAuthRequired=auth;claudeError=auth?"Claude: нужна авторизация":"Не удалось получить квоту Claude: " + Objects.toString(e.getMessage(), e.toString());} }
                     }
                 }
                 // A failed source keeps its last values and its stale timestamp; only a fresh answer moves the clock.
@@ -93,6 +95,16 @@ public final class CodexQuotaService implements AutoCloseable {
         if(!found)next.add(Json.object("id","claude","label","Claude","windows",List.of(Json.object("kind",duration==10080?"secondary":"primary","remainingPercent",0,"durationMinutes",duration,"resetsAt",reset))));
         claudeBuckets=next;claudeError="";updatedAt=System.currentTimeMillis();return true;
     }
+    private static boolean authenticationRequired(Throwable failure){
+        for(Throwable current=failure;current!=null;current=current.getCause()){
+            if(current instanceof ClaudeAccountClient.AuthenticationRequiredException)return true;
+            String message=Objects.toString(current.getMessage(),"").toLowerCase(Locale.ROOT);
+            if(message.contains("claude")&&(message.contains("не авторизован")||message.contains("сеанс")&&message.contains("истёк")))return true;
+        }
+        return false;
+    }
+    /** Authentication completion must not be held back by the ordinary refresh-button debounce. */
+    public synchronized void refreshAfterAuthentication(){requestedAt=0;refresh();}
     private static final Pattern CLAUDE_RESET=Pattern.compile("(?i)resets\\s+([a-z]{3})\\s+(\\d{1,2}),\\s*(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)\\s*\\(([^)]+)\\)");
     private static Long claudeReset(String text){
         try{

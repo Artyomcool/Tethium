@@ -43,6 +43,7 @@ public final class HostService implements AutoCloseable {
     private final Map<AgentAdapter.Provider, AgentAdapter> adapters = new EnumMap<>(AgentAdapter.Provider.class);
     private final boolean detachedEnabled;
     private final CodexQuotaService quota;
+    private final ClaudeLogin claudeLogin;
     private final CodexModelCatalog models;
     private final Path data;
     private dev.tethium.mobile.MobileGateway mobile;
@@ -88,6 +89,8 @@ public final class HostService implements AutoCloseable {
         for (var executor : executors) if (adapters.putIfAbsent(executor.provider(), executor) != null) throw new IllegalArgumentException("Duplicate executor for " + executor.provider());
         if (models == null) models = new CodexModelCatalog(adapter instanceof CodexAdapter && !Boolean.getBoolean("tethium.probe") ? directory -> new CodexAccountClient(directory).readModels() : null);
         this.adapter = adapter; this.quota = quota; this.draining = standby; this.models = models; this.data = data;
+        var claudeAdapter=adapters.get(AgentAdapter.Provider.CLAUDE);
+        claudeLogin=claudeAdapter==null?null:new ClaudeLogin(data,claudeAdapter.executable(),()->{quota.refreshAfterAuthentication();bump();});
         detachedEnabled=adapter instanceof CodexAdapter&&!Boolean.getBoolean("tethium.probe");
         store = new SessionStore(data.resolve("tethium.db"));
         try{store.compactEvents();}catch(Exception e){System.err.println("Event compaction: "+e.getMessage());}
@@ -272,7 +275,8 @@ public final class HostService implements AutoCloseable {
             if(previous==null){if(!CodexQuotaService.canReset(quota.snapshot()))throw new IllegalStateException("Сброс доступен только при остатке ≤5%, наличии сбросов и свежей квоте");usage.beginRedemption(key);}
             var result=quota.consume(key);if(Set.of("reset","alreadyRedeemed").contains(result.path("outcome").asText()))usage.resetBoundary(key);usage.finishRedemption(key,result);return result;
         }
-        if (path.equals("/quota/refresh")) { quota.refresh(); return quota.snapshot(); }
+        if(path.equals("/claude/auth/login")){if(claudeLogin==null)throw new IllegalStateException("Claude CLI не подключён");return claudeLogin.start();}
+        if (path.equals("/quota/refresh")) { quota.refresh(); return quotaState(); }
         if (path.equals("/projects")) {
             String requestedPath=body.path("path").asText().strip();if(requestedPath.isEmpty())throw new IllegalArgumentException("Укажите папку проекта");
             Path directory = ProjectPaths.root(Files.createDirectories(Path.of(requestedPath)).toRealPath());
@@ -444,7 +448,7 @@ public final class HostService implements AutoCloseable {
         var projects = store.projects();
         for (var project : projects) for (var session : store.list(project.id())) if(store.trashedAt(session.id())==0)sessions.add(sessionJson(session));
         var backlogWaiting=store.backlogWaiting();var collapsed=store.collapsedProjects();var projectValues=new ArrayList<JsonNode>();for(var p:projects)projectValues.add(Json.object("backlog",backlogWaiting.getOrDefault(p.id(),0),"id",p.id(),"collapsed",collapsed.contains(p.id()),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"crossProject",store.crossProject(p.id()),"icon",ProjectIcons.version(Path.of(p.root())),"panel",projectPanels.read(Path.of(p.root())),"widget",projectWidgets.read(Path.of(p.root()))));
-        var result = Json.object("machineUsage",machineUsage(),"resources",resources.snapshot(),"reminders",reminderRows(),"files",store.projectFiles(),"resourceUsage",usage.sidebar(),"revision", revision.get(), "projects", projectValues, "sessions", sessions, "quota", quota.snapshot(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
+        var result = Json.object("machineUsage",machineUsage(),"resources",resources.snapshot(),"reminders",reminderRows(),"files",store.projectFiles(),"resourceUsage",usage.sidebar(),"revision", revision.get(), "projects", projectValues, "sessions", sessions, "quota", quotaState(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
         if (selected != null && sessions.stream().anyMatch(s -> s.path("id").asText().equals(selected))) {
             var messages = new ArrayList<SessionStore.Message>(); long cursor = 0;
             while (!window) { var page = store.messages(selected, cursor, 1000); messages.addAll(page); if (page.size() < 1000) break; cursor = page.getLast().sequence(); }
@@ -454,6 +458,10 @@ public final class HostService implements AutoCloseable {
                             .map(p -> Json.object("id", p.id, "method", p.method, "params", p.params)).toList()));
         }
         return result;
+    }
+    private JsonNode quotaState(){
+        var value=(com.fasterxml.jackson.databind.node.ObjectNode)quota.snapshot().deepCopy();
+        value.set("authLogin",claudeLogin==null?Json.object("available",false):claudeLogin.snapshot());return value;
     }
     private String historyVersion(String id)throws Exception{var live=running.get(id);return store.lastSequence(id)+"-"+store.messageRevision(id)+"-"+store.mediaRevision(id)+":"+(live==null?"done":System.identityHashCode(live)+":"+live.text.length());}
     private JsonNode historyIndex(String id,boolean gallery)throws Exception{

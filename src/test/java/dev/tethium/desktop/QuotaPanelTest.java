@@ -45,6 +45,19 @@ class QuotaPanelTest {
             assertTrue(rows<150,"five windows must stay compact, got "+rows);
         });
     }
+    @Test void expiredClaudeSessionBecomesOneClickableLoginRow()throws Exception{
+        SwingUtilities.invokeAndWait(()->{
+            Theme.install();var clicked=new boolean[1];var panel=new QuotaPanel(()->{},()->{},()->{},()->clicked[0]=true);
+            panel.update(Json.object("state","ready","updatedAt",System.currentTimeMillis(),"authRequired",Json.object("claude",true),"authLogin",Json.object("running",false),"buckets",List.of(
+                    Json.object("id","codex","label","Codex","windows",List.of(Json.object("remainingPercent",42,"durationMinutes",300))),
+                    Json.object("id","claude","label","Claude","windows",List.of(Json.object("remainingPercent",0,"durationMinutes",10080))),
+                    Json.object("id","claude-fable","label","Claude · Fable","windows",List.of(Json.object("remainingPercent",0,"durationMinutes",10080))))));
+            var login=collect(panel,JLabel.class).stream().filter(l->"quota.auth".equals(l.getName())).findFirst().orElseThrow();
+            assertEquals("Claude · нужна авторизация",login.getText());assertEquals(1,collect(panel,JProgressBar.class).size(),"stale Claude bars are replaced by the login row");
+            for(var listener:login.getMouseListeners())listener.mouseClicked(new java.awt.event.MouseEvent(login,java.awt.event.MouseEvent.MOUSE_CLICKED,System.currentTimeMillis(),0,1,1,1,false));
+            assertTrue(clicked[0]);
+        });
+    }
     private static <T extends Component> List<T> collect(Container root,Class<T> type){
         var out=new ArrayList<T>();
         for(var c:root.getComponents()){if(type.isInstance(c))out.add(type.cast(c));if(c instanceof Container child)out.addAll(collect(child,type));}

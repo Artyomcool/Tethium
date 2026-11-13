@@ -62,8 +62,12 @@ class ClaudeQuotaTest {
         }
         try (var claudeOnly = new CodexQuotaService(null, null, () -> { throw new IllegalStateException("Сеанс Claude Code истёк"); }, 0)) {
             var state = await(claudeOnly, s -> s.path("state").asText().equals("error") && !s.path("refreshing").asBoolean());
-            assertTrue(state.path("error").asText().contains("Claude Code"));
+            assertEquals("Claude: нужна авторизация",state.path("error").asText());
+            assertTrue(state.path("authRequired").path("claude").asBoolean());
+            assertEquals("auth-required",state.path("sources").path("claude").asText());
             assertFalse(CodexQuotaService.available(state, 0));
+            assertTrue(claudeOnly.claudeExhausted(Json.object("api_error","usage_limit_reached","result","You've hit your weekly limit · resets Dec 31, 11pm (Europe/Berlin)")));
+            assertTrue(claudeOnly.snapshot().path("authRequired").path("claude").asBoolean(),"restoring a durable quota rejection must not hide the expired login");
         }
     }
     private static com.fasterxml.jackson.databind.JsonNode await(CodexQuotaService quota, java.util.function.Predicate<com.fasterxml.jackson.databind.JsonNode> condition) throws Exception {

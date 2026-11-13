@@ -12,6 +12,10 @@ import java.util.*;
 /** Account limits of the signed-in Claude Code user. Reads the CLI's own OAuth token and asks the same usage
  * endpoint its /usage command uses; never starts a conversation and never refreshes or rewrites the token. */
 public final class ClaudeAccountClient {
+    /** The saved CLI identity is missing or its OAuth session can no longer be used. */
+    public static final class AuthenticationRequiredException extends IllegalStateException {
+        public AuthenticationRequiredException(String message) { super(message); }
+    }
     private static final URI USAGE = URI.create("https://api.anthropic.com/api/oauth/usage");
     private final Path credentials;
     private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
@@ -23,13 +27,15 @@ public final class ClaudeAccountClient {
         return home.resolve(".credentials.json");
     }
     public JsonNode readUsage() throws Exception {
-        if (!Files.isRegularFile(credentials)) throw new IllegalStateException("Claude Code не авторизован: нет " + credentials);
-        String token = Json.MAPPER.readTree(credentials.toFile()).path("claudeAiOauth").path("accessToken").asText("");
-        if (token.isBlank()) throw new IllegalStateException("Claude Code не авторизован");
+        if (!Files.isRegularFile(credentials)) throw new AuthenticationRequiredException("Claude Code не авторизован: нет " + credentials);
+        var oauth=Json.MAPPER.readTree(credentials.toFile()).path("claudeAiOauth");
+        String token = oauth.path("accessToken").asText("");
+        if (token.isBlank()) throw new AuthenticationRequiredException("Claude Code не авторизован");
+        if(oauth.path("expiresAt").isNumber()&&oauth.path("expiresAt").asLong()<=System.currentTimeMillis())throw new AuthenticationRequiredException("Сеанс Claude Code истёк");
         var request = HttpRequest.newBuilder(USAGE).timeout(Duration.ofSeconds(20)).GET()
                 .header("Authorization", "Bearer " + token).header("anthropic-beta", "oauth-2025-04-20").header("Accept", "application/json").header("User-Agent", "Tethium").build();
         var response = http.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() == 401 || response.statusCode() == 403) throw new IllegalStateException("Сеанс Claude Code истёк: запустите claude и войдите заново");
+        if (response.statusCode() == 401 || response.statusCode() == 403) throw new AuthenticationRequiredException("Сеанс Claude Code истёк");
         if (response.statusCode() != 200) throw new IllegalStateException("Сервис квоты Claude ответил " + response.statusCode());
         return Json.parse(response.body());
     }

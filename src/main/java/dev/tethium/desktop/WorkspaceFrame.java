@@ -24,7 +24,7 @@ public final class WorkspaceFrame extends JFrame {
     private final JScrollPane inactiveScroll = new JScrollPane(inactive);
     private final JButton archiveToggle = Theme.button("› Неактивные", "Показать деактивированные сессии", this::toggleInactive);
     private final JLabel heading = new JLabel("Выберите сессию"), status = new JLabel(" ");
-    private final QuotaPanel quota = new QuotaPanel(this::refreshQuota,this::resetQuota,this::showUsage);
+    private final QuotaPanel quota = new QuotaPanel(this::refreshQuota,this::resetQuota,this::showUsage,this::loginClaude);
     private ChatTranscript transcript;
     private JScrollPane history;
     private VirtualHistory pagedHistory;
@@ -936,6 +936,7 @@ public final class WorkspaceFrame extends JFrame {
         action(()->{Path pending=dev.tethium.host.AppPaths.data().resolve("quota-reset-pending.json");String key=Files.exists(pending)?Json.MAPPER.readTree(pending.toFile()).path("requestId").asText():UUID.randomUUID().toString();Files.createDirectories(pending.getParent());Files.writeString(pending,Json.object("requestId",key).toString());var result=host.post("/quota/reset",Json.object("requestId",key,"confirmed",true));Files.deleteIfExists(pending);SwingUtilities.invokeLater(()->JOptionPane.showMessageDialog(this,switch(result.path("outcome").asText()){case "reset","alreadyRedeemed"->"Сброс применён. Обновляем квоту.";case "nothingToReset"->"Сейчас нет подходящего лимита для сброса.";case "noCredit"->"Доступные сбросы закончились.";default->"Ответ сервиса: "+result.path("outcome").asText();}));});
     }
     private void refreshQuota() { action(() -> host.post("/quota/refresh", Json.object())); }
+    private void loginClaude(){action(()->host.post("/claude/auth/login",Json.object()));}
     private void groupQueued(boolean merge,JsonNode selectedJobs) {
         if(selected==null||grouping||!groupingAvailable)return;String id=selected;grouping=true;refreshTakeControls();
         var first=selectedJobs.get(0);var body=merge?Json.object("selected",selectedJobs,"requestId",UUID.randomUUID().toString()):Json.object("jobId",first.path("id").asText(),"expectedPrompt",first.path("prompt").asText(),"requestId",UUID.randomUUID().toString());
