@@ -51,4 +51,19 @@ class QueueGroupingTest {
             assertTrue(s.attention(id).path("unread").asBoolean()); assertTrue(s.get(id).active());
         }
     }
+    @Test void runningAndCancelledNewerRunsDoNotEraseUnreadResult() throws Exception {
+        try(var s=new SessionStore(root.resolve("db"))) {
+            String id=s.create(s.project(root),null,"test",root).id();
+            String completed=s.beginRun(id,Provider.CODEX);s.finishRun(completed,"COMPLETED");
+            long result=s.attention(id).path("version").asLong();
+            String running=s.beginRun(id,Provider.CODEX);
+            assertEquals(result,s.attention(id).path("version").asLong());
+            assertTrue(s.attention(id).path("unread").asBoolean());
+            s.finishRun(running,"CANCELLED");
+            assertEquals(result,s.attention(id).path("version").asLong());
+            assertTrue(s.attention(id).path("unread").asBoolean());
+            s.seen(id,result);
+            assertFalse(s.attention(id).path("unread").asBoolean());
+        }
+    }
 }

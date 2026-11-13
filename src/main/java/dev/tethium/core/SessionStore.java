@@ -440,11 +440,10 @@ public final class SessionStore implements AutoCloseable {
     }
     public synchronized void setActive(String id, boolean active) throws SQLException { execute("UPDATE sessions SET active=? WHERE id=?", active, id); }
     public synchronized JsonNode attention(String id) throws SQLException {
-        try (var q=connection.prepareStatement("SELECT r.rowid,r.status,COALESCE(s.last_run,0) FROM runs r LEFT JOIN session_seen s ON s.session_id=r.session_id WHERE r.session_id=? ORDER BY r.rowid DESC LIMIT 1")) {
+        try (var q=connection.prepareStatement("SELECT r.rowid,r.status,COALESCE(s.last_run,0) FROM runs r LEFT JOIN session_seen s ON s.session_id=r.session_id WHERE r.session_id=? AND r.status IN ('COMPLETED','FAILED','INTERRUPTED') ORDER BY r.rowid DESC LIMIT 1")) {
             q.setString(1,id); try(var row=q.executeQuery()) {
                 if(!row.next()) return Json.object("version",0,"unread",false);
-                boolean terminal=Set.of("COMPLETED","FAILED","INTERRUPTED").contains(row.getString(2));
-                return Json.object("version",row.getLong(1),"unread",terminal&&row.getLong(1)>row.getLong(3),"status",row.getString(2));
+                return Json.object("version",row.getLong(1),"unread",row.getLong(1)>row.getLong(3),"status",row.getString(2));
             }
         }
     }
