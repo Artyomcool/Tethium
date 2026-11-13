@@ -64,7 +64,15 @@ final class RelayLinkManager implements AutoCloseable {
                 URI endpoint=URI.create(url+"/v1/connect/"+crypto.room());
                 WebSocket socket=client.newWebSocketBuilder().header("x-tethium-ticket",ticket(crypto.room(),"host")).header("x-tethium-role","host").header("x-tethium-auth",crypto.auth()).connectTimeout(Duration.ofSeconds(10)).buildAsync(endpoint,listener).join();
                 listener.socket=socket;active.add(listener);lastConnectedAt=System.currentTimeMillis();lastError="";
-                try{traffic.relayConnection();accepted.accept(listener.channel());delay=1_000;listener.closed.join();}
+                try{
+                    traffic.relayConnection();accepted.accept(listener.channel());delay=1_000;
+                    while(!closed&&!listener.closed.isDone()){
+                        long probe=listener.probe();
+                        try{listener.closed.get(10,TimeUnit.SECONDS);}catch(TimeoutException ignored){}
+                        if(!listener.closed.isDone()&&listener.lastProbeAck<probe)throw new IOException("Cloudflare relay probe timed out");
+                    }
+                    listener.closed.join();
+                }
                 finally{active.remove(listener);listener.abort();}
             }catch(Exception e){if(closed)return;lastError=message(e);System.err.println("Cloudflare host relay: "+lastError);}
             if(!closed)try{Thread.sleep(delay);}catch(InterruptedException e){return;}delay=Math.min(30_000,delay*2);
@@ -82,6 +90,7 @@ final class RelayLinkManager implements AutoCloseable {
         private final CompletableFuture<Void> closed=new CompletableFuture<>();
         private ByteArrayOutputStream message=new ByteArrayOutputStream();
         private volatile WebSocket socket;
+        private volatile long lastProbeAck;
         RelayListener(RelayCrypto crypto,TrafficLedger traffic){this.crypto=crypto;this.traffic=traffic;}
         LinkChannel channel(){return new LinkChannel(){
             public byte[] read()throws IOException{try{byte[] value=incoming.take();if(value==CLOSED)throw new EOFException("Relay closed");return value;}catch(InterruptedException e){Thread.currentThread().interrupt();throw new EOFException("Relay interrupted");}}
@@ -92,6 +101,12 @@ final class RelayLinkManager implements AutoCloseable {
             public void close(){WebSocket current=socket;if(current!=null&&!current.isOutputClosed())current.sendClose(WebSocket.NORMAL_CLOSURE,"closed");finish();}
         };}
         public void onOpen(WebSocket socket){this.socket=socket;socket.request(1);}
+        long probe()throws IOException{
+            WebSocket current=socket;if(current==null||current.isOutputClosed())throw new EOFException("Relay closed");
+            long sent=System.currentTimeMillis();
+            try{current.sendText("@tethium-host-probe",true).join();return sent;}catch(Exception e){throw new IOException("Relay probe failed",e);}
+        }
+        public CompletionStage<?> onText(WebSocket socket,CharSequence data,boolean last){if(last&&data.toString().equals("@tethium-host-ok"))lastProbeAck=System.currentTimeMillis();socket.request(1);return null;}
         public CompletionStage<?> onBinary(WebSocket socket,ByteBuffer data,boolean last){byte[] part=new byte[data.remaining()];data.get(part);message.write(part,0,part.length);if(last){byte[] envelope=message.toByteArray();message=new ByteArrayOutputStream();try{traffic.bytes(true,false,envelope.length);traffic.relayMessage();if(!traffic.allowRelay()){socket.sendClose(4008,"daily budget");finish();return null;}incoming.add(Frames.unpack(crypto.open(envelope)));}catch(Exception e){socket.abort();finish();}}socket.request(1);return null;}
         public CompletionStage<?> onClose(WebSocket socket,int status,String reason){finish();return null;}
         public void onError(WebSocket socket,Throwable error){finish();}

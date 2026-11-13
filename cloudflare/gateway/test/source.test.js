@@ -9,6 +9,8 @@ test("worker exposes only health and authenticated websocket rooms", async () =>
   assert.match(source, /x-tethium-auth/);
   assert.match(source, /role !== "host"/);
   assert.match(source, /acceptWebSocket/);
+  assert.match(source, /@tethium-host-probe/);
+  assert.doesNotMatch(source, /webSocketClose\([^)]*\)\s*\{\s*socket\.close/);
   assert.doesNotMatch(source, /console\.log|request\.text\(|request\.arrayBuffer\(/);
   assert.doesNotMatch(source, /x-tethium-gateway/);
 });

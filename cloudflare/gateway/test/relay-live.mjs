@@ -27,6 +27,7 @@ function open(envelope) { if(envelope[0]!==1)throw new Error("version");const no
 
 const host = await connect("host");
 const phone = await connect("phone");
+const probe = receive(host);host.send("@tethium-host-probe");if((await probe).toString()!=="@tethium-host-ok")throw new Error("host probe failed");
 const one = receive(phone);host.send(seal(Buffer.from("host-to-phone")));if(open(await one).toString()!=="host-to-phone")throw new Error("host direction failed");
 const two = receive(host);phone.send(seal(Buffer.from("phone-to-host")));if(open(await two).toString()!=="phone-to-host")throw new Error("phone direction failed");
 try { await connect("phone", "wrong"); throw new Error("wrong ticket accepted"); } catch (error) { if(!String(error).includes("401"))throw error; }

@@ -46,6 +46,10 @@ export class LinkRoom {
   }
 
   webSocketMessage(source, message) {
+    if (typeof message === "string" && message === "@tethium-host-probe") {
+      source.send("@tethium-host-ok");
+      return;
+    }
     const role = source.deserializeAttachment()?.role;
     const target = role === "host" ? "phone" : "host";
     for (const socket of this.ctx.getWebSockets(target)) {
@@ -53,6 +57,8 @@ export class LinkRoom {
     }
   }
 
-  webSocketClose(socket, code, reason) { socket.close(code, reason); }
+  // The socket is already closed when this callback runs. In particular 1006 is
+  // reserved and must never be passed back to WebSocket.close().
+  webSocketClose() {}
   webSocketError(socket) { socket.close(1011, "relay_error"); }
 }

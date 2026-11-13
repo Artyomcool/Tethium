@@ -8,6 +8,7 @@ android/.gradle/
 android/**/build/
 android/local.properties
 node_modules/
+/.wrangler/
 src/main/resources/mobile/tethium.apk
 /.nimbalyst/transcript-images/
 /.nimbalyst/scratch/
