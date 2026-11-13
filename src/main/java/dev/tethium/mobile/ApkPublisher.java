@@ -67,7 +67,7 @@ public final class ApkPublisher {
         var sdks=new LinkedHashSet<Path>();
         for(String env:List.of("ANDROID_HOME","ANDROID_SDK_ROOT")){String value=System.getenv(env);if(value!=null&&!value.isBlank())sdks.add(Path.of(value));}
         for(Path file:List.of(root.resolve("local.properties"),root.resolve("android/local.properties"))){if(Files.isRegularFile(file)){var props=new Properties();try(var in=Files.newInputStream(file)){props.load(in);}if(props.containsKey("sdk.dir"))sdks.add(Path.of(props.getProperty("sdk.dir")));}}
-        String local=System.getenv("LOCALAPPDATA");if(local!=null){sdks.add(Path.of(local,"Android/Sdk"));sdks.add(Path.of(local,"Temp/sbg-android-sdk"));}
+        String local=System.getenv("LOCALAPPDATA");if(local!=null)sdks.add(Path.of(local,"Android/Sdk"));
         for(Path sdk:sdks){Path folder=sdk.resolve("build-tools");if(!Files.isDirectory(folder))continue;try(var dirs=Files.list(folder)){var found=dirs.filter(p->Files.isRegularFile(p.resolve("aapt2.exe"))&&Files.isRegularFile(p.resolve("lib/apksigner.jar"))).max(Comparator.comparing(p->p.getFileName().toString()));if(found.isPresent())return found.get();}}
         throw new IOException("Нужны Android SDK build-tools: укажите sdk.dir в local.properties или ANDROID_HOME");
     }

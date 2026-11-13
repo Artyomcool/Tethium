@@ -1,7 +1,7 @@
 param([string]$SdkPath = $env:ANDROID_HOME)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
-if (-not $SdkPath) { $SdkPath = 'C:/Users/Raider/AppData/Local/Temp/sbg-android-sdk' }
+if (-not $SdkPath) { $SdkPath = Join-Path $env:LOCALAPPDATA 'Android/Sdk' }
 if (-not (Test-Path -LiteralPath "$SdkPath/platforms/android-36/android.jar")) { throw 'Android SDK 36 not found. Pass -SdkPath.' }
 $data = Join-Path $env:LOCALAPPDATA 'Tethium'
 $signing = Join-Path $data 'android-signing.properties'

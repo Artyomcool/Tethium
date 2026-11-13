@@ -1,7 +1,7 @@
 """Native Android smoke test against MobileProbe only; no live data or model calls."""
 import json, pathlib, re, subprocess, time, urllib.request, xml.etree.ElementTree as ET
 ROOT=pathlib.Path(__file__).resolve().parent.parent
-ADB=pathlib.Path.home()/'AppData/Local/Temp/sbg-android-sdk/platform-tools/adb.exe'
+ADB=pathlib.Path.home()/'AppData/Local/Android/Sdk/platform-tools/adb.exe'
 SERIAL='emulator-5570'
 fixture=pathlib.Path((ROOT/'.local/mobile-probe/current.txt').read_text())
 info=json.loads((fixture/'server.json').read_text())

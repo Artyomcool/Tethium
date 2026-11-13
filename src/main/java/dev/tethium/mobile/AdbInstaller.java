@@ -96,7 +96,7 @@ public final class AdbInstaller {
         var candidates = new ArrayList<String>();
         String home = System.getenv("ANDROID_HOME"); if (home != null) candidates.add(home + "/platform-tools/adb.exe");
         String sdk = System.getenv("ANDROID_SDK_ROOT"); if (sdk != null) candidates.add(sdk + "/platform-tools/adb.exe");
-        String local = System.getenv("LOCALAPPDATA"); if (local != null) { candidates.add(local + "/Android/Sdk/platform-tools/adb.exe"); candidates.add(local + "/Temp/sbg-android-sdk/platform-tools/adb.exe"); }
+        String local = System.getenv("LOCALAPPDATA"); if (local != null) candidates.add(local + "/Android/Sdk/platform-tools/adb.exe");
         String path = System.getenv("PATH"); if (path != null) for (String dir : path.split(Pattern.quote(java.io.File.pathSeparator))) if (!dir.isBlank()) candidates.add(dir + "/adb.exe");
         for (String candidate : candidates) try { if (Files.isRegularFile(Path.of(candidate))) return Path.of(candidate).toString(); } catch (Exception ignored) { }
         return null;
