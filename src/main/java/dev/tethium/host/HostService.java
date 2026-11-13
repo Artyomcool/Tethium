@@ -226,7 +226,7 @@ public final class HostService implements AutoCloseable {
     private final Object resetLock=new Object();
     private Object command(String path,JsonNode body)throws Exception{
         if(path.equals("/quota/reset")){synchronized(resetLock){return commandBody(path,body);}}
-        if(path.equals("/projects")||path.startsWith("/projects/"))return commandBody(path,body);
+        if(path.equals("/projects")||path.startsWith("/projects/")||path.equals("/project-groups")||path.startsWith("/project-groups/"))return commandBody(path,body);
         synchronized(this){return commandBody(path,body);}
     }
     private Object commandBody(String path, JsonNode body) throws Exception {
@@ -277,6 +277,15 @@ public final class HostService implements AutoCloseable {
         }
         if(path.equals("/claude/auth/login")){if(claudeLogin==null)throw new IllegalStateException("Claude CLI не подключён");return claudeLogin.start();}
         if (path.equals("/quota/refresh")) { quota.refresh(); return quotaState(); }
+        if(path.equals("/project-groups")){var group=store.createProjectGroup(body.path("title").asText());return Json.object("id",group.id(),"title",group.title(),"position",group.position(),"collapsed",group.collapsed());}
+        if(path.matches("/project-groups/[a-zA-Z0-9-]+/(rename|collapsed|remove)")){
+            var parts=path.split("/");String id=parts[2];switch(parts[3]){
+                case "rename"->store.renameProjectGroup(id,body.path("title").asText());
+                case "collapsed"->store.projectGroupCollapsed(id,body.path("collapsed").asBoolean());
+                case "remove"->store.removeProjectGroup(id);
+                default->throw new IllegalArgumentException("Unknown endpoint");
+            }return Json.object("ok",true);
+        }
         if (path.equals("/projects")) {
             String requestedPath=body.path("path").asText().strip();if(requestedPath.isEmpty())throw new IllegalArgumentException("Укажите папку проекта");
             Path directory = ProjectPaths.root(Files.createDirectories(Path.of(requestedPath)).toRealPath());
@@ -289,6 +298,7 @@ public final class HostService implements AutoCloseable {
             });resources.refresh();return created;
         }
         if(path.equals("/projects/order")){var ids=new ArrayList<String>();for(var id:body.path("ids"))ids.add(id.asText());store.reorderProjects(ids);return Json.object("ok",true);}
+        if(path.matches("/projects/[a-zA-Z0-9-]+/parent")){store.projectParent(path.split("/")[2],body.path("kind").asText("root"),body.path("parentId").asText(null));return Json.object("ok",true);}
         if(path.matches("/projects/[a-zA-Z0-9-]+/sessions-order")){var ids=new ArrayList<String>();for(var id:body.path("ids"))ids.add(id.asText());store.reorderSessions(path.split("/")[2],ids);return Json.object("ok",true);}
         if(path.matches("/projects/[a-zA-Z0-9-]+/settings")){
             String pid=path.split("/")[2];Path root=Path.of(store.projects().stream().filter(p->p.id().equals(pid)).findFirst().orElseThrow().root());return GitHubProjects.configure(root,body);
@@ -447,8 +457,9 @@ public final class HostService implements AutoCloseable {
         var sessions = new ArrayList<JsonNode>();
         var projects = store.projects();
         for (var project : projects) for (var session : store.list(project.id())) if(store.trashedAt(session.id())==0)sessions.add(sessionJson(session));
-        var backlogWaiting=store.backlogWaiting();var collapsed=store.collapsedProjects();var projectValues=new ArrayList<JsonNode>();for(var p:projects)projectValues.add(Json.object("backlog",backlogWaiting.getOrDefault(p.id(),0),"id",p.id(),"collapsed",collapsed.contains(p.id()),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"crossProject",store.crossProject(p.id()),"icon",ProjectIcons.version(Path.of(p.root())),"panel",projectPanels.read(Path.of(p.root())),"widget",projectWidgets.read(Path.of(p.root()))));
-        var result = Json.object("machineUsage",machineUsage(),"resources",resources.snapshot(),"reminders",reminderRows(),"files",store.projectFiles(),"resourceUsage",usage.sidebar(),"revision", revision.get(), "projects", projectValues, "sessions", sessions, "quota", quotaState(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
+        var parents=store.projectParents();var backlogWaiting=store.backlogWaiting();var collapsed=store.collapsedProjects();var projectValues=new ArrayList<JsonNode>();for(var p:projects){var parent=parents.get(p.id());projectValues.add(Json.object("backlog",backlogWaiting.getOrDefault(p.id(),0),"id",p.id(),"collapsed",collapsed.contains(p.id()),"parentKind",parent==null?"root":parent.kind(),"parentId",parent==null?null:parent.id(),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"crossProject",store.crossProject(p.id()),"icon",ProjectIcons.version(Path.of(p.root())),"panel",projectPanels.read(Path.of(p.root())),"widget",projectWidgets.read(Path.of(p.root()))));}
+        var groupValues=store.projectGroups().stream().map(g->Json.object("id",g.id(),"title",g.title(),"position",g.position(),"collapsed",g.collapsed())).toList();
+        var result = Json.object("machineUsage",machineUsage(),"resources",resources.snapshot(),"reminders",reminderRows(),"files",store.projectFiles(),"resourceUsage",usage.sidebar(),"revision", revision.get(), "projectGroups",groupValues,"projects", projectValues, "sessions", sessions, "quota", quotaState(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
         if (selected != null && sessions.stream().anyMatch(s -> s.path("id").asText().equals(selected))) {
             var messages = new ArrayList<SessionStore.Message>(); long cursor = 0;
             while (!window) { var page = store.messages(selected, cursor, 1000); messages.addAll(page); if (page.size() < 1000) break; cursor = page.getLast().sequence(); }

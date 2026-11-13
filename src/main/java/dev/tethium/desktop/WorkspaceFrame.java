@@ -77,6 +77,7 @@ public final class WorkspaceFrame extends JFrame {
     private final JButton closePreview=Theme.iconButton("close","Закрыть просмотр",this::closePreview);
     private final Map<String,Long> acknowledged = new HashMap<>();
     private final Map<String, JsonNode> projects = new LinkedHashMap<>();
+    private final Map<String, JsonNode> projectGroups = new LinkedHashMap<>();
     private volatile String selected;
     private String initialSelection;
     private String selectedProject, treeSignature = "", chatSignature = "", requestSignature = "", artifactSignature = "";
@@ -129,12 +130,15 @@ public final class WorkspaceFrame extends JFrame {
     private JsonNode pendingTake;
     private final Runnable onClose;
     private final javax.swing.Timer draftTimer;
-    record Node(String id, String title, boolean project, boolean running, String status, String path, String attention,boolean file,int pausedQueued,int backlog) {
-        Node(String id,String title,boolean project,boolean running,String status,String path,String attention){this(id,title,project,running,status,path,attention,false,0,0);}
-        Node(String id,String title,boolean project,boolean running,String status,String path,String attention,boolean file){this(id,title,project,running,status,path,attention,file,0,0);}
+    record Node(String id, String title, boolean project, boolean running, String status, String path, String attention,boolean file,int pausedQueued,int backlog,boolean group) {
+        Node(String id,String title,boolean project,boolean running,String status,String path,String attention){this(id,title,project,running,status,path,attention,false,0,0,false);}
+        Node(String id,String title,boolean project,boolean running,String status,String path,String attention,boolean file){this(id,title,project,running,status,path,attention,file,0,0,false);}
+        Node(String id,String title,boolean project,boolean running,String status,String path,String attention,boolean file,int pausedQueued,int backlog){this(id,title,project,running,status,path,attention,file,pausedQueued,backlog,false);}
+        static Node group(String id,String title){return new Node(id,title,false,false,"","Группа проектов","",false,0,0,true);}
         public String toString() { return title; }
     }
     private record Artifact(String title, Path path) { public String toString() { return title; } }
+    private record ProjectParentChoice(String kind,String id,String title){public String toString(){return title;}}
 
     public WorkspaceFrame(HostClient host, Runnable onClose) {
         this(host, onClose, null);
@@ -176,12 +180,12 @@ public final class WorkspaceFrame extends JFrame {
                 label.setIcon(null); setBackgroundNonSelectionColor(Theme.SIDEBAR); setBackgroundSelectionColor(Theme.SELECTED); setBorderSelectionColor(Theme.SELECTED);
                 var user = ((DefaultMutableTreeNode) value).getUserObject();
                 if (user instanceof Node n) {
-                    label.setText(n.title); label.setFont(n.project?projectFont(t):t.getFont().deriveFont(Font.PLAIN));
+                    label.setText(n.title); label.setFont(n.project||n.group?projectFont(t):t.getFont().deriveFont(Font.PLAIN));
                     label.setIcon(null);
-                    label.setForeground(n.running ? Theme.ACCENT : n.status.equals("FAILED") ? Theme.RED : Theme.TEXT);
-                    label.setToolTipText(n.path); label.setBorder(new EmptyBorder(0, (n.project?Theme.UNIT/2:Theme.UNIT)+22+Theme.GAP, 0, Theme.UNIT));
+                    label.setForeground(n.running ? Theme.ACCENT : n.status.equals("FAILED") ? Theme.RED : n.group?Theme.MUTED:n.project?Theme.ACCENT:Theme.TEXT);
+                    label.setToolTipText(n.path); label.setBorder(new EmptyBorder(0, (n.project||n.group?Theme.UNIT/2:Theme.UNIT)+22+Theme.GAP, 0, Theme.UNIT));
                     rowPanel.removeAll(); rowPanel.setBackground(selected?Theme.SELECTED:Theme.SIDEBAR); rowPanel.add(label);
-                    rowPanel.add(Box.createHorizontalStrut(backlogWidth(label,shownBacklog(t,t.getPathForRow(row),n))+(n.pausedQueued>0?Theme.GUTTER*2:n.project?Theme.GAP:Theme.GUTTER)+(n.project&&expanded&&projectWidgets.available(projects.get(n.id),"right")?rightWidgetWidth(projects.get(n.id))+2+(n.pausedQueued==0&&!shownAttention(t,t.getPathForRow(row),n).isEmpty()?12:0):0)),BorderLayout.EAST);
+                    rowPanel.add(Box.createHorizontalStrut(n.group?Theme.UNIT:backlogWidth(label,shownBacklog(t,t.getPathForRow(row),n))+(n.pausedQueued>0?Theme.GUTTER*2:n.project?Theme.GAP:Theme.GUTTER)+(n.project&&expanded&&projectWidgets.available(projects.get(n.id),"right")?rightWidgetWidth(projects.get(n.id))+2+(n.pausedQueued==0&&!shownAttention(t,t.getPathForRow(row),n).isEmpty()?12:0):0)),BorderLayout.EAST);
                     // One line per fact: path, attention, paused queue, then each project widget with its error (if any).
                     var hint=new StringBuilder("<html>").append(escapeHtml(n.path));
                     if(!n.attention.isEmpty())hint.append("<br>").append(n.attention.equals("question")?"Ждёт ответа":n.attention.equals("manual")?"Отмечено: требует внимания":"Работа завершена · новый результат");
@@ -217,7 +221,7 @@ public final class WorkspaceFrame extends JFrame {
             @Override public int getSourceActions(JComponent c){return MOVE;}
             @Override protected java.awt.datatransfer.Transferable createTransferable(JComponent c){
                 var path=tree.getSelectionPath();if(path==null)return null;
-                if(!(((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject() instanceof Node n)||n.file)return null;
+                if(!(((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject() instanceof Node n)||n.file||n.group)return null;
                 return new java.awt.datatransfer.StringSelection((n.project?"project:":"session:")+n.id);
             }
             @Override public boolean canImport(TransferSupport support){return support.isDrop()&&reorderTarget(tree,support)!=null;}
@@ -252,7 +256,7 @@ public final class WorkspaceFrame extends JFrame {
     private static void collectSessions(DefaultMutableTreeNode node,DefaultMutableTreeNode reordered,List<DefaultMutableTreeNode> order,List<String> ids){
         var children=new ArrayList<DefaultMutableTreeNode>();
         if(node==reordered)children.addAll(order);else for(int i=0;i<node.getChildCount();i++)children.add((DefaultMutableTreeNode)node.getChildAt(i));
-        for(var child:children){if(child.getUserObject() instanceof Node n&&!n.project&&!n.file)ids.add(n.id);collectSessions(child,reordered,order,ids);}
+        for(var child:children){if(!(child.getUserObject() instanceof Node n)||n.group||n.project)continue;if(!n.file)ids.add(n.id);collectSessions(child,reordered,order,ids);}
     }
     private static String escapeHtml(String text){return text==null?"":text.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;");}
     private static int resourceLeft(JTree tree){return tree.getInsets().left+2*treeIndent(tree)+Theme.UNIT+22+Theme.GAP;}
@@ -260,7 +264,7 @@ public final class WorkspaceFrame extends JFrame {
         int row=tree.getClosestRowForLocation(event.getX(),event.getY());if(row<0)return null;
         var bounds=tree.getRowBounds(row);if(bounds==null||event.getY()<bounds.y||event.getY()>=bounds.y+bounds.height)return null;
         var path=tree.getPathForRow(row);var value=((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject();
-        if(!(value instanceof Node n)||n.file||n.project&&tree.isExpanded(path))return null;
+        if(!(value instanceof Node n)||n.group||n.file||n.project&&tree.isExpanded(path))return null;
         if(!ResourceBars.share(resourceUsage,machineUsage,resourceControl,n.id,n.project).hasUsage())return null;
         if(event.getX()<resourceLeft(tree)||event.getX()>=tree.getWidth()-tree.getInsets().right-Theme.GAP)return null;
         int lane=ResourceBars.lane(event.getX(),event.getY(),resourceLeft(tree),tree.getWidth()-tree.getInsets().right-Theme.GAP-resourceLeft(tree),bounds.y+bounds.height);
@@ -274,7 +278,7 @@ public final class WorkspaceFrame extends JFrame {
         for(int row=Math.max(0,tree.getClosestRowForLocation(0,clip.y));row<tree.getRowCount();row++){
             Rectangle bounds=tree.getRowBounds(row);if(bounds==null||bounds.y>clip.y+clip.height)break;
             var path=tree.getPathForRow(row);var value=((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject();
-            if(!(value instanceof Node n))continue;var icon=n.file?Theme.icon("attachment"):n.project?IdentityIcons.ofProject(n.id,n.title,n.path):IdentityIcons.of(false,n.title,n.path);icon.paintIcon(tree,g,bounds.x+(n.project?Theme.UNIT/2:Theme.UNIT)+(22-icon.getIconWidth())/2,bounds.y+(bounds.height-icon.getIconHeight())/2);if(n.file)continue;
+            if(!(value instanceof Node n))continue;var icon=n.group?Theme.icon("folder"):n.file?Theme.icon("attachment"):n.project?IdentityIcons.ofProject(n.id,n.title,n.path):IdentityIcons.of(false,n.title,n.path);icon.paintIcon(tree,g,bounds.x+(n.project||n.group?Theme.UNIT/2:Theme.UNIT)+(22-icon.getIconWidth())/2,bounds.y+(bounds.height-icon.getIconHeight())/2);if(n.file||n.group)continue;
             if(!n.project||!tree.isExpanded(path))ResourceBars.paint(g,x,bounds.y+bounds.height,Math.max(0,right-x),ResourceBars.share(resourceUsage,machineUsage,resourceControl,n.id,n.project));
             int deferred=shownBacklog(tree,path,n);String dotted=shownAttention(tree,path,n);
             if(deferred>0){var label=backlogBounds(tree,n,deferred,dotted,bounds);var fm=tree.getFontMetrics(tree.getFont());g.setFont(tree.getFont());g.setColor(Theme.MUTED);g.drawString("["+deferred+"]",label.x,bounds.y+(bounds.height+fm.getAscent()-fm.getDescent())/2-3);}
@@ -300,7 +304,9 @@ public final class WorkspaceFrame extends JFrame {
     private String expansionKey(JTree tree,String project){return (tree==inactive?"inactive:":"active:")+project;}
     private void rememberProjectExpansion(JTree tree,TreePath path,boolean collapsed){
         if(changingTree||disposed)return;
-        if(((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject() instanceof Node n&&n.project){
+        if(((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject() instanceof Node n&&n.group){
+            action(()->host.post("/project-groups/"+n.id+"/collapsed",Json.object("collapsed",collapsed)));
+        }else if(((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject() instanceof Node n&&n.project){
             String key=expansionKey(tree,n.id);boolean changed=collapsed?collapsedProjects.add(key):collapsedProjects.remove(key);
             if(changed){sessionViews.put("$collapsedProjects",Json.MAPPER.valueToTree(collapsedProjects));persistViews();}
             // The active list's folding is shared through the core with Remote and the phone.
@@ -332,14 +338,14 @@ public final class WorkspaceFrame extends JFrame {
             tree.addTreeSelectionListener(e -> {
                 if (changingTree) return;
                 var node = (DefaultMutableTreeNode) tree.getLastSelectedPathComponent(); if (node == null || !(node.getUserObject() instanceof Node n)) return;
-                if (n.project) selectedProject = n.id; else if(n.file)selectDocument(n.id);else selectSession(n.id);
+                if(n.group)return;if (n.project) selectedProject = n.id; else if(n.file)selectDocument(n.id);else selectSession(n.id);
             });
             tree.addMouseListener(new MouseAdapter() {
                 @Override public void mouseClicked(MouseEvent e) {
                     if(!SwingUtilities.isLeftMouseButton(e))return;int row=tree.getClosestRowForLocation(e.getX(),e.getY());var bounds=tree.getRowBounds(row);if(bounds==null)return;
                     var rowPath=tree.getPathForRow(row);if(!(((DefaultMutableTreeNode)rowPath.getLastPathComponent()).getUserObject() instanceof Node n))return;
-                    if(shownBacklog(tree,rowPath,n)>0&&backlogBounds(tree,n,shownBacklog(tree,rowPath,n),shownAttention(tree,rowPath,n),bounds).contains(e.getPoint())){if(n.project)openBacklog(n.id,sessionIn(n.id));else openBacklog(sessions.get(n.id).path("projectId").asText(),n.id);return;}
-                    if(!n.project&&!n.file&&rowPath.equals(tree.getSelectionPath())&&bounds.y<=e.getY()&&e.getY()<bounds.y+bounds.height){
+                    if(!n.group&&shownBacklog(tree,rowPath,n)>0&&backlogBounds(tree,n,shownBacklog(tree,rowPath,n),shownAttention(tree,rowPath,n),bounds).contains(e.getPoint())){if(n.project)openBacklog(n.id,sessionIn(n.id));else openBacklog(sessions.get(n.id).path("projectId").asText(),n.id);return;}
+                    if(!n.group&&!n.project&&!n.file&&rowPath.equals(tree.getSelectionPath())&&bounds.y<=e.getY()&&e.getY()<bounds.y+bounds.height){
                         SwingUtilities.invokeLater(()->{if(Objects.equals(selected,n.id)&&selectedFile==null&&isActive()&&input.isShowing()&&input.isEnabled()){viewer.releaseFocus();input.requestFocusInWindow();}});
                     }
                 }
@@ -442,7 +448,7 @@ public final class WorkspaceFrame extends JFrame {
     /** Session rows under a project that are visible, or that are not: a project repeats only what no visible row shows. */
     private static List<Node> sessionsUnder(JTree tree,TreePath path,boolean visible){
         var found=new ArrayList<Node>();var top=(DefaultMutableTreeNode)path.getLastPathComponent();
-        for(var e=top.depthFirstEnumeration();e.hasMoreElements();){var node=(DefaultMutableTreeNode)e.nextElement();if(node!=top&&node.getUserObject() instanceof Node m&&!m.file&&tree.isVisible(new TreePath(node.getPath()))==visible)found.add(m);}
+        for(var e=top.depthFirstEnumeration();e.hasMoreElements();){var node=(DefaultMutableTreeNode)e.nextElement();if(node==top||!(node.getUserObject() instanceof Node m)||m.group||m.project||m.file)continue;var owner=(DefaultMutableTreeNode)node.getParent();while(owner!=null&&!(owner.getUserObject() instanceof Node p&&p.project))owner=(DefaultMutableTreeNode)owner.getParent();if(owner==top&&tree.isVisible(new TreePath(node.getPath()))==visible)found.add(m);}
         return found;
     }
     static int shownBacklog(JTree tree,TreePath path,Node n){
@@ -488,6 +494,11 @@ public final class WorkspaceFrame extends JFrame {
         var path = tree.getPathForLocation(event.getX(), event.getY()); if (path == null) return;
         tree.setSelectionPath(path); var n = (Node) ((DefaultMutableTreeNode) path.getLastPathComponent()).getUserObject();
         var menu = new JPopupMenu();
+        if(n.group){
+            var rename=new JMenuItem("Переименовать группу…");rename.addActionListener(e->{String title=JOptionPane.showInputDialog(this,"Название группы",n.title);if(title!=null&&!title.isBlank())action(()->host.post("/project-groups/"+n.id+"/rename",Json.object("title",title)));});menu.add(rename);
+            var remove=new JMenuItem("Удалить группу…");remove.addActionListener(e->{if(JOptionPane.showConfirmDialog(this,"Удалить группу «"+n.title+"»?\nПроекты останутся и вернутся на верхний уровень.","Удаление группы",JOptionPane.YES_NO_OPTION)==JOptionPane.YES_OPTION)action(()->host.post("/project-groups/"+n.id+"/remove",Json.object()));});menu.add(remove);
+            menu.show(tree,event.getX(),event.getY());return;
+        }
         var create = new JMenuItem("Новая сессия"); create.addActionListener(e -> newSession()); menu.add(create);
         if (!n.project&&!n.file) {
             var rename = new JMenuItem("Переименовать"); rename.addActionListener(e -> rename()); menu.add(rename);
@@ -506,6 +517,7 @@ public final class WorkspaceFrame extends JFrame {
         if(n.project){var archive=new JMenuItem(projects.get(n.id).path("active").asBoolean(true)?"В неактивные весь проект":"Вернуть проект в активные");archive.addActionListener(e->action(()->host.post("/projects/"+n.id+"/active",Json.object("active",!projects.get(n.id).path("active").asBoolean(true)))));menu.add(archive);}
         if(n.project){var pin=new JMenuItem("Закрепить файл в проекте…");pin.addActionListener(e->choosePinnedFile(true));menu.add(pin);}
         if(n.project){var git=new JMenuItem("Изменения в Git…");git.addActionListener(e->GitDialog.open(this,host,n.id,projects.get(n.id).path("title").asText()));menu.add(git);}
+        if(n.project){var move=new JMenuItem("Переместить проект…");move.addActionListener(e->moveProject(n.id));menu.add(move);var group=new JMenuItem("Новая группа проектов…");group.addActionListener(e->createProjectGroup());menu.add(group);}
         if(n.project&&!host.remote()){var settings=new JMenuItem("Настройки проекта и GitHub…");settings.addActionListener(e->ProjectDialog.open(this,host,projects.get(n.id),value->{}));menu.add(settings);}
         var cpuItem=new JMenuItem("CPU: лимит и приоритет…");cpuItem.addActionListener(e->configureCpu(n.project?"project":"session",n.id,n.title));menu.add(cpuItem);
         var backlogItem=new JMenuItem("Отложенные задачи…");backlogItem.addActionListener(e->openBacklog(n.project?n.id:sessions.get(n.id).path("projectId").asText(),n.project?null:n.id));menu.add(backlogItem);
@@ -530,7 +542,20 @@ public final class WorkspaceFrame extends JFrame {
         }); if(!host.remote())menu.add(quit);else{var reconnect=new JMenuItem("Подключить другой ноутбук…");reconnect.addActionListener(e->{saveDraft();RemoteMain.restartPairing(this);});menu.add(reconnect);var update=new JMenuItem("Обновить Tethium Remote…");update.addActionListener(e->updateRemote(true));menu.add(update);var version=new JMenuItem("Версия: "+version());version.setEnabled(false);menu.add(version);} menu.show(heading, Math.max(0, heading.getWidth() - 100), heading.getHeight());
     }
     private void workspaceSettings(){
-        var menu=new JPopupMenu();var files=new JMenuItem("Файлы…");files.addActionListener(e->FileManagerDialog.open(this,host,selectedProject));menu.add(files);var allBacklog=new JMenuItem("Отложенные задачи…");allBacklog.addActionListener(e->openBacklog("",null));menu.add(allBacklog);var reminderList=new JMenuItem("Напоминания…");reminderList.addActionListener(e->{if(reminderWindow!=null)reminderWindow.openList();});menu.add(reminderList);var cpu=new JMenuItem("CPU: общий лимит и приоритет…");cpu.addActionListener(e->configureCpu("global","","Все исполнения"));menu.add(cpu);var trash=new JMenuItem("Корзина сессий…");trash.addActionListener(e->TrashDialog.open(this,host,()->poller.execute(this::poll)));menu.add(trash);menu.show(active,0,0);
+        var menu=new JPopupMenu();var group=new JMenuItem("Новая группа проектов…");group.addActionListener(e->createProjectGroup());menu.add(group);var files=new JMenuItem("Файлы…");files.addActionListener(e->FileManagerDialog.open(this,host,selectedProject));menu.add(files);var allBacklog=new JMenuItem("Отложенные задачи…");allBacklog.addActionListener(e->openBacklog("",null));menu.add(allBacklog);var reminderList=new JMenuItem("Напоминания…");reminderList.addActionListener(e->{if(reminderWindow!=null)reminderWindow.openList();});menu.add(reminderList);var cpu=new JMenuItem("CPU: общий лимит и приоритет…");cpu.addActionListener(e->configureCpu("global","","Все исполнения"));menu.add(cpu);var trash=new JMenuItem("Корзина сессий…");trash.addActionListener(e->TrashDialog.open(this,host,()->poller.execute(this::poll)));menu.add(trash);menu.show(active,0,0);
+    }
+    private void createProjectGroup(){
+        String title=JOptionPane.showInputDialog(this,"Название группы проектов","Новая группа",JOptionPane.PLAIN_MESSAGE);if(title==null||title.isBlank())return;
+        action(()->host.post("/project-groups",Json.object("title",title)));
+    }
+    private void moveProject(String id){
+        var project=projects.get(id);if(project==null)return;var choices=new ArrayList<ProjectParentChoice>();choices.add(new ProjectParentChoice("root","","Верхний уровень"));
+        for(var group:projectGroups.values())choices.add(new ProjectParentChoice("group",group.path("id").asText(),"Группа · "+group.path("title").asText()));
+        for(var candidate:projects.values())if(!candidate.path("id").asText().equals(id))choices.add(new ProjectParentChoice("project",candidate.path("id").asText(),"Дочерний от · "+candidate.path("title").asText()));
+        String kind=project.path("parentKind").asText("root"),parent=project.path("parentId").asText("");ProjectParentChoice selected=choices.getFirst();for(var choice:choices)if(choice.kind.equals(kind)&&choice.id.equals(parent))selected=choice;
+        var box=new JComboBox<ProjectParentChoice>(choices.toArray(ProjectParentChoice[]::new));box.setSelectedItem(selected);
+        if(JOptionPane.showConfirmDialog(this,box,"Куда поместить «"+project.path("title").asText()+"»",JOptionPane.OK_CANCEL_OPTION,JOptionPane.PLAIN_MESSAGE)!=JOptionPane.OK_OPTION)return;
+        var choice=(ProjectParentChoice)box.getSelectedItem();if(choice!=null)action(()->host.post("/projects/"+id+"/parent",Json.object("kind",choice.kind,"parentId",choice.id)));
     }
     private void configureCpu(String scope,String id,String title){
         action(()->{var state=host.get("/resources");var row=scope.equals("global")?state.path("global"):state.path(scope+"s").path(id);SwingUtilities.invokeLater(()->{var settings=CpuSettingsDialog.show(this,scope,title,state,row);if(settings!=null)action(()->host.post("/resources",Json.object("scope",scope,"target",id,"settings",settings)));});});
@@ -653,6 +678,7 @@ public final class WorkspaceFrame extends JFrame {
         queueEditingAvailable = state.path("queueEditing").asBoolean();
         groupingAvailable=state.path("queueGrouping").asBoolean();imagesAvailable=state.path("imageAttachments").asBoolean();interruptAvailable=state.path("priorityInterrupt").asBoolean();
         runStatus.setGroupingAvailable(groupingAvailable);runStatus.setQueueEditing(queueEditingAvailable, pendingTake != null || grouping);
+        projectGroups.clear();for(var group:state.path("projectGroups"))projectGroups.put(group.path("id").asText(),group);
         projects.clear(); for (var p : state.path("projects")) projects.put(p.path("id").asText(), p);
         for (var p : state.path("projects")) { String pid = p.path("id").asText(), version = p.path("icon").asText();
             if (IdentityIcons.projectIconStale(pid, version)) io.submit(() -> { try { var icon = host.get("/project-icon?project=" + pid); IdentityIcons.registerProjectIcon(pid, icon.path("version").asText(), icon.path("png").asText()); SwingUtilities.invokeLater(() -> { active.repaint(); inactive.repaint(); }); } catch (Exception e) { IdentityIcons.registerProjectIcon(pid, version, ""); } }); }
@@ -664,7 +690,7 @@ public final class WorkspaceFrame extends JFrame {
             documents.put(id,Json.object("id",id,"projectId",pid,"title",panel.path("title"),"path",panel.path("path"),"panel",true,"config",panel));
         }
         syncCollapsed(state);
-        String signature = state.path("files").toString()+state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("projects").findValues("backlog") + state.path("sessions").findValues("backlog") + state.path("sessions").findValues("active") + state.path("sessions").findValues("technical") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
+        String signature = state.path("files").toString()+state.path("projectGroups").toString()+state.path("projects").toString() + state.path("sessions").findValues("id") + state.path("sessions").findValues("title") + state.path("projects").findValues("backlog") + state.path("sessions").findValues("backlog") + state.path("sessions").findValues("active") + state.path("sessions").findValues("technical") + state.path("sessions").findValues("running") + state.path("sessions").findValues("status") + state.path("sessions").findValues("attention");
         signature+=state.path("sessions").findValues("queuePaused").toString()+state.path("sessions").findValues("queued");
         if (!signature.equals(treeSignature)) { rebuildTrees(state); treeSignature = signature; }
         if (selectedProject == null && !projects.isEmpty()) selectedProject = projects.keySet().iterator().next();
@@ -735,6 +761,10 @@ public final class WorkspaceFrame extends JFrame {
             for (boolean archived : new boolean[]{false, true}) {
                 JTree tree = archived ? inactive : active;
                 var root = new DefaultMutableTreeNode("root"); TreePath selection = null;
+                var groupNodes=new LinkedHashMap<String,DefaultMutableTreeNode>();
+                for(var group:projectGroups.values())groupNodes.put(group.path("id").asText(),new DefaultMutableTreeNode(Node.group(group.path("id").asText(),group.path("title").asText())));
+                var projectNodes=new LinkedHashMap<String,DefaultMutableTreeNode>();
+                var projectSessions=new LinkedHashMap<String,List<JsonNode>>();
                 for (var project : projects.values()) {
                     String pid = project.path("id").asText();
                     var matching = new ArrayList<JsonNode>(); for (var s : state.path("sessions")) if (s.path("projectId").asText().equals(pid) && (s.path("active").asBoolean()&&project.path("active").asBoolean(true)) != archived) matching.add(s);
@@ -743,15 +773,29 @@ public final class WorkspaceFrame extends JFrame {
                     boolean running=noticed.stream().anyMatch(s->s.path("running").asBoolean());
                     String attention=noticed.stream().anyMatch(s->s.path("attention").path("kind").asText().equals("question"))?"question":noticed.stream().anyMatch(s->s.path("attention").path("manual").asBoolean())?"manual":noticed.stream().anyMatch(s->!s.path("attention").path("kind").asText().isEmpty())?"finished":"";
                     int pausedQueued=noticed.stream().filter(s->s.path("queuePaused").asBoolean()).mapToInt(s->Math.max(0,s.path("queued").asInt())).sum();
-                    var projectNode = new DefaultMutableTreeNode(new Node(pid, project.path("title").asText(), true, running, "", project.path("root").asText(),attention,false,pausedQueued,project.path("backlog").asInt())); root.add(projectNode);
+                    projectNodes.put(pid,new DefaultMutableTreeNode(new Node(pid, project.path("title").asText(), true, running, "", project.path("root").asText(),attention,false,pausedQueued,project.path("backlog").asInt())));
+                    projectSessions.put(pid,matching);
+                }
+                for(var groupNode:groupNodes.values())root.add(groupNode);
+                for(var project:projects.values()){
+                    String pid=project.path("id").asText();var projectNode=projectNodes.get(pid);if(projectNode==null)continue;
+                    String kind=project.path("parentKind").asText("root"),parent=project.path("parentId").asText();DefaultMutableTreeNode target=null;
+                    if(kind.equals("group"))target=groupNodes.get(parent);else if(kind.equals("project"))target=projectNodes.get(parent);
+                    (target==null?root:target).add(projectNode);
+                }
+                for(var project:projects.values()){
+                    String pid=project.path("id").asText();var projectNode=projectNodes.get(pid);if(projectNode==null)continue;var matching=projectSessions.get(pid);boolean projectArchived=!project.path("active").asBoolean(true);
                     if(archived==projectArchived)for(var document:documents.values())if(document.path("projectId").asText().equals(pid)){var node=new DefaultMutableTreeNode(new Node(document.path("id").asText(),document.path("title").asText(),false,false,"",document.path("path").asText(),"",true));projectNode.add(node);if(document.path("id").asText().equals(selectedFile))selection=new TreePath(node.getPath());}
                     var nodes = new LinkedHashMap<String, DefaultMutableTreeNode>();
                     for (var s : matching) nodes.put(s.path("id").asText(), new DefaultMutableTreeNode(new Node(s.path("id").asText(), s.path("title").asText(), false, s.path("running").asBoolean()&&!s.path("technical").asBoolean(), s.path("technical").asBoolean()?"":s.path("status").asText(), s.path("directory").asText(),s.path("attention").path("kind").asText(),false,0,s.path("technical").asBoolean()?0:s.path("backlog").asInt())));
                     for (var s : matching) { var n = nodes.get(s.path("id").asText()); var parent = nodes.get(s.path("parentId").asText()); (parent == null ? projectNode : parent).add(n); }
                     for (var entry : nodes.entrySet()) if (entry.getKey().equals(selected)) selection = new TreePath(entry.getValue().getPath());
                 }
+                // Empty groups stay visible in the active tree so a newly created group can be named,
+                // filled or removed immediately; they add no noise to the archive.
+                if(archived)for(var groupNode:groupNodes.values())if(groupNode.getChildCount()==0)root.remove(groupNode);
                 tree.setModel(new DefaultTreeModel(root));
-                for (int i = 0; i < tree.getRowCount(); i++) { var path = tree.getPathForRow(i); var n = (DefaultMutableTreeNode) path.getLastPathComponent(); if (n.getUserObject() instanceof Node node && (!node.project||!collapsedProjects.contains(expansionKey(tree,node.id)))) tree.expandPath(path); }
+                for (int i = 0; i < tree.getRowCount(); i++) { var path = tree.getPathForRow(i); var n = (DefaultMutableTreeNode) path.getLastPathComponent(); if (n.getUserObject() instanceof Node node && (node.group?!projectGroups.get(node.id).path("collapsed").asBoolean():!node.project||!collapsedProjects.contains(expansionKey(tree,node.id)))) tree.expandPath(path); }
                 if (selection != null) tree.setSelectionPath(selection);
             }
             long count = sessions.values().stream().filter(s -> !s.path("active").asBoolean()||!projects.get(s.path("projectId").asText()).path("active").asBoolean(true)).count(); archiveToggle.setText((inactiveOpen ? "⌄ " : "› ") + "Неактивные  " + count);

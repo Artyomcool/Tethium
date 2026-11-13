@@ -19,6 +19,8 @@ public final class SessionStore implements AutoCloseable {
     }
     public record Binding(String conversationId, long lastSequence) {}
     public record Project(String id, String root, String title) {}
+    public record ProjectGroup(String id, String title, int position, boolean collapsed) {}
+    public record ProjectParent(String kind, String id) {}
     public record Job(String id, String sessionId, String sourceId, String prompt, int partsCount, boolean urgent) {}
     public record ImportedMessage(String sourceId, String role, String text,long timestamp) {
         public ImportedMessage(String sourceId,String role,String text){this(sourceId,role,text,0);}
@@ -106,6 +108,8 @@ public final class SessionStore implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS backlog_settings(id INTEGER PRIMARY KEY CHECK(id=1),max_running INTEGER NOT NULL,min_quota INTEGER NOT NULL,min_free_cpu INTEGER NOT NULL,paused INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS project_order(project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,position INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS session_order(session_id TEXT PRIMARY KEY REFERENCES sessions(id) ON DELETE CASCADE,position INTEGER NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS project_groups(id TEXT PRIMARY KEY,title TEXT NOT NULL,position INTEGER NOT NULL,collapsed INTEGER NOT NULL DEFAULT 0)");
+            s.execute("CREATE TABLE IF NOT EXISTS project_hierarchy(project_id TEXT PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,parent_kind TEXT NOT NULL,parent_id TEXT NOT NULL)");
         }
     }
 
@@ -628,6 +632,55 @@ public final class SessionStore implements AutoCloseable {
             while (rows.next()) { var path = Path.of(rows.getString(2)); result.add(new Project(rows.getString(1), path.toString(), path.getFileName() == null ? path.toString() : path.getFileName().toString())); }
         }
         return List.copyOf(result);
+    }
+    public synchronized List<ProjectGroup> projectGroups() throws SQLException {
+        var result = new ArrayList<ProjectGroup>();
+        try (var q = connection.createStatement(); var rows = q.executeQuery("SELECT id,title,position,collapsed FROM project_groups ORDER BY position,rowid")) {
+            while (rows.next()) result.add(new ProjectGroup(rows.getString(1), rows.getString(2), rows.getInt(3), rows.getBoolean(4)));
+        }
+        return List.copyOf(result);
+    }
+    public synchronized Map<String,ProjectParent> projectParents() throws SQLException {
+        var result = new HashMap<String,ProjectParent>();
+        try (var q = connection.createStatement(); var rows = q.executeQuery("SELECT project_id,parent_kind,parent_id FROM project_hierarchy")) {
+            while (rows.next()) result.put(rows.getString(1), new ProjectParent(rows.getString(2), rows.getString(3)));
+        }
+        return Map.copyOf(result);
+    }
+    public synchronized ProjectGroup createProjectGroup(String title) throws SQLException {
+        String clean=title==null?"":title.strip();if(clean.isEmpty())throw new IllegalArgumentException("Название группы не может быть пустым");
+        String id=UUID.randomUUID().toString();int position=0;
+        try(var q=connection.createStatement();var rows=q.executeQuery("SELECT COALESCE(MAX(position),-1)+1 FROM project_groups")){if(rows.next())position=rows.getInt(1);}
+        execute("INSERT INTO project_groups(id,title,position) VALUES(?,?,?)",id,clean,position);
+        return new ProjectGroup(id,clean,position,false);
+    }
+    public synchronized void renameProjectGroup(String id,String title)throws SQLException{
+        String clean=title==null?"":title.strip();if(clean.isEmpty())throw new IllegalArgumentException("Название группы не может быть пустым");
+        try(var q=connection.prepareStatement("UPDATE project_groups SET title=? WHERE id=?")){q.setString(1,clean);q.setString(2,id);if(q.executeUpdate()!=1)throw new IllegalArgumentException("Группа не найдена");}
+    }
+    public synchronized void projectGroupCollapsed(String id,boolean collapsed)throws SQLException{
+        try(var q=connection.prepareStatement("UPDATE project_groups SET collapsed=? WHERE id=?")){q.setBoolean(1,collapsed);q.setString(2,id);if(q.executeUpdate()!=1)throw new IllegalArgumentException("Группа не найдена");}
+    }
+    public synchronized void removeProjectGroup(String id)throws Exception{
+        transaction(()->{execute("DELETE FROM project_hierarchy WHERE parent_kind='group' AND parent_id=?",id);execute("DELETE FROM project_groups WHERE id=?",id);return null;});
+    }
+    public synchronized void projectParent(String projectId,String kind,String parentId)throws Exception{
+        transaction(()->{
+            boolean projectExists=projects().stream().anyMatch(p->p.id().equals(projectId));if(!projectExists)throw new IllegalArgumentException("Проект не найден");
+            String normalized=kind==null?"root":kind.strip().toLowerCase(Locale.ROOT);
+            if(normalized.equals("root")){execute("DELETE FROM project_hierarchy WHERE project_id=?",projectId);return null;}
+            if(parentId==null||parentId.isBlank())throw new IllegalArgumentException("Родитель не выбран");
+            if(normalized.equals("group")){
+                if(projectGroups().stream().noneMatch(g->g.id().equals(parentId)))throw new IllegalArgumentException("Группа не найдена");
+            }else if(normalized.equals("project")){
+                if(projectId.equals(parentId))throw new IllegalArgumentException("Проект не может быть родителем самого себя");
+                if(projects().stream().noneMatch(p->p.id().equals(parentId)))throw new IllegalArgumentException("Родительский проект не найден");
+                var parents=projectParents();String cursor=parentId;var seen=new HashSet<String>();
+                while(seen.add(cursor)){if(cursor.equals(projectId))throw new IllegalArgumentException("Такая вложенность создаёт цикл");var parent=parents.get(cursor);if(parent==null||!parent.kind().equals("project"))break;cursor=parent.id();}
+            }else throw new IllegalArgumentException("Неизвестный тип родителя");
+            execute("INSERT INTO project_hierarchy(project_id,parent_kind,parent_id) VALUES(?,?,?) ON CONFLICT(project_id) DO UPDATE SET parent_kind=excluded.parent_kind,parent_id=excluded.parent_id",projectId,normalized,parentId);
+            return null;
+        });
     }
     /** Copies conversational history into a fresh Tethium session; never reuses a live external agent thread. */
     public synchronized Session importConversation(String projectId, Path directory, String title, String sourceKey, List<ImportedMessage> messages) throws Exception {
