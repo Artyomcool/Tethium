@@ -518,6 +518,7 @@ public final class WorkspaceFrame extends JFrame {
     }
     static String shownAttention(JTree tree,TreePath path,Node n){
         if(!n.project||path==null)return n.attention;
+        if(!n.directSession.isBlank())return n.attention;
         String shown="";
         for(var m:sessionsUnder(tree,path,false)){if(m.attention.equals("question"))return "question";if(m.attention.equals("manual"))shown="manual";else if(shown.isEmpty())shown=m.attention;}
         return shown;

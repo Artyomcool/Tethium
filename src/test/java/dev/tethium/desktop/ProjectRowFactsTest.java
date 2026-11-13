@@ -38,6 +38,15 @@ class ProjectRowFactsTest {
         tree.collapsePath(new TreePath(project.getPath()));
         assertEquals("manual", WorkspaceFrame.shownAttention(tree, new TreePath(project.getPath()), projectRow));
     }
+    @Test void aFlattenedSingleSessionKeepsItsDotOnTheProjectRow() {
+        var root=new DefaultMutableTreeNode("root");
+        var projectRow=row("project",true,"finished",0).direct("session");
+        var project=new DefaultMutableTreeNode(projectRow);root.add(project);
+        var favorite=projectRow.asFavoriteCopy();var favoriteNode=new DefaultMutableTreeNode(favorite);root.add(favoriteNode);
+        var tree=new JTree(new DefaultTreeModel(root));tree.setRootVisible(false);
+        assertEquals("finished",WorkspaceFrame.shownAttention(tree,new TreePath(project.getPath()),projectRow));
+        assertEquals("finished",WorkspaceFrame.shownAttention(tree,new TreePath(favoriteNode.getPath()),favorite));
+    }
     @Test void theCurrentSessionIsHighlightedInItsFavoriteCopyToo() {
         var direct=row("project",true,"",0).direct("session").asFavoriteCopy();
         var child=row("session",false,"",0).asFavoriteCopy();
