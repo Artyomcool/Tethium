@@ -182,7 +182,7 @@ public final class WorkspaceFrame extends JFrame {
                 if (user instanceof Node n) {
                     label.setText(n.title); label.setFont(n.project||n.group?projectFont(t):t.getFont().deriveFont(Font.PLAIN));
                     label.setIcon(null);
-                    label.setForeground(n.running ? Theme.ACCENT : n.status.equals("FAILED") ? Theme.RED : n.group?Theme.MUTED:n.project?Theme.ACCENT:Theme.TEXT);
+                    label.setForeground(n.running ? Theme.ACCENT : n.status.equals("FAILED") ? Theme.RED : n.group?Theme.MUTED:Theme.TEXT);
                     label.setToolTipText(n.path); label.setBorder(new EmptyBorder(0, (n.project||n.group?Theme.UNIT/2:Theme.UNIT)+22+Theme.GAP, 0, Theme.UNIT));
                     rowPanel.removeAll(); rowPanel.setBackground(selected?Theme.SELECTED:Theme.SIDEBAR); rowPanel.add(label);
                     rowPanel.add(Box.createHorizontalStrut(n.group?Theme.UNIT:backlogWidth(label,shownBacklog(t,t.getPathForRow(row),n))+(n.pausedQueued>0?Theme.GUTTER*2:n.project?Theme.GAP:Theme.GUTTER)+(n.project&&expanded&&projectWidgets.available(projects.get(n.id),"right")?rightWidgetWidth(projects.get(n.id))+2+(n.pausedQueued==0&&!shownAttention(t,t.getPathForRow(row),n).isEmpty()?12:0):0)),BorderLayout.EAST);
@@ -278,7 +278,7 @@ public final class WorkspaceFrame extends JFrame {
         for(int row=Math.max(0,tree.getClosestRowForLocation(0,clip.y));row<tree.getRowCount();row++){
             Rectangle bounds=tree.getRowBounds(row);if(bounds==null||bounds.y>clip.y+clip.height)break;
             var path=tree.getPathForRow(row);var value=((DefaultMutableTreeNode)path.getLastPathComponent()).getUserObject();
-            if(!(value instanceof Node n))continue;var icon=n.group?Theme.icon("folder"):n.file?Theme.icon("attachment"):n.project?IdentityIcons.ofProject(n.id,n.title,n.path):IdentityIcons.of(false,n.title,n.path);icon.paintIcon(tree,g,bounds.x+(n.project||n.group?Theme.UNIT/2:Theme.UNIT)+(22-icon.getIconWidth())/2,bounds.y+(bounds.height-icon.getIconHeight())/2);if(n.file||n.group)continue;
+            if(!(value instanceof Node n))continue;var icon=n.group?Theme.icon("folder"):n.file?Theme.icon("attachment"):n.project?IdentityIcons.ofProject(n.id,n.title,n.path):IdentityIcons.of(false,n.title,n.path);int iconX=bounds.x+(n.project||n.group?Theme.UNIT/2:Theme.UNIT)+(22-icon.getIconWidth())/2,iconY=bounds.y+(bounds.height-icon.getIconHeight())/2;icon.paintIcon(tree,g,iconX,iconY);if(n.project)paintProjectBadge(tree,g,iconX+icon.getIconWidth()-7,iconY+icon.getIconHeight()-7,tree.isRowSelected(row));if(n.file||n.group)continue;
             if(!n.project||!tree.isExpanded(path))ResourceBars.paint(g,x,bounds.y+bounds.height,Math.max(0,right-x),ResourceBars.share(resourceUsage,machineUsage,resourceControl,n.id,n.project));
             int deferred=shownBacklog(tree,path,n);String dotted=shownAttention(tree,path,n);
             if(deferred>0){var label=backlogBounds(tree,n,deferred,dotted,bounds);var fm=tree.getFontMetrics(tree.getFont());g.setFont(tree.getFont());g.setColor(Theme.MUTED);g.drawString("["+deferred+"]",label.x,bounds.y+(bounds.height+fm.getAscent()-fm.getDescent())/2-3);}
@@ -300,6 +300,14 @@ public final class WorkspaceFrame extends JFrame {
             }
             if(n.pausedQueued>0){int y=bounds.y+(bounds.height-8)/2-3;g.setColor(Theme.AMBER);g.fillRect(right-22,y,2,8);g.fillRect(right-17,y,2,8);}
         }
+    }
+    /** Project identity remains the dominant icon; this tiny folder corner distinguishes its row from a session. */
+    private static void paintProjectBadge(JTree tree,Graphics graphics,int x,int y,boolean selected){
+        var g=(Graphics2D)graphics.create();try{
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
+            g.setColor(selected?Theme.SELECTED:Theme.SIDEBAR);g.fillRoundRect(x-1,y-1,10,10,4,4);
+            g.setColor(Theme.MUTED);g.fillRoundRect(x,y+2,8,6,2,2);g.fillRoundRect(x+1,y,4,4,2,2);
+        }finally{g.dispose();}
     }
     private String expansionKey(JTree tree,String project){return (tree==inactive?"inactive:":"active:")+project;}
     private void rememberProjectExpansion(JTree tree,TreePath path,boolean collapsed){
