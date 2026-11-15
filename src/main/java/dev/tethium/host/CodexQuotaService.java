@@ -68,7 +68,9 @@ public final class CodexQuotaService implements AutoCloseable {
                         synchronized (this) { if (!closed) { claudeBuckets = response; claudeError = ""; claudeAuthRequired=false; success = true; } }
                     } catch (Exception e) {
                         boolean auth=authenticationRequired(e);
-                        synchronized (this) { if (!closed) {claudeAuthRequired=auth;claudeError=auth?"Claude: нужна авторизация":"Не удалось получить квоту Claude: " + Objects.toString(e.getMessage(), e.toString());} }
+                        // A stale access token keeps the last known numbers: the login itself is still valid.
+                        boolean stale=e instanceof ClaudeAccountClient.StaleTokenException;
+                        synchronized (this) { if (!closed) {claudeAuthRequired=auth;claudeError=auth?"Claude: нужна авторизация":stale?"":"Не удалось получить квоту Claude: " + Objects.toString(e.getMessage(), e.toString());} }
                     }
                 }
                 // A failed source keeps its last values and its stale timestamp; only a fresh answer moves the clock.
