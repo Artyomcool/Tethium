@@ -137,7 +137,9 @@ public final class MobileGateway implements AutoCloseable {
     }
     private final class Link implements Runnable {
         private final LinkChannel channel;
-        private final Tbin.Writer writer=new Tbin.Writer(); private final Tbin.Reader reader=new Tbin.Reader();
+        // Key dictionaries live as long as one phone connection: a new HELLO on the same channel starts both over.
+        private Tbin.Writer writer=new Tbin.Writer(); private Tbin.Reader reader=new Tbin.Reader();
+        private final Object sendLock=new Object();
         private String deviceToken="";
         private final Object wake=new Object(); private boolean dirty,reset;
         /** Held for each round of pushes; a new HELLO takes it to answer WELCOME before anything else of the new phone's. */
@@ -182,11 +184,13 @@ public final class MobileGateway implements AutoCloseable {
         }
         private boolean rehello(Frame hello)throws IOException{
             synchronized(handshake){
+                // Whatever the answer, it goes to a phone with an empty dictionary: start the writer over first.
+                synchronized(sendLock){writer=new Tbin.Writer();wire2=false;}
                 String token=hello.body.path("token").asText();
                 if(hello.body.path("protocol").asInt()!=Frames.PROTOCOL||!authorized(token)){send(Frames.BYE,Json.object("error","Подключите телефон по QR на ноутбуке"));return false;}
                 deviceToken=token;boolean requestedWire2=hello.body.path("wire").asInt()>=PhoneWire.VERSION;
                 if(channel.remote())traffic.relayConnection();
-                wire2=false;send(Frames.WELCOME,Json.object("protocol",Frames.PROTOCOL,"wire",requestedWire2?PhoneWire.VERSION:1,"httpPort",httpPort(),"transport",channel.remote()?"cloudflare":"lan","relay",relay.device(sha(deviceToken.getBytes(StandardCharsets.UTF_8))),"traffic",traffic.snapshot()));
+                send(Frames.WELCOME,Json.object("protocol",Frames.PROTOCOL,"wire",requestedWire2?PhoneWire.VERSION:1,"httpPort",httpPort(),"transport",channel.remote()?"cloudflare":"lan","relay",relay.device(sha(deviceToken.getBytes(StandardCharsets.UTF_8))),"traffic",traffic.snapshot()));
                 wire2=requestedWire2;
                 // Everything the previous phone had been sent is unknown to this one: the next round sends full state.
                 sentCatalog.clear();sentSessions.clear();sentMeta.clear();catalogSent=false;convSession="";sentSequence=-1;sentMessageRevision=-1;liveRun=-1;liveOffset=0;sentDetail="";
@@ -194,8 +198,8 @@ public final class MobileGateway implements AutoCloseable {
             }
             kick();return true;
         }
-        private Frame read()throws IOException{byte[] raw=channel.read();if(raw.length<2)throw new IOException("Empty frame");int kind=raw[0]&255;return new Frame(kind,wire2?PhoneWire.decode(kind,reader.decode(raw,1)):reader.decode(raw,1));}
-        private void send(int kind,JsonNode body)throws IOException{synchronized(writer){channel.send(writer.encode(kind,wire2?PhoneWire.encode(kind,body):body));}}
+        private Frame read()throws IOException{byte[] raw=channel.read();if(raw.length<2)throw new IOException("Empty frame");int kind=raw[0]&255;if(kind==Frames.HELLO)reader=new Tbin.Reader();return new Frame(kind,wire2?PhoneWire.decode(kind,reader.decode(raw,1)):reader.decode(raw,1));}
+        private void send(int kind,JsonNode body)throws IOException{synchronized(sendLock){channel.send(writer.encode(kind,wire2?PhoneWire.encode(kind,body):body));}}
         private void kick(){synchronized(wake){dirty=true;wake.notifyAll();}}
         void close(){channel.close();synchronized(wake){dirty=true;wake.notifyAll();}}
         private void respond(JsonNode request){

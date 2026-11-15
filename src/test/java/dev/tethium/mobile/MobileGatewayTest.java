@@ -67,14 +67,17 @@ class MobileGatewayTest {
             String token=pairOverLink(m);
             try(var phone=hello(m,token)){
                 phone.expect(Frames.STATE,f->f.path("full").asBoolean());
+                // A returning phone starts with empty key dictionaries; frames of the old link may still be in flight.
+                phone.restart();
                 phone.send(Frames.HELLO,Json.object("protocol",Frames.PROTOCOL,"token",token,"name","returning phone"));
-                var welcome=phone.expect(Frames.WELCOME,f->true);
+                var welcome=phone.awaitWelcome();
                 assertEquals(Frames.PROTOCOL,welcome.path("protocol").asInt());
                 var state=phone.expect(Frames.STATE,f->f.path("full").asBoolean());
                 assertTrue(state.has("projects"));
                 assertEquals(200,phone.request("/state",null).path("status").asInt());
+                phone.restart();
                 phone.send(Frames.HELLO,Json.object("protocol",Frames.PROTOCOL,"token","unknown","name","stranger"));
-                assertTrue(phone.expect(Frames.BYE,f->true).path("error").asText().contains("QR"));
+                assertTrue(phone.awaitWelcome().path("error").asText().contains("QR"));
             }
         }
     }
@@ -109,9 +112,13 @@ class MobileGatewayTest {
 
     /** Minimal phone-side client for tests: same framing and encoding as the Android app. */
     private static final class LinkClient implements AutoCloseable {
-        final Socket socket;final DataInputStream in;final DataOutputStream out;final Tbin.Writer writer=new Tbin.Writer();final Tbin.Reader reader=new Tbin.Reader();final Deque<Map.Entry<Integer,JsonNode>> frames=new ArrayDeque<>();int ids,pings;
+        final Socket socket;final DataInputStream in;final DataOutputStream out;Tbin.Writer writer=new Tbin.Writer();Tbin.Reader reader=new Tbin.Reader();final Deque<Map.Entry<Integer,JsonNode>> frames=new ArrayDeque<>();int ids,pings;
         LinkClient(int port)throws IOException{socket=new Socket("127.0.0.1",port);socket.setSoTimeout(15_000);in=new DataInputStream(new BufferedInputStream(socket.getInputStream()));out=new DataOutputStream(new BufferedOutputStream(socket.getOutputStream()));}
         void send(int kind,JsonNode body)throws IOException{Frames.write(out,writer.encode(kind,body));}
+        /** Like a phone that connects again: fresh dictionaries, nothing of the old link kept. */
+        void restart(){writer=new Tbin.Writer();reader=new Tbin.Reader();frames.clear();}
+        /** Skips frames of the old link by kind byte, as the phone does, and decodes the WELCOME or BYE that answers HELLO. */
+        JsonNode awaitWelcome()throws IOException{long until=System.currentTimeMillis()+15_000;while(System.currentTimeMillis()<until){byte[] raw=Frames.read(in);int kind=raw[0]&255;if(kind==Frames.WELCOME||kind==Frames.BYE)return reader.decode(raw,1);}throw new AssertionError("No WELCOME");}
         Map.Entry<Integer,JsonNode> read()throws IOException{byte[] raw=Frames.read(in);return Map.entry(raw[0]&255,reader.decode(raw,1));}
         /** Waits for the first frame of a kind matching the predicate; other frames stay in order for later checks. */
         JsonNode expect(int kind,Predicate<JsonNode> test)throws IOException{

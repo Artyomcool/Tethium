@@ -85,9 +85,11 @@ final class Connection {
         FrameChannel current=useRelay?new RelayFrameChannel(relayUrl,relayTicket,relaySecret,network):new LanFrameChannel(host,port,network);var w=new Tbin.Writer();var r=new Tbin.Reader();
         try{
             current.send(w.encode(HELLO,json("protocol",PROTOCOL,"wire",PhoneWire.VERSION,"token",token,"name",Build.MANUFACTURER+" "+Build.MODEL)));
-            // Over Cloudflare a ping or update of the laptop's previous link can still be on its way: skip it, wait for the answer.
-            long deadline=System.currentTimeMillis()+(current.remote()?8_000:0);Frame hello;
-            while(true){hello=read(current,r,current.remote()?Math.max(1,deadline-System.currentTimeMillis()):0);if(hello.kind==WELCOME||hello.kind==BYE||!current.remote())break;}
+            // Over Cloudflare a ping or update of the laptop's previous link can still be on its way, encoded with that link's
+            // key dictionary: skip it by its kind byte, without decoding, and wait for the answer.
+            long deadline=System.currentTimeMillis()+(current.remote()?8_000:0);byte[] raw;
+            while(true){raw=current.read(current.remote()?Math.max(1,deadline-System.currentTimeMillis()):0);if(raw.length<2)throw new IOException("Empty frame");int kind=raw[0]&255;if(kind==WELCOME||kind==BYE||!current.remote())break;}
+            Frame hello;try{int kind=raw[0]&255;hello=new Frame(kind,PhoneWire.decode(kind,r.decode(raw,1)));}catch(JSONException e){throw new IOException("Повреждённый кадр");}
             if(hello.kind!=WELCOME)throw new ApiException(401,hello.body.optString("error","Ноутбук отклонил подключение"));
             wire2=hello.body.optInt("wire")>=PhoneWire.VERSION;
             if(current instanceof LanFrameChannel lan)lan.timeout(45_000);
