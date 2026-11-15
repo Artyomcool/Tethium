@@ -61,6 +61,23 @@ class MobileGatewayTest {
             }
         }
     }
+    /** Over Cloudflare one host channel outlives the phone; a new phone says HELLO on it and must get WELCOME and full state. */
+    @Test void aSecondHelloOnTheSameLinkIsAnsweredAndStartsOver()throws Exception{
+        try(var h=new HostService(root,ADAPTER);var m=new MobileGateway(root,h.feed(),0,0)){
+            String token=pairOverLink(m);
+            try(var phone=hello(m,token)){
+                phone.expect(Frames.STATE,f->f.path("full").asBoolean());
+                phone.send(Frames.HELLO,Json.object("protocol",Frames.PROTOCOL,"token",token,"name","returning phone"));
+                var welcome=phone.expect(Frames.WELCOME,f->true);
+                assertEquals(Frames.PROTOCOL,welcome.path("protocol").asInt());
+                var state=phone.expect(Frames.STATE,f->f.path("full").asBoolean());
+                assertTrue(state.has("projects"));
+                assertEquals(200,phone.request("/state",null).path("status").asInt());
+                phone.send(Frames.HELLO,Json.object("protocol",Frames.PROTOCOL,"token","unknown","name","stranger"));
+                assertTrue(phone.expect(Frames.BYE,f->true).path("error").asText().contains("QR"));
+            }
+        }
+    }
     @Test void uacStatusIsPushedToPairedClientsAndActionsAreNotHostCommands()throws Exception{
         try(var h=new HostService(root,ADAPTER);var local=new HostClient(h.descriptor());var m=new MobileGateway(root,h.feed(),0,0)){
             var unauthorized=HttpClient.newHttpClient().send(HttpRequest.newBuilder(URI.create("http://127.0.0.1:"+m.httpPort()+"/uac")).build(),HttpResponse.BodyHandlers.ofString());assertEquals(401,unauthorized.statusCode());

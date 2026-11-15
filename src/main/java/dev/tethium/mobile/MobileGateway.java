@@ -140,6 +140,8 @@ public final class MobileGateway implements AutoCloseable {
         private final Tbin.Writer writer=new Tbin.Writer(); private final Tbin.Reader reader=new Tbin.Reader();
         private String deviceToken="";
         private final Object wake=new Object(); private boolean dirty,reset;
+        /** Held for each round of pushes; a new HELLO takes it to answer WELCOME before anything else of the new phone's. */
+        private final Object handshake=new Object();
         private volatile String watched="";
         private final Runnable listener=this::kick;
         private final Map<String,String> sentCatalog=new HashMap<>(),sentSessions=new HashMap<>(),sentMeta=new HashMap<>();
@@ -169,11 +171,28 @@ public final class MobileGateway implements AutoCloseable {
                         case Frames.HTTP_REQUEST->workers.execute(()->proxyHttp(frame.body));
                         case Frames.WATCH->{var b=frame.body;watched=b.path("session").asText("");synchronized(wake){if(b.path("reset").asBoolean())reset=true;resumeSession=b.has("after")?watched:null;resumeAfter=b.path("after").asLong(-1);resumeRevision=b.path("messageRevision").asLong(-1);resumeLiveRun=b.path("liveRun").asLong(-1);resumeLiveOffset=b.path("liveOffset").asInt(0);tail=Math.max(10,Math.min(300,b.path("tail").asInt(TAIL)));dirty=true;wake.notifyAll();}}
                         case Frames.PING->send(Frames.PONG,Json.object());
+                        // Over Cloudflare one host channel outlives the phone: the relay drops frames while no phone is in the
+                        // room and never tells the host it left. A HELLO here is a new phone connection: answer it and start over.
+                        case Frames.HELLO->{if(!rehello(frame))return;}
                         default->{}
                     }
                 }
             }catch(Exception e){if(channel.remote())System.err.println("Cloudflare phone link ended: "+e);}
             finally{feed.removeListener(listener);links.remove(this);close();}
+        }
+        private boolean rehello(Frame hello)throws IOException{
+            synchronized(handshake){
+                String token=hello.body.path("token").asText();
+                if(hello.body.path("protocol").asInt()!=Frames.PROTOCOL||!authorized(token)){send(Frames.BYE,Json.object("error","Подключите телефон по QR на ноутбуке"));return false;}
+                deviceToken=token;boolean requestedWire2=hello.body.path("wire").asInt()>=PhoneWire.VERSION;
+                if(channel.remote())traffic.relayConnection();
+                wire2=false;send(Frames.WELCOME,Json.object("protocol",Frames.PROTOCOL,"wire",requestedWire2?PhoneWire.VERSION:1,"httpPort",httpPort(),"transport",channel.remote()?"cloudflare":"lan","relay",relay.device(sha(deviceToken.getBytes(StandardCharsets.UTF_8))),"traffic",traffic.snapshot()));
+                wire2=requestedWire2;
+                // Everything the previous phone had been sent is unknown to this one: the next round sends full state.
+                sentCatalog.clear();sentSessions.clear();sentMeta.clear();catalogSent=false;convSession="";sentSequence=-1;sentMessageRevision=-1;liveRun=-1;liveOffset=0;sentDetail="";
+                watched="";synchronized(wake){resumeSession=null;resumeAfter=-1;resumeRevision=-1;resumeLiveRun=-1;resumeLiveOffset=0;tail=TAIL;reset=true;}
+            }
+            kick();return true;
         }
         private Frame read()throws IOException{byte[] raw=channel.read();if(raw.length<2)throw new IOException("Empty frame");int kind=raw[0]&255;return new Frame(kind,wire2?PhoneWire.decode(kind,reader.decode(raw,1)):reader.decode(raw,1));}
         private void send(int kind,JsonNode body)throws IOException{synchronized(writer){channel.send(writer.encode(kind,wire2?PhoneWire.encode(kind,body):body));}}
@@ -220,11 +239,13 @@ public final class MobileGateway implements AutoCloseable {
                     if(!channel.open())return;
                     // Ping on a fixed cadence even while deltas flow: the pong is the only traffic a quiet phone sends,
                     // and the reader's timeout would otherwise drop a busy link every 45 seconds.
-                    if(System.currentTimeMillis()-lastPing>=10_000){send(Frames.PING,Json.object("now",System.currentTimeMillis()));lastPing=System.currentTimeMillis();}
+                    if(System.currentTimeMillis()-lastPing>=10_000){synchronized(handshake){send(Frames.PING,Json.object("now",System.currentTimeMillis()));}lastPing=System.currentTimeMillis();}
                     if(!changed)continue;
                     Thread.sleep(60); // coalesce bursts of events into one round of deltas
-                    if(resync)convSession="";
-                    pushCatalog();pushConversation();pushLive();
+                    synchronized(handshake){
+                        if(resync)convSession="";
+                        pushCatalog();pushConversation();pushLive();
+                    }
                 }
             }catch(Exception e){close();}
         }

@@ -85,7 +85,10 @@ final class Connection {
         FrameChannel current=useRelay?new RelayFrameChannel(relayUrl,relayTicket,relaySecret,network):new LanFrameChannel(host,port,network);var w=new Tbin.Writer();var r=new Tbin.Reader();
         try{
             current.send(w.encode(HELLO,json("protocol",PROTOCOL,"wire",PhoneWire.VERSION,"token",token,"name",Build.MANUFACTURER+" "+Build.MODEL)));
-            var hello=read(current,r,current.remote()?8_000:0);if(hello.kind!=WELCOME)throw new ApiException(401,hello.body.optString("error","Ноутбук отклонил подключение"));
+            // Over Cloudflare a ping or update of the laptop's previous link can still be on its way: skip it, wait for the answer.
+            long deadline=System.currentTimeMillis()+(current.remote()?8_000:0);Frame hello;
+            while(true){hello=read(current,r,current.remote()?Math.max(1,deadline-System.currentTimeMillis()):0);if(hello.kind==WELCOME||hello.kind==BYE||!current.remote())break;}
+            if(hello.kind!=WELCOME)throw new ApiException(401,hello.body.optString("error","Ноутбук отклонил подключение"));
             wire2=hello.body.optInt("wire")>=PhoneWire.VERSION;
             if(current instanceof LanFrameChannel lan)lan.timeout(45_000);
             JSONObject relay=hello.body.optJSONObject("relay");if(relay!=null&&!relay.optString("secret").isBlank()){relayUrl=relay.optString("url");relayTicket=relay.optString("ticket");relaySecret=relay.optString("secret");}
