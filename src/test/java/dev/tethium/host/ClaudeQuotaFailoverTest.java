@@ -60,6 +60,35 @@ class ClaudeQuotaFailoverTest {
         }
     }
 
+    @Test void choosingClaudeAgainReleasesTheCodexWaitAndTheFailoverPin()throws Exception{
+        var calls=new CopyOnWriteArrayList<String>();var claudeBack=new java.util.concurrent.atomic.AtomicBoolean();
+        AgentAdapter claude=new AgentAdapter(){
+            public Provider provider(){return Provider.CLAUDE;}
+            public Result run(Request request,Consumer<Event> events,Cancellation cancellation){
+                calls.add("CLAUDE:"+request.prompt());
+                if(claudeBack.get())return new Result("claude-thread",Status.COMPLETED,"done");
+                events.accept(new Event("finished","",Json.object("type","result","api_error","usage_limit_reached","result","You've hit your weekly limit")));
+                return new Result("claude-thread",Status.FAILED,"limit");
+            }
+        };
+        AgentAdapter codex=new AgentAdapter(){
+            public Provider provider(){return Provider.CODEX;}
+            public Result run(Request request,Consumer<Event> events,Cancellation cancellation){calls.add("CODEX:"+request.prompt());return new Result("codex-thread",Status.FAILED,"You've hit your usage limit");}
+        };
+        try(var host=new HostService(root,List.of(codex,claude),new CodexQuotaService(null),false,null);var client=new HostClient(host.descriptor())){
+            String project=client.post("/projects",Json.object("path",root.toString())).path("id").asText();
+            String id=client.post("/sessions",Json.object("projectId",project)).path("id").asText();
+            client.post("/sessions/"+id+"/settings",Json.object("provider","CLAUDE","model","opus"));
+            client.post("/sessions/"+id+"/run",Json.object("prompt","keep this exact task"));
+            until(()->calls.size()==2&&session(client,id).path("quotaWait").path("waiting").asBoolean()&&!session(client,id).path("running").asBoolean());
+            claudeBack.set(true);
+            client.post("/sessions/"+id+"/settings",Json.object("provider","CLAUDE","model","opus"));
+            until(()->calls.size()==3&&!session(client,id).path("running").asBoolean());
+            assertTrue(calls.get(2).startsWith("CLAUDE:")&&calls.get(2).contains("keep this exact task")&&calls.get(2).contains("ожидание квоты Codex снято"),calls.toString());
+            assertEquals(0,session(client,id).path("queued").asInt());
+        }
+    }
+
     @Test void deferredTaskOptOutKeepsClaudeAndDoesNotRetry()throws Exception{
         var calls=new CopyOnWriteArrayList<String>();
         try(var host=new HostService(root,List.of(codex(calls),claude(calls)),new CodexQuotaService(null),false,null);var client=new HostClient(host.descriptor())){

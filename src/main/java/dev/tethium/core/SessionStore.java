@@ -168,6 +168,10 @@ public final class SessionStore implements AutoCloseable {
     public synchronized void jobExecution(String job,String provider,String model,String effort)throws SQLException{
         execute("INSERT INTO job_execution VALUES(?,?,?,?) ON CONFLICT(job_id) DO UPDATE SET provider=excluded.provider,model=excluded.model,effort=excluded.effort",job,provider,model,effort);
     }
+    /** The user's executor choice outranks an automatic quota failover still attached to a queued ordinary job; deferred tasks keep their own choice. */
+    public synchronized void releaseQueuedExecution(String session)throws SQLException{
+        execute("DELETE FROM job_execution WHERE job_id IN (SELECT id FROM jobs WHERE session_id=? AND status='QUEUED') AND job_id NOT IN (SELECT job_id FROM backlog_tasks WHERE job_id IS NOT NULL)",session);
+    }
     /** A deferred task may explicitly prohibit substitution, or pin one executor. Ordinary jobs may always fail over. */
     public synchronized boolean executorFailoverAllowed(String job)throws SQLException{
         try(var q=connection.prepareStatement("SELECT COALESCE(e.auto_switch,1),e.provider FROM backlog_tasks b LEFT JOIN backlog_execution e ON e.task_id=b.id WHERE b.job_id=?")){

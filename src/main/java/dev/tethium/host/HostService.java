@@ -444,6 +444,8 @@ public final class HostService implements AutoCloseable {
                 boolean switched = !provider.name().equals(current.path("provider").asText());
                 store.preferences(id, body.path("model").asText(null), SessionStore.SESSION_ACCESS,
                         body.has("reasoningEffort") ? body.path("reasoningEffort").asText(null) : switched ? null : current.path("reasoningEffort").asText(null), provider.name());
+                store.releaseQueuedExecution(id);
+                releaseQuotaWait(id,quota.snapshot(),true);
             }
             case "artifact" -> { return publish(id, body); }
             default -> throw new IllegalArgumentException("Unknown session action");
@@ -738,8 +740,22 @@ public final class HostService implements AutoCloseable {
     synchronized void observeQuota(){try{
         var snapshot=quota.snapshot();long updated=snapshot.path("updatedAt").asLong();if(updated>quotaObserved){usage.snapshot(snapshot);quotaObserved=updated;}
         if(closed||draining)return;
-        for(var project:store.projects())for(var session:store.list(project.id())){var wait=usage.waitState(session.id());if(wait.path("autoResume").asBoolean()&&wait.path("waiting").asBoolean()&&!store.queuePaused(session.id())&&CodexQuotaService.available(snapshot,wait.path("blockedAt").asLong())){usage.waiting(session.id(),false);schedule(session.id());}}
+        for(var project:store.projects())for(var session:store.list(project.id()))releaseQuotaWait(session.id(),snapshot,false);
     }catch(Exception e){if(!closed)System.err.println("Quota monitor: "+e.getMessage());}}
+    /** A wait is for Codex quota only: it ends when Codex quota returns or when the next job no longer runs on Codex. The agent is told why it resumes.
+     *  The user's own executor choice releases the wait even without automatic resumption. */
+    private synchronized void releaseQuotaWait(String id,JsonNode snapshot,boolean chosen)throws Exception{
+        if(closed||draining)return;
+        var wait=usage.waitState(id);
+        if(!chosen&&!wait.path("autoResume").asBoolean()||!wait.path("waiting").asBoolean()||store.queuePaused(id))return;
+        var queue=store.queued(id);
+        var next=queue.isEmpty()?AgentAdapter.Provider.of(store.preferences(id).path("provider").asText(null)):AgentAdapter.Provider.of(store.executionPreferences(id,queue.getFirst().id()).path("provider").asText(null));
+        boolean returned=CodexQuotaService.available(snapshot,wait.path("blockedAt").asLong());
+        if(!returned&&next==AgentAdapter.Provider.CODEX)return;
+        usage.waiting(id,false);
+        store.append(id,"system","TETHIUM",returned?"Квота Codex восстановилась. Продолжай с места остановки.":"Исполнитель сменён на "+next.title+", ожидание квоты Codex снято. Продолжай с места остановки.");
+        schedule(id);
+    }
     private void blockAutonomy(String id,String reason)throws Exception{var a=store.autonomy(id);if(a.path("state").asText().equals("active"))store.autonomy(id,"blocked",a.path("goalId").asText(),"",reason.length()>1600?reason.substring(0,1600):reason);}
     /** Nobody watches a technical session, so a question must not hang it: the agent gets a refusal and goes on by itself. */
     private static JsonNode technicalAnswer(String method){
