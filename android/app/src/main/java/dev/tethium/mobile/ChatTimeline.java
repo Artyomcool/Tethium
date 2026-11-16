@@ -61,14 +61,34 @@ final class ChatTimeline extends FrameLayout {
     static volatile boolean showThoughts=true;
     private static final String ACTION="\u2014\u2063 ";
     /** Reports of commands are shown muted and without the mark; they and thoughts are not part of what a message says when copied. */
-    private void render(TextView view,String text){
+    private void render(TextView view,String text){markdown.setParsedMarkdown(view,styled(text));}
+    /** Markdown plus muted command lines; pure text work, safe off the main thread. */
+    private android.text.Spanned styled(String text){
         var shown=new android.text.SpannableStringBuilder(markdown.toMarkdown(text));
-        for(int at=shown.toString().lastIndexOf(ACTION);at>=0;at=at==0?-1:shown.toString().lastIndexOf(ACTION,at-1)){
-            int end=shown.toString().indexOf('\n',at);if(end<0)end=shown.length();
+        // Linear on the main thread: one copy of the text, marks found in one pass and handled from the end, so deleting a
+        // mark never moves a position still to be handled. (Re-reading the text per mark froze long live answers: ANR.)
+        String plain=shown.toString();var marks=new java.util.ArrayList<Integer>();
+        for(int at=plain.indexOf(ACTION);at>=0;at=plain.indexOf(ACTION,at+ACTION.length()))marks.add(at);
+        for(int i=marks.size()-1;i>=0;i--){
+            int at=marks.get(i),end=plain.indexOf('\n',at);if(end<0)end=plain.length();
             shown.setSpan(new android.text.style.ForegroundColorSpan(Ui.MUTED),at,end,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);shown.setSpan(new android.text.style.RelativeSizeSpan(.85f),at,end,android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             shown.delete(at,at+ACTION.length());
         }
-        markdown.setParsedMarkdown(view,shown);
+        return shown;
+    }
+    /*
+     * The live answer grows to hundreds of kilobytes and changes every second: it is parsed on its own thread, and only the
+     * newest text is shown; versions overtaken while one is being prepared are skipped.
+     */
+    private final java.util.concurrent.ExecutorService liveStyler=java.util.concurrent.Executors.newSingleThreadExecutor(r->{var t=new Thread(r,"tethium-live-markdown");t.setDaemon(true);return t;});
+    private volatile String liveWanted="";
+    private void renderLive(String text){
+        liveWanted=text;
+        liveStyler.execute(()->{
+            if(!text.equals(liveWanted))return;
+            android.text.Spanned prepared;try{prepared=styled(narration(text));}catch(RuntimeException failure){return;}
+            post(()->{if(text.equals(liveWanted))markdown.setParsedMarkdown(liveText,prepared);});
+        });
     }
     static String withoutActions(String text){
         if(!text.contains(ACTION)&&!text.contains("```thought"))return text;
@@ -168,7 +188,7 @@ final class ChatTimeline extends FrameLayout {
         });return t;}
     boolean bottom(){return scroll.getChildCount()==0||scroll.getChildAt(0).getHeight()-scroll.getHeight()-scroll.getScrollY()<=ui.dp(96);}
     void toEnd(){follow=true;scroll.post(()->scroll.scrollTo(0,scroll.getChildAt(0).getHeight()));}
-    void reset(String id){follow=true;anchorKey=Long.MIN_VALUE;session=id;start=-1;limit=100;lastLive="";rendered.clear();anchors.clear();userTitles.clear();messages.removeAllViews();live.setVisibility(GONE);}
+    void reset(String id){liveWanted="";follow=true;anchorKey=Long.MIN_VALUE;session=id;start=-1;limit=100;lastLive="";rendered.clear();anchors.clear();userTitles.clear();messages.removeAllViews();live.setVisibility(GONE);}
     void render(JSONArray array,String streaming){render(array,streaming,true);}
     void render(JSONArray array,String streaming,boolean changed){history=array;if(messages.getChildCount()==0)follow=true;else remember();int nextStart=Math.max(0,array.length()-limit);
         // Existing cards are immutable in normal operation; rebuild only on pagination/deletion.
@@ -179,7 +199,7 @@ final class ChatTimeline extends FrameLayout {
             var card=ui.col();if(user){card.setBackground(ui.shape(Ui.PANEL,18));ui.pad(card,14,6);}var header=ui.row();var name=ui.label(user?"ВЫ":assistant?m.optString("provider","Codex").toUpperCase(Locale.ROOT):"СОБЫТИЕ",11,user?Ui.ACCENT:Ui.MUTED);name.setTypeface(Typeface.DEFAULT_BOLD);header.addView(name,new LinearLayout.LayoutParams(0,-2,1));header.addView(ui.icon("copy","Копировать сообщение",()->ui.copy(withoutActions(text))),new LinearLayout.LayoutParams(ui.dp(48),ui.dp(48)));card.addView(header);
             var t=body();if(user)t.setText(IMAGE_LINK.matcher(text).replaceAll("").strip());else render(t,narration(text));if(!assistant&&!user){t.setMaxLines(3);t.setEllipsize(TextUtils.TruncateAt.END);t.setTextColor(Ui.MUTED);t.setOnClickListener(v->{var detail=ui.col();ui.pad(detail,16,12);var full=body();render(full,narration(text));var sc=new ScrollView(getContext());sc.addView(full);detail.addView(sc,new LinearLayout.LayoutParams(-1,-1));ui.sheet("Событие",detail);});}card.addView(t);images(card,visualizeLinks(text));ui.gap(card,user?14:4);messages.addView(card);anchors.put(key,card);if(user)userTitles.put(key,text.replace('\n',' '));ui.gap(messages,20);
         }
-        if(!streaming.equals(lastLive)){lastLive=streaming;render(liveText,narration(streaming));}live.setVisibility(streaming.isEmpty()?GONE:VISIBLE);
+        if(!streaming.equals(lastLive)){lastLive=streaming;renderLive(streaming);}live.setVisibility(streaming.isEmpty()?GONE:VISIBLE);
         if(array.length()==0&&streaming.isEmpty()&&messages.getChildCount()==0){var empty=ui.col();ui.pad(empty,8,36);empty.addView(ui.title("Начнём с задачи"));ui.gap(empty,12);empty.addView(ui.label("Все действия выполняются на ноутбуке. Здесь — тот же разговор, очередь и результаты.",16,Ui.MUTED));messages.addView(empty);start=-1;}
         scroll.post(this::keepAnchor);
     }
