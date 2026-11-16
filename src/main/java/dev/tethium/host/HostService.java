@@ -698,6 +698,8 @@ public final class HostService implements AutoCloseable {
         catch(Exception e){if(!closed)System.err.println("Worker recovery: "+e);}
         finally{if(acquired)slots.release();running.remove(id,run);bump();try{for(var project:store.projects())for(var session:store.list(project.id()))schedule(session.id());}catch(Exception ignored){}}
     }
+    private static final int PROCESS_RETRIES=3;
+    private final Map<String,Integer> processRetries=new ConcurrentHashMap<>();
     private void observeWorker(String id,Running run)throws Exception{
         try{
             while(!closed){
@@ -718,14 +720,19 @@ public final class HostService implements AutoCloseable {
                     var failover=quotaFailure?claudeQuotaFailover(id,store.job(run.workerRun.jobId()),run.provider):null;
                     boolean quotaBlocked=quotaFailure&&codexQuota(run);
                     if(quotaBlocked){usage.waiting(id,true);quota.refresh();}
+                    // A worker killed under the job (a Windows restart, a crash) is not the agent failing: the same job runs again
+                    // and the agent continues where it stopped. A few times per job, so a process that keeps dying cannot loop.
+                    boolean processDied=failover==null&&!quotaBlocked&&!run.stopping&&result.status()==AgentAdapter.Status.FAILED&&result.text().endsWith(WorkerExecution.PROCESS_DIED)
+                        &&processRetries.merge(run.workerRun.jobId(),1,Integer::sum)<=PROCESS_RETRIES;
                     synchronized(this){
                         if(closed)return;
                         store.transaction(()->{
                             var saved=run.workerRun;
                             store.completeRun(saved.runId(),id,AgentAdapter.Provider.of(saved.spec().path("provider").asText(null)),result,saved.deliveredThrough());
-                            if(failover!=null)applyExecutorFailover(id,store.job(saved.jobId()),failover);else store.jobStatus(saved.jobId(),quotaBlocked?"QUEUED":result.status().name());
-                            if(failover==null&&!quotaBlocked&&!run.stopping&&result.status()==AgentAdapter.Status.FAILED)blockAutonomy(id,"Запуск завершился с ошибкой: "+result.text());
-                            if(failover==null&&!quotaBlocked)for(String recipient:store.resultRecipients(store.job(saved.jobId()))){String title=store.get(id).title(),text="Результат ("+result.status()+"):\n"+result.text();store.appendSessionUpdate(recipient,sessionUpdateKey(id,run),"Результат сессии «"+title+"» ("+result.status()+"):\n"+result.text(),text);store.wakeAutonomy(recipient);}
+                            if(failover!=null)applyExecutorFailover(id,store.job(saved.jobId()),failover);else store.jobStatus(saved.jobId(),quotaBlocked||processDied?"QUEUED":result.status().name());
+                            if(processDied)store.append(id,"system","TETHIUM","Процесс исполнителя оборвался (перезапуск Windows или сбой). Задание запущено заново: продолжай с места остановки, проверь, что из начатого уже сделано.");
+                            if(failover==null&&!quotaBlocked&&!processDied&&!run.stopping&&result.status()==AgentAdapter.Status.FAILED)blockAutonomy(id,"Запуск завершился с ошибкой: "+result.text());
+                            if(failover==null&&!quotaBlocked&&!processDied)for(String recipient:store.resultRecipients(store.job(saved.jobId()))){String title=store.get(id).title(),text="Результат ("+result.status()+"):\n"+result.text();store.appendSessionUpdate(recipient,sessionUpdateKey(id,run),"Результат сессии «"+title+"» ("+result.status()+"):\n"+result.text(),text);store.wakeAutonomy(recipient);}
                             store.workerFinished(saved.runId());return null;
                         });
                     }

@@ -124,16 +124,16 @@ class WorkerHandoffTest {
         assertEquals(2,messages.size());assertEquals("before during after",messages.get(1).path("text").asText());
         assertEquals(1,Files.readAllLines(fixture.resolve("submissions")).size());
     }
-    @Test void aDeadWorkerDoesNotResubmitAnUncertainTurn()throws Exception{
+    /** A worker killed under its job (a Windows restart) is not the agent failing: the job runs again, once, with a note. */
+    @Test void aDeadWorkerRunsItsJobAgainWithANote()throws Exception{
         String id=session("dead worker");client.post("/sessions/"+id+"/run",Json.object("prompt","first"));
         until(id,s->s.path("conversation").path("live").asText().equals("before "));
         var worker=ProcessHandle.of(workerPid()).orElseThrow();var children=worker.descendants().toList();
         worker.destroyForcibly();worker.onExit().get(5,TimeUnit.SECONDS);
-        var state=until(id,s->!s.path("sessions").get(0).path("running").asBoolean());
-        assertEquals("FAILED",state.path("sessions").get(0).path("status").asText());
-        assertTrue(state.path("conversation").path("messages").get(1).path("text").asText().startsWith("before "));
-        detach();start(false);Thread.sleep(200);
-        assertEquals(1,Files.readAllLines(fixture.resolve("submissions")).size());
+        var state=until(id,s->{for(var m:s.path("conversation").path("messages"))if(m.path("text").asText().contains("Процесс исполнителя оборвался"))return true;return false;});
+        assertTrue(state.path("conversation").path("messages").get(1).path("text").asText().startsWith("before "),"the cut-off output is kept");
+        until(id,s->{try{return Files.readAllLines(fixture.resolve("submissions")).size()==2;}catch(java.io.IOException e){return false;}});
+        client.post("/sessions/"+id+"/stop",Json.object());until(id,s->!s.path("sessions").get(0).path("running").asBoolean());
         for(var child:children)if(child.isAlive())child.destroyForcibly();
     }
 }

@@ -89,11 +89,13 @@ final class WorkerExecution implements AutoCloseable {
             }
             if(page.isEmpty()&&journal.state("claimed")!=null&&!journal.alive()){
                 // Re-read after observing process death: its final commit may follow our previous read.
-                if(++deadPolls>=3)return failed("Процесс исполнителя завершился без результата. Повторного запуска не было.","true".equals(journal.state("cancel")));
+                if(++deadPolls>=3)return failed(PROCESS_DIED,"true".equals(journal.state("cancel")));
             }else deadPolls=0;
             Thread.sleep(100);
         }return null;
     }
+    /** The worker process vanished without a result: killed by a Windows restart, a crash or the task manager. */
+    static final String PROCESS_DIED="Процесс исполнителя завершился без результата.";
     private AgentAdapter.Result failed(String message,boolean cancelled){
         return new AgentAdapter.Result(conversation,cancelled?AgentAdapter.Status.CANCELLED:AgentAdapter.Status.FAILED,
                 output+(output.isEmpty()?"":"\n\n")+message);
