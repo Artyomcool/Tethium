@@ -38,7 +38,11 @@ public final class CodexQuotaService implements AutoCloseable {
         if (executor != null) executor.scheduleWithFixedDelay(this::refresh, 0, REFRESH_INTERVAL_MILLIS, TimeUnit.MILLISECONDS);
     }
     public synchronized JsonNode snapshot() {
-        var all = Json.MAPPER.createArrayNode(); all.addAll((com.fasterxml.jackson.databind.node.ArrayNode) buckets); all.addAll((com.fasterxml.jackson.databind.node.ArrayNode) claudeBuckets);
+        var all = Json.MAPPER.createArrayNode(); all.addAll((com.fasterxml.jackson.databind.node.ArrayNode) buckets.deepCopy()); all.addAll((com.fasterxml.jackson.databind.node.ArrayNode) claudeBuckets.deepCopy());
+        // A window whose reset time has passed has been reset, whatever the last reading said: show it as full (estimated)
+        // until a fresh reading arrives. Otherwise a quota exhausted in the morning stays "0%" after it came back.
+        long now = System.currentTimeMillis() / 1000;
+        for (var bucket : all) for (var window : bucket.path("windows")) if (window instanceof com.fasterxml.jackson.databind.node.ObjectNode w && w.path("resetsAt").isNumber() && w.path("resetsAt").asLong() <= now && w.path("remainingPercent").asInt() < 100) { w.put("remainingPercent", 100); w.put("estimated", true); }
         String problems = String.join(" ", List.of(error, claudeError).stream().filter(s -> !s.isEmpty()).toList());
         boolean codexOk = reader != null && error.isEmpty(), claudeOk = claude != null && claudeError.isEmpty();
         return Json.object("buckets", all, "updatedAt", updatedAt, "refreshing", refreshing,
@@ -125,6 +129,11 @@ public final class CodexQuotaService implements AutoCloseable {
     public static boolean canReset(JsonNode state){
         if(!state.path("resetSupported").asBoolean()||!state.path("state").asText().equals("ready")||System.currentTimeMillis()-state.path("updatedAt").asLong()>6*60_000||state.path("resetCredits").path("availableCount").asInt()<=0)return false;
         for(var b:state.path("buckets")){if(!b.path("id").asText().equals("codex"))continue;for(var w:b.path("windows"))if(w.path("remainingPercent").asInt(100)<=5)return true;}return false;
+    }
+    /** Claude can take work again: its account limits are known and none of its windows is empty. */
+    public static boolean claudeAvailable(JsonNode state){
+        boolean has=false;for(var b:state.path("buckets")){if(!b.path("id").asText().equals("claude"))continue;for(var w:b.path("windows")){has=true;if(w.path("remainingPercent").asInt()<=0)return false;}}
+        return has&&!state.path("authRequired").path("claude").asBoolean();
     }
     public static boolean available(JsonNode state,long after){
         if(!state.path("state").asText().equals("ready")||state.path("updatedAt").asLong()<=after||System.currentTimeMillis()-state.path("updatedAt").asLong()>6*60_000)return false;

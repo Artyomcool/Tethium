@@ -54,6 +54,7 @@ public final class SessionStore implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS run_progress(run_id TEXT PRIMARY KEY REFERENCES runs(id), session_id TEXT NOT NULL, output TEXT NOT NULL DEFAULT '')");
             s.execute("CREATE TABLE IF NOT EXISTS project_collapsed(project_id TEXT PRIMARY KEY)");
             s.execute("CREATE TABLE IF NOT EXISTS cascade_pauses(session_id TEXT PRIMARY KEY,origin TEXT NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS executor_failovers(session_id TEXT PRIMARY KEY,provider TEXT NOT NULL,model TEXT,effort TEXT,replacement_provider TEXT NOT NULL,replacement_model TEXT,at INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS events(sequence INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id), run_id TEXT NOT NULL, type TEXT NOT NULL, payload TEXT NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), source_id TEXT REFERENCES sessions(id), prompt TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'QUEUED')");
             s.execute("CREATE TABLE IF NOT EXISTS queue_state(session_id TEXT PRIMARY KEY REFERENCES sessions(id), paused INTEGER NOT NULL DEFAULT 0)");
@@ -169,6 +170,18 @@ public final class SessionStore implements AutoCloseable {
         execute("INSERT INTO job_execution VALUES(?,?,?,?) ON CONFLICT(job_id) DO UPDATE SET provider=excluded.provider,model=excluded.model,effort=excluded.effort",job,provider,model,effort);
     }
     /** The user's executor choice outranks an automatic quota failover still attached to a queued ordinary job; deferred tasks keep their own choice. */
+    /** A session moved off Claude by the core for quota: what it ran before, so it can return when Claude has quota again. */
+    public synchronized void recordFailover(String session,String provider,String model,String effort,String replacementProvider,String replacementModel)throws SQLException{
+        execute("INSERT INTO executor_failovers VALUES(?,?,?,?,?,?,?) ON CONFLICT(session_id) DO UPDATE SET replacement_provider=excluded.replacement_provider,replacement_model=excluded.replacement_model,at=excluded.at",session,provider,model,effort,replacementProvider,replacementModel,System.currentTimeMillis());
+    }
+    public synchronized List<JsonNode> failovers()throws SQLException{
+        var result=new ArrayList<JsonNode>();
+        try(var q=connection.createStatement();var r=q.executeQuery("SELECT session_id,provider,model,effort,replacement_provider,replacement_model FROM executor_failovers")){
+            while(r.next())result.add(Json.object("session",r.getString(1),"provider",r.getString(2),"model",r.getString(3),"effort",r.getString(4),"replacementProvider",r.getString(5),"replacementModel",r.getString(6)));
+        }
+        return result;
+    }
+    public synchronized void clearFailover(String session)throws SQLException{execute("DELETE FROM executor_failovers WHERE session_id=?",session);}
     public synchronized void releaseQueuedExecution(String session)throws SQLException{
         execute("DELETE FROM job_execution WHERE job_id IN (SELECT id FROM jobs WHERE session_id=? AND status='QUEUED') AND job_id NOT IN (SELECT job_id FROM backlog_tasks WHERE job_id IS NOT NULL)",session);
     }

@@ -60,6 +60,28 @@ class ClaudeQuotaFailoverTest {
         }
     }
 
+    /** The core moved the session to Codex for Claude quota; when Claude has quota again it goes back by itself. */
+    @Test void claudeQuotaComingBackReturnsTheSessionToItsClaudeModel()throws Exception{
+        var calls=new CopyOnWriteArrayList<String>();
+        var usage=new java.util.concurrent.atomic.AtomicReference<JsonNode>(Json.object("seven_day",Json.object("utilization",100.0,"resets_at","2030-01-01T00:00:00Z")));
+        var quota=new CodexQuotaService(null,null,usage::get,0);
+        try(var host=new HostService(root,List.of(codex(calls),claude(calls)),quota,false,null);var client=new HostClient(host.descriptor())){
+            String project=client.post("/projects",Json.object("path",root.toString())).path("id").asText();
+            String id=client.post("/sessions",Json.object("projectId",project)).path("id").asText();
+            client.post("/sessions/"+id+"/settings",Json.object("provider","CLAUDE","model","opus","reasoningEffort","xhigh"));
+            client.post("/sessions/"+id+"/run",Json.object("prompt","long task"));
+            until(()->calls.size()==2&&!session(client,id).path("running").asBoolean());
+            assertEquals("CODEX",session(client,id).path("preferences").path("provider").asText());
+            host.observeQuota();
+            assertEquals("CODEX",session(client,id).path("preferences").path("provider").asText(),"still no Claude quota");
+            usage.set(Json.object("seven_day",Json.object("utilization",10.0,"resets_at","2030-01-01T00:00:00Z")));
+            quota.refresh();until(()->CodexQuotaService.claudeAvailable(quota.snapshot()));host.observeQuota();
+            var prefs=session(client,id).path("preferences");
+            assertEquals("CLAUDE",prefs.path("provider").asText());assertEquals("opus",prefs.path("model").asText());assertEquals("xhigh",prefs.path("reasoningEffort").asText());
+            boolean told=false;for(var m:client.get("/state?session="+id).path("conversation").path("messages"))told|=m.path("text").asText().contains("Квота Claude восстановилась");
+            assertTrue(told,"the agent is told why its executor changed");
+        }
+    }
     @Test void choosingClaudeAgainReleasesTheCodexWaitAndTheFailoverPin()throws Exception{
         var calls=new CopyOnWriteArrayList<String>();var claudeBack=new java.util.concurrent.atomic.AtomicBoolean();
         AgentAdapter claude=new AgentAdapter(){

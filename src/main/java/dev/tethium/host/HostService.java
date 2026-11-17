@@ -444,7 +444,7 @@ public final class HostService implements AutoCloseable {
                 boolean switched = !provider.name().equals(current.path("provider").asText());
                 store.preferences(id, body.path("model").asText(null), SessionStore.SESSION_ACCESS,
                         body.has("reasoningEffort") ? body.path("reasoningEffort").asText(null) : switched ? null : current.path("reasoningEffort").asText(null), provider.name());
-                store.releaseQueuedExecution(id);
+                store.releaseQueuedExecution(id);store.clearFailover(id);
                 releaseQuotaWait(id,quota.snapshot(),true);
             }
             case "artifact" -> { return publish(id, body); }
@@ -637,6 +637,9 @@ public final class HostService implements AutoCloseable {
             store.jobExecution(job.id(),choice.provider().name(),choice.model(),choice.effort());
             if(!failover.preserveSession()){
                 var prefs=store.preferences(id);
+                // The first failover remembers what the session ran; a second one keeps that origin.
+                if(store.failovers().stream().noneMatch(f->f.path("session").asText().equals(id)))store.recordFailover(id,AgentAdapter.Provider.of(prefs.path("provider").asText(null)).name(),prefs.path("model").asText(null),prefs.path("reasoningEffort").asText(null),choice.provider().name(),choice.model());
+                else store.recordFailover(id,"","","",choice.provider().name(),choice.model());
                 store.preferences(id,choice.model(),prefs.path("access").asText(),choice.effort(),choice.provider().name());
             }
             store.jobStatus(job.id(),"QUEUED");
@@ -747,8 +750,33 @@ public final class HostService implements AutoCloseable {
     synchronized void observeQuota(){try{
         var snapshot=quota.snapshot();long updated=snapshot.path("updatedAt").asLong();if(updated>quotaObserved){usage.snapshot(snapshot);quotaObserved=updated;}
         if(closed||draining)return;
+        if(CodexQuotaService.claudeAvailable(snapshot))returnFromFailover(snapshot);
         for(var project:store.projects())for(var session:store.list(project.id()))releaseQuotaWait(session.id(),snapshot,false);
     }catch(Exception e){if(!closed)System.err.println("Quota monitor: "+e.getMessage());}}
+    /**
+     * Sessions the core moved off Claude for quota go back to what they ran once Claude has quota again, with their queued jobs
+     * and any Codex quota wait released. A session whose executor the user changed since then keeps the user's choice.
+     */
+    private synchronized void returnFromFailover(JsonNode snapshot)throws Exception{
+        for(var failover:store.failovers()){
+            String id=failover.path("session").asText();
+            try{
+                if(!store.has(id)){store.clearFailover(id);continue;}
+                var prefs=store.preferences(id);
+                boolean untouched=AgentAdapter.Provider.of(prefs.path("provider").asText(null)).name().equals(failover.path("replacementProvider").asText())&&java.util.Objects.equals(prefs.path("model").asText(null),failover.path("replacementModel").asText(null));
+                if(!untouched||failover.path("provider").asText().isEmpty()){store.clearFailover(id);continue;}
+                var provider=AgentAdapter.Provider.of(failover.path("provider").asText());
+                if(!adapters.containsKey(provider)){store.clearFailover(id);continue;}
+                store.transaction(()->{
+                    store.preferences(id,failover.path("model").asText(null),prefs.path("access").asText(),failover.path("effort").asText(null),provider.name());
+                    store.releaseQueuedExecution(id);store.clearFailover(id);
+                    store.append(id,"system","TETHIUM","Квота "+provider.title+" восстановилась: сессия возвращена на "+provider.title+(failover.path("model").asText("").isBlank()?"":" · "+failover.path("model").asText())+". Продолжай с места остановки.");
+                    return null;
+                });
+                usage.waiting(id,false);schedule(id);bump();
+            }catch(Exception e){System.err.println("Return from failover "+id+": "+e.getMessage());}
+        }
+    }
     /** A wait is for Codex quota only: it ends when Codex quota returns or when the next job no longer runs on Codex. The agent is told why it resumes.
      *  The user's own executor choice releases the wait even without automatic resumption. */
     private synchronized void releaseQuotaWait(String id,JsonNode snapshot,boolean chosen)throws Exception{
