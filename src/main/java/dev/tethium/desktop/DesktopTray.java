@@ -4,7 +4,10 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 
-/** The native tray keeps a minimized window reachable without a taskbar button. */
+/**
+ * The native tray icon. Minimizing is ordinary (the window stays on the taskbar and in Alt+Tab); the window goes to the tray
+ * only through the icon's "Свернуть в трей" item, or when the app starts at sign-in.
+ */
 final class DesktopTray implements AutoCloseable {
     private final JFrame frame;
     private final TrayIcon icon;
@@ -18,7 +21,6 @@ final class DesktopTray implements AutoCloseable {
         var images=AppIcon.images();icon=new TrayIcon(images.get(2),"Tethium",menu);icon.setImageAutoSize(true);
         icon.addActionListener(e->SwingUtilities.invokeLater(open));
         icon.addMouseListener(new MouseAdapter(){@Override public void mouseClicked(MouseEvent e){if(e.getButton()==MouseEvent.BUTTON1&&e.getClickCount()==1)SwingUtilities.invokeLater(open);}});
-        frame.addWindowStateListener(e->{if((e.getNewState()&Frame.ICONIFIED)!=0)hideWindow();});
         frame.addWindowListener(new WindowAdapter(){@Override public void windowClosed(WindowEvent e){close();}});
     }
     private boolean install(){
