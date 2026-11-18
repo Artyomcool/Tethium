@@ -542,6 +542,12 @@ public final class SessionStore implements AutoCloseable {
         }return result;
     }
     /** Finished Claude workers whose latest session run and owning job both still represent a failure. */
+    /** Runs whose result the host has already taken from the worker journal. */
+    public synchronized List<String> finishedWorkerRuns()throws SQLException{
+        var result=new ArrayList<String>();
+        try(var q=connection.createStatement();var r=q.executeQuery("SELECT run_id FROM worker_runs WHERE finished=1")){while(r.next())result.add(r.getString(1));}
+        return result;
+    }
     public synchronized List<FailedWorkerRun> failedClaudeWorkers()throws SQLException{
         var result=new ArrayList<FailedWorkerRun>();
         String sql="SELECT w.run_id,w.session_id,w.job_id FROM worker_runs w JOIN runs r ON r.id=w.run_id JOIN jobs j ON j.id=w.job_id WHERE w.finished=1 AND r.provider='CLAUDE' AND r.status='FAILED' AND j.status='FAILED' AND r.rowid=(SELECT MAX(r2.rowid) FROM runs r2 WHERE r2.session_id=r.session_id)";

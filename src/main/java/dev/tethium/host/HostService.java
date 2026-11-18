@@ -116,6 +116,7 @@ public final class HostService implements AutoCloseable {
         for (var project : store.projects()) for (var session : store.list(project.id())) schedule(session.id());
         backlog=new Backlog(store,quota::snapshot,()->cpu==null?Json.object():cpu.machineUsage(),this::sessionBusy,this::bump,adapters.keySet(),id->modelsForBacklog(id));
         quotaMonitor.scheduleWithFixedDelay(this::observeQuota,0,15,TimeUnit.SECONDS);
+        quotaMonitor.scheduleWithFixedDelay(this::pruneWorkerJournals,2,60,TimeUnit.MINUTES);
         quotaMonitor.scheduleWithFixedDelay(this::observeBacklog,15,15,TimeUnit.SECONDS);
         scheduleMonitor.scheduleWithFixedDelay(()->observeSchedules(System.currentTimeMillis()),1,1,TimeUnit.SECONDS);
         scheduleMonitor.scheduleWithFixedDelay(this::observeReminders,1,1,TimeUnit.SECONDS);
@@ -524,6 +525,28 @@ public final class HostService implements AutoCloseable {
         }return Json.object("version",index.path("version"),"entries",result);
     }
     private Object trashList()throws Exception{var result=new ArrayList<JsonNode>();for(var p:store.projects())for(var session:store.list(p.id())){long deleted=store.trashedAt(session.id());if(deleted>0){var row=(com.fasterxml.jackson.databind.node.ObjectNode)sessionJson(session);row.put("deletedAt",deleted);row.put("projectTitle",p.title());result.add(row);}}return result;}
+    /**
+     * A worker journal keeps every streamed delta of a run, tens of megabytes each; once the host has taken the result it is
+     * only diagnostics. Journals of finished runs go after six hours, except failed Claude runs the quota recovery may still read.
+     * Without this they piled up to 20 GB in a few days.
+     */
+    private void pruneWorkerJournals(){
+        if(closed)return;
+        try{
+            var keep=new HashSet<String>();for(var failed:store.failedClaudeWorkers())keep.add(failed.runId());
+            long cutoff=System.currentTimeMillis()-6*3_600_000L,freed=0;int removed=0;
+            for(String run:store.finishedWorkerRuns()){
+                if(closed)return;
+                Path folder=data.resolve("workers").resolve(run);
+                if(keep.contains(run)||!Files.isDirectory(folder))continue;
+                long newest=0,size=0;
+                try(var files=Files.walk(folder)){for(var file:files.filter(Files::isRegularFile).toList()){newest=Math.max(newest,Files.getLastModifiedTime(file).toMillis());size+=Files.size(file);}}
+                if(newest>cutoff)continue;
+                try{removeOwnedDirectory("workers",run);removed++;freed+=size;}catch(Exception locked){System.err.println("Worker journal "+run+" kept: "+locked.getMessage());}
+            }
+            if(removed>0)System.err.println("Worker journals pruned: "+removed+", "+freed/1_048_576+" MB");
+        }catch(Exception e){if(!closed)System.err.println("Worker journal pruning: "+e.getMessage());}
+    }
     private void removeOwnedDirectory(String kind,String id)throws Exception{
         UUID.fromString(id);Path root=data.resolve(kind).toAbsolutePath().normalize(),target=root.resolve(id).normalize();
         if(!target.startsWith(root)||target.equals(root))throw new IllegalArgumentException("Invalid service path");
