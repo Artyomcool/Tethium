@@ -49,6 +49,9 @@ public final class ApkPublisher {
                 apps.add(metadata);var catalog=existing.isObject()?(com.fasterxml.jackson.databind.node.ObjectNode)existing.deepCopy():Json.object();catalog.set("apps",apps);
                 Path tmp=Files.createTempFile(root,".tethium-apps-",".tmp");
                 try{Files.writeString(tmp,Json.MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(catalog)+"\n",StandardCharsets.UTF_8);Files.move(tmp,manifest,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);}finally{Files.deleteIfExists(tmp);}
+                // Only the current version of each app is kept: an APK no entry of the catalog points to is an old build.
+                var kept=new HashSet<String>();for(var app:apps)kept.add(app.path("apk").asText());
+                try(var files=Files.list(folder)){for(Path file:files.filter(f->f.getFileName().toString().endsWith(".apk")).toList())if(!kept.contains(".tethium/apps/"+file.getFileName()))Files.deleteIfExists(file);}
                 return metadata;
             }
         }finally{Files.deleteIfExists(staged);}
