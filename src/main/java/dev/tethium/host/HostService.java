@@ -661,6 +661,8 @@ public final class HostService implements AutoCloseable {
             if(!failover.preserveSession()){
                 var prefs=store.preferences(id);
                 // The first failover remembers what the session ran; a second one keeps that origin.
+                // Moved off Claude again soon after a return: a limit the quota figures do not show. Do not bounce back for a while.
+                Long returned=failbackAt.get(id);if(returned!=null&&System.currentTimeMillis()-returned<30*60_000L)failbackHold.put(id,System.currentTimeMillis()+3*3_600_000L);
                 if(store.failovers().stream().noneMatch(f->f.path("session").asText().equals(id)))store.recordFailover(id,AgentAdapter.Provider.of(prefs.path("provider").asText(null)).name(),prefs.path("model").asText(null),prefs.path("reasoningEffort").asText(null),choice.provider().name(),choice.model());
                 else store.recordFailover(id,"","","",choice.provider().name(),choice.model());
                 store.preferences(id,choice.model(),prefs.path("access").asText(),choice.effort(),choice.provider().name());
@@ -773,17 +775,21 @@ public final class HostService implements AutoCloseable {
     synchronized void observeQuota(){try{
         var snapshot=quota.snapshot();long updated=snapshot.path("updatedAt").asLong();if(updated>quotaObserved){usage.snapshot(snapshot);quotaObserved=updated;}
         if(closed||draining)return;
-        if(CodexQuotaService.claudeAvailable(snapshot))returnFromFailover(snapshot);
+        returnFromFailover(snapshot);
         for(var project:store.projects())for(var session:store.list(project.id()))releaseQuotaWait(session.id(),snapshot,false);
     }catch(Exception e){if(!closed)System.err.println("Quota monitor: "+e.getMessage());}}
     /**
      * Sessions the core moved off Claude for quota go back to what they ran once Claude has quota again, with their queued jobs
      * and any Codex quota wait released. A session whose executor the user changed since then keeps the user's choice.
      */
+    private final Map<String,Long> failbackAt=new ConcurrentHashMap<>(),failbackHold=new ConcurrentHashMap<>();
     private synchronized void returnFromFailover(JsonNode snapshot)throws Exception{
         for(var failover:store.failovers()){
             String id=failover.path("session").asText();
             try{
+                // The session's own model must have quota: Fable has a weekly limit of its own besides the account's.
+                if(!CodexQuotaService.claudeAvailable(snapshot,failover.path("model").asText(null)))continue;
+                Long hold=failbackHold.get(id);if(hold!=null&&hold>System.currentTimeMillis())continue;
                 if(!store.has(id)){store.clearFailover(id);continue;}
                 var prefs=store.preferences(id);
                 boolean untouched=AgentAdapter.Provider.of(prefs.path("provider").asText(null)).name().equals(failover.path("replacementProvider").asText())&&java.util.Objects.equals(prefs.path("model").asText(null),failover.path("replacementModel").asText(null));
@@ -796,6 +802,7 @@ public final class HostService implements AutoCloseable {
                     store.append(id,"system","TETHIUM","Квота "+provider.title+" восстановилась: сессия возвращена на "+provider.title+(failover.path("model").asText("").isBlank()?"":" · "+failover.path("model").asText())+". Продолжай с места остановки.");
                     return null;
                 });
+                failbackAt.put(id,System.currentTimeMillis());failbackHold.remove(id);
                 usage.waiting(id,false);schedule(id);bump();
             }catch(Exception e){System.err.println("Return from failover "+id+": "+e.getMessage());}
         }

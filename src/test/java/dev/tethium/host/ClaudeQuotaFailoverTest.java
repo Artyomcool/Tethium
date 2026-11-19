@@ -82,6 +82,29 @@ class ClaudeQuotaFailoverTest {
             assertTrue(told,"the agent is told why its executor changed");
         }
     }
+    /** Fable has a weekly limit of its own: with the account's quota left but Fable's spent, the session must stay on Codex. */
+    @Test void aSpentModelLimitKeepsTheSessionOnCodexEvenWithAccountQuotaLeft()throws Exception{
+        var calls=new CopyOnWriteArrayList<String>();
+        java.util.function.Function<Double,JsonNode> usageWithFable=fable->Json.object("seven_day",Json.object("utilization",99.0,"resets_at","2030-01-01T00:00:00Z"),
+            "limits",List.of(Json.object("kind","weekly_scoped","scope",Json.object("model",Json.object("display_name","Fable")),"percent",fable,"resets_at","2030-01-01T00:00:00Z")));
+        var usage=new java.util.concurrent.atomic.AtomicReference<JsonNode>(usageWithFable.apply(100.0));
+        var quota=new CodexQuotaService(null,null,usage::get,0);
+        try(var host=new HostService(root,List.of(codex(calls),claude(calls)),quota,false,null);var client=new HostClient(host.descriptor())){
+            String project=client.post("/projects",Json.object("path",root.toString())).path("id").asText();
+            String id=client.post("/sessions",Json.object("projectId",project)).path("id").asText();
+            client.post("/sessions/"+id+"/settings",Json.object("provider","CLAUDE","model","fable","reasoningEffort","xhigh"));
+            client.post("/sessions/"+id+"/run",Json.object("prompt","long task"));
+            until(()->calls.size()==2&&!session(client,id).path("running").asBoolean());
+            quota.refresh();until(()->CodexQuotaService.claudeAvailable(quota.snapshot()));
+            for(int i=0;i<3;i++)host.observeQuota();
+            assertEquals("CODEX",session(client,id).path("preferences").path("provider").asText(),"Fable is spent: no bounce back to it");
+            assertEquals(2,calls.size(),"no new attempt on Fable");
+            usage.set(usageWithFable.apply(20.0));
+            quota.refresh();until(()->CodexQuotaService.claudeAvailable(quota.snapshot(),"fable"));host.observeQuota();
+            assertEquals("CLAUDE",session(client,id).path("preferences").path("provider").asText());
+            assertEquals("fable",session(client,id).path("preferences").path("model").asText());
+        }
+    }
     @Test void choosingClaudeAgainReleasesTheCodexWaitAndTheFailoverPin()throws Exception{
         var calls=new CopyOnWriteArrayList<String>();var claudeBack=new java.util.concurrent.atomic.AtomicBoolean();
         AgentAdapter claude=new AgentAdapter(){

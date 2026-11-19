@@ -135,6 +135,17 @@ public final class CodexQuotaService implements AutoCloseable {
         boolean has=false;for(var b:state.path("buckets")){if(!b.path("id").asText().equals("claude"))continue;for(var w:b.path("windows")){has=true;if(w.path("remainingPercent").asInt()<=0)return false;}}
         return has&&!state.path("authRequired").path("claude").asBoolean();
     }
+    /** Claude can take work on this model: the account has quota and so does the model's own limit, if it has one (Fable does). */
+    public static boolean claudeAvailable(JsonNode state,String model){
+        if(!claudeAvailable(state))return false;
+        if(model==null||model.isBlank())return true;
+        String name=model.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+","-");
+        for(var b:state.path("buckets")){
+            String id=b.path("id").asText();if(!id.startsWith("claude-")||!id.contains(name))continue;
+            for(var w:b.path("windows"))if(w.path("remainingPercent").asInt()<=0)return false;
+        }
+        return true;
+    }
     public static boolean available(JsonNode state,long after){
         if(!state.path("state").asText().equals("ready")||state.path("updatedAt").asLong()<=after||System.currentTimeMillis()-state.path("updatedAt").asLong()>6*60_000)return false;
         boolean has=false;for(var b:state.path("buckets")){if(!b.path("id").asText().equals("codex"))continue;for(var w:b.path("windows")){has=true;if(w.path("remainingPercent").asInt()<=0)return false;}}
