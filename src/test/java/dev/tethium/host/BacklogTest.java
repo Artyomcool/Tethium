@@ -126,8 +126,17 @@ class BacklogTest {
         store.trash(doomed, true); store.purge(doomed);
         assertEquals("new", row(id).path("target").asText());
     }
+    /** The title is optional: without one the task is named after the first line of what to do. */
+    @Test void aTaskWithoutTitleIsNamedAfterItsPrompt() throws Exception {
+        add("title", "", "prompt", "\n  Почистить старые сборки   в build\nи проверить место");
+        var tasks = backlog.state(project).path("tasks");boolean named = false;
+        for (var t : tasks) named |= t.path("title").asText().equals("Почистить старые сборки в build");
+        assertTrue(named, tasks.toString());
+        String longTitle = Backlog.titleOf("x".repeat(200));
+        assertTrue(longTitle.length() <= 80 && longTitle.endsWith("…"), longTitle);
+    }
     @Test void aBadTaskIsRefused() {
-        assertThrows(Exception.class, () -> add("title", " "));
+        assertThrows(Exception.class, () -> add("title", " ", "prompt", " "));
         assertThrows(Exception.class, () -> add("sessionId", "missing"));
         assertThrows(Exception.class, () -> add("target", "named", "sessionTitle", ""));
     }

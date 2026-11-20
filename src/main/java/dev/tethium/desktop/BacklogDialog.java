@@ -110,7 +110,7 @@ final class BacklogDialog {
         }
         Runnable syncExecutor=()->{boolean inherited=((Choice)executor.getSelectedItem()).id.isEmpty();automatic.setEnabled(inherited);if(!inherited)automatic.setSelected(false);};executor.addActionListener(e->syncExecutor.run());syncExecutor.run();
         var form=new JPanel();form.setLayout(new BoxLayout(form,BoxLayout.Y_AXIS));
-        form.add(line(new JLabel("Название:"),title));form.add(Box.createVerticalStrut(6));form.add(line(new JLabel("Что сделать (агент не помнит разговор):")));form.add(new JScrollPane(prompt));form.add(Box.createVerticalStrut(6));
+        form.add(line(new JLabel("Название (необязательно):"),title));form.add(Box.createVerticalStrut(6));form.add(line(new JLabel("Что сделать (агент не помнит разговор):")));form.add(new JScrollPane(prompt));form.add(Box.createVerticalStrut(6));
         form.add(line(new JLabel("Приоритет:"),priority));form.add(Box.createVerticalStrut(6));
         form.add(line(inSession,sessionPicker));form.add(line(named,sessionName));form.add(line(fresh));form.add(Box.createVerticalStrut(6));
         form.add(line(new JLabel("Исполнитель:"),executor));form.add(line(automatic));form.add(Box.createVerticalStrut(6));

@@ -95,7 +95,7 @@ final class BacklogSheet {
         if(target.isEmpty()){Toast.makeText(activity,"Откройте сессию проекта",Toast.LENGTH_SHORT).show();return;}
         boolean inCurrent=!current.isEmpty()&&target.equals(sessionProject(current));
         var form=ui.col();ui.pad(form,16,8);var inner=ui.col();var scroll=new ScrollView(activity);scroll.addView(inner);form.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        var title=ui.edit("Название");title.setSingleLine();inner.addView(title);ui.gap(inner,8);
+        var title=ui.edit("Название (необязательно)");title.setSingleLine();inner.addView(title);ui.gap(inner,8);
         var prompt=ui.edit("Что сделать: агент не помнит разговор");prompt.setInputType(InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_MULTI_LINE);prompt.setMinLines(4);prompt.setGravity(Gravity.TOP);inner.addView(prompt);ui.gap(inner,8);
         var priority=new Spinner(activity);spinner(priority,List.of(PRIORITY_NAMES));priority.setSelection(1);inner.addView(priority,new LinearLayout.LayoutParams(-1,ui.dp(48)));
         var kinds=new ArrayList<String>();var kindIds=new ArrayList<String>();if(inCurrent){kinds.add("В текущей сессии");kindIds.add("session");}kinds.add("В общей сессии по имени");kindIds.add("named");kinds.add("В новой сессии");kindIds.add("new");
@@ -108,7 +108,7 @@ final class BacklogSheet {
         var execution=new ExecutorFields(inner,null);
         var sheet=ui.sheet("Отложить задачу",form);
         form.addView(ui.primary("Отложить",()->{
-            if(title.getText().toString().isBlank()){title.requestFocus();return;}
+            if(title.getText().toString().isBlank()&&prompt.getText().toString().isBlank()){prompt.requestFocus();return;}
             try{
                 String chosen=kindIds.get(kind.getSelectedItemPosition());
                 var body=new JSONObject().put("projectId",target).put("title",title.getText().toString()).put("prompt",prompt.getText().toString()).put("priority",PRIORITY_IDS[priority.getSelectedItemPosition()]).put("target",chosen);

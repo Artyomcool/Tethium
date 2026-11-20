@@ -191,10 +191,16 @@ final class Backlog {
         };
     }
     private JsonNode task(String id)throws SQLException{for(var t:store.backlog())if(t.path("id").asText().equals(id))return t;throw new IllegalStateException("Этой задачи уже нет");}
+    static String titleOf(String prompt){
+        String line=prompt.lines().map(String::strip).filter(s->!s.isEmpty()).findFirst().orElse(prompt.strip()).replaceAll("\\s+"," ");
+        return line.codePointCount(0,line.length())<=80?line:line.substring(0,line.offsetByCodePoints(0,79)).strip()+"…";
+    }
     private record Fields(String title,String prompt,int priority,Integer minQuota,Integer minFreeCpu,String target,String session,String sessionTitle){}
     private Fields fields(JsonNode body,String project)throws SQLException{
         String title=body.path("title").asText().strip(),prompt=body.path("prompt").asText().strip();
-        if(title.isEmpty())throw new IllegalArgumentException("Укажите название задачи");
+        if(title.isEmpty()&&prompt.isEmpty())throw new IllegalArgumentException("Опишите задачу");
+        // The title is optional: without one it is the first line of the task, shortened.
+        if(title.isEmpty())title=titleOf(prompt);
         if(prompt.isEmpty())prompt=title;
         int priority=switch(body.path("priority").asText("normal")){case "high"->0;case "low"->2;default->1;};
         String target=body.path("target").asText("session"),session=null,sessionTitle=null;
@@ -221,7 +227,7 @@ final class Backlog {
                 "pinnedProvider",Json.object("type","string","enum",List.of("CODEX","CLAUDE"),"description","Fix the executor only when the user asks."),
                 "pinnedModel",Json.object("type","string","description","Fixed model for pinnedProvider; disables automatic replacement."),
                 "session",Json.object("type","string","description","Omit for your session. A name for a shared session of the project, created when missing. \"new\" for a session of its own: only when the user asks for it")),
-                "required",List.of("title","prompt"),"additionalProperties",false));
+                "required",List.of("prompt"),"additionalProperties",false));
         var list=Json.object("name","backlog_list","description","List the tasks put off in this project with the reason each one waits.","inputSchema",Json.object("type","object","properties",Json.object(),"additionalProperties",false));
         var remove=Json.object("name","backlog_remove","description","Remove a task from this project's list, when the user asks for it or it is no longer needed.","inputSchema",Json.object("type","object","properties",Json.object("id",Json.object("type","string")),"required",List.of("id"),"additionalProperties",false));
         return List.of(add,list,remove);
