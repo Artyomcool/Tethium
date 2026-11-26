@@ -495,7 +495,7 @@ public final class HostService implements AutoCloseable {
             var messages = new ArrayList<SessionStore.Message>(); long cursor = 0;
             while (!window) { var page = store.messages(selected, cursor, 1000); messages.addAll(page); if (page.size() < 1000) break; cursor = page.getLast().sequence(); }
             var live = running.get(selected);
-            result.set("conversation", Json.object("messages", messages, "live", window||live == null ? "" : live.text.toString(), "liveTimestamp",live==null?0:live.activity.snapshot().path("startedAt").asLong(),"historyVersion",historyVersion(selected),"windowed",window,"events", store.events(selected),
+            result.set("conversation", Json.object("messages", messages, "live", window||live == null ? "" : live.text.toString(), "liveTimestamp",live==null?0:live.activity.snapshot().path("startedAt").asLong(),"historyVersion",historyVersion(selected),"windowed",window,
                     "queued", store.queued(selected), "artifacts", store.artifacts(selected), "requests", pending.values().stream().filter(p -> p.sessionId.equals(selected))
                             .map(p -> Json.object("id", p.id, "method", p.method, "params", p.params)).toList()));
         }

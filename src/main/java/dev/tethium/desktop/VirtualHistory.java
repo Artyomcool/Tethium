@@ -59,6 +59,11 @@ final class VirtualHistory implements AutoCloseable {
         scroll.getViewport().addComponentListener(new ComponentAdapter(){@Override public void componentResized(ComponentEvent e){if(enabled&&scroll.getViewport().getWidth()>0){var saved=navigation.beforeChange(false);int anchor=at(Math.max(0,bottomEdge()-1)),offset=bottomEdge()-prefix[anchor];boolean changed=width!=scroll.getViewport().getWidth();trace.operation("history.resize","oldWidth",width,"newWidth",scroll.getViewport().getWidth(),"changed",changed,"anchor",anchor,"offset",offset);if(changed)measured.clear();reindex();restore(saved,fromBottom(prefix[anchor]+offset));if(changed)first=-1;debounce.restart();}}});
     }
     boolean enabled(){return enabled;}
+    void activate(String id,boolean tail){
+        trace.session(id);
+        trace.operation("history.activate","cached",Objects.equals(session,id)&&indexKnown);
+        update(id,"",tail);
+    }
     void restorePosition(JsonNode saved){pendingPosition=saved.deepCopy();forceTail=saved.path("tail").asBoolean();if(!entries.isEmpty()){navigation.restorePosition(pendingPosition);pendingPosition=null;debounce.restart();}}
     void legacy(){if(!enabled)return;reset(null);enabled=false;pendingPosition=null;text.virtualScrolling=false;text.setVisible(true);surface.remove(text);scroll.setViewportView(text);navigation.virtualPositions(null);}
 
@@ -71,9 +76,10 @@ final class VirtualHistory implements AutoCloseable {
         if(closed)return;if(!Objects.equals(session,id))reset(id);forceTail|=tail;
         if(!enabled){enabled=true;text.virtualScrolling=true;text.setVisible(false);surface.add(text);scroll.setViewportView(surface);navigation.virtualPositions(this::positionOf);}
         requestedVersion=revision;
-        if(!revision.equals(version)&&!indexLoading)loadIndex();else if(forceTail||first<0||!version.equals(renderedVersion))debounce.restart();
+        if((!indexKnown||!revision.equals(version))&&!indexLoading)loadIndex();else if(forceTail||first<0||!version.equals(renderedVersion))debounce.restart();
     }
     private void loadIndex(){
+        if(closed||indexLoading)return;
         trace.operation("history.index.request","version",version,"requestedVersion",requestedVersion,"entries",entries.size());indexLoading=true;long expected=generation;String id=session;
         loader.submit(()->{try{var result=host.get("/history/index?gallery=true&session="+id);if(!result.path("entries").isArray())throw new IllegalStateException("Ядро не вернуло список сообщений");SwingUtilities.invokeLater(()->{
             if(closed||expected!=generation)return;trace.operation("history.index.apply","version",result.path("version").asText(),"entries",result.path("entries").size());indexKnown=true;indexLoading=false;error="";
@@ -83,7 +89,7 @@ final class VirtualHistory implements AutoCloseable {
             navigation.setTasks(tasks);reindex();int y=saved.absolute();boolean found=false;for(int i=0;i<entries.size();i++)if(key(entries.get(i)).equals(anchor)){y=fromBottom(prefix[i]+offset);found=true;break;}
             // New rows have estimated heights only; jumping to their estimated end shows blank space and then jumps back.
             restore(saved,y,shown&&found);if(pendingPosition!=null){navigation.restorePosition(pendingPosition);forceTail=pendingPosition.path("tail").asBoolean();pendingPosition=null;}debounce.restart();
-        });}catch(Exception failure){SwingUtilities.invokeLater(()->{if(expected==generation){indexLoading=false;error="История не загружена: "+failure.getMessage();surface.repaint();}});}});
+        });}catch(Exception failure){SwingUtilities.invokeLater(()->{if(expected==generation){indexLoading=false;error="История не загружена: "+failure.getMessage();trace.event("history.index.failed","failure",failure.getClass().getSimpleName());surface.repaint();}});}});
     }
     private static String baseVersion(String value){int last=value.lastIndexOf(':');return last<0?value:value.substring(0,last);}
     private static String key(JsonNode row){return row.path("sequence").asText()+":"+row.path("offset").asInt();}
@@ -112,8 +118,13 @@ final class VirtualHistory implements AutoCloseable {
         if(pageLoading)return;trace.operation("history.page.request","first",first,"end",end,"wanted",wanted,"visible",visible,"tail",tail,"forceTail",forceTail,"version",version,"renderedVersion",renderedVersion,"width",width);pageLoading=true;long expected=generation,serial=++request;String id=session;int start=wanted;
         loader.submit(()->{try{var page=host.get("/history/page?gallery=true&session="+id+"&first="+start+"&count="+WINDOW);var body=new StringBuilder();
             for(var row:page.path("entries")){
-                String role=row.path("role").asText(),cacheKey=key(row)+":"+(row.path("live").asBoolean()?page.path("version").asText():row.path("length").asText())+":"+row.path("revision").asLong()+":"+row.path("mediaVersion").asLong();
-                String html; synchronized(htmlCache){html=htmlCache.get(cacheKey);if(html==null){html=row.path("kind").asText().equals("gallery")?galleryHtml(row):row.path("kind").asText().equals("image")?imageHtml(row):markdown.render(row.path("text").asText());htmlCache.put(cacheKey,html);while(htmlCache.size()>64)htmlCache.remove(htmlCache.keySet().iterator().next());}}
+                String role=row.path("role").asText(),cacheKey=id+":"+key(row)+":"+(row.path("live").asBoolean()?page.path("version").asText():row.path("length").asText())+":"+row.path("revision").asLong()+":"+row.path("mediaVersion").asLong();
+                String html; synchronized(htmlCache){html=htmlCache.get(cacheKey);}
+                // reset/close also take this lock on the UI thread; never hold it during a thumbnail download.
+                if(html==null){
+                    html=row.path("kind").asText().equals("gallery")?galleryHtml(id,row):row.path("kind").asText().equals("image")?imageHtml(id,row):markdown.render(row.path("text").asText());
+                    synchronized(htmlCache){htmlCache.put(cacheKey,html);while(htmlCache.size()>64)htmlCache.remove(htmlCache.keySet().iterator().next());}
+                }
                 String who=role.equals("user")?"ВЫ":role.equals("assistant")?ChatTheme.executorLabel(row.path("provider").asText()):role.equals("session")?"ДРУГАЯ СЕССИЯ":"TETHIUM";
                 if(row.path("offset").asInt()>0)who+=" · ПРОДОЛЖЕНИЕ";if(row.path("provider").asText().equals("IMPORTED"))who+=" · ИМПОРТ";
                 boolean graphic=Set.of("image","gallery").contains(row.path("kind").asText());
@@ -136,12 +147,12 @@ final class VirtualHistory implements AutoCloseable {
                 reindex();text.setBounds(0,prefix[first],width,height);text.setVisible(true);restore(saved,anchoredY(textAnchor,fromBottom(prefix[Math.min(anchor,entries.size())]+offset)));surface.repaint();trace.event("history.page.applied","first",first,"end",end,"height",height);SwingUtilities.invokeLater(()->{text.renderingPage=false;trace.event("history.page.settled");});
                 debounce.restart();
             });
-        }catch(Exception failure){SwingUtilities.invokeLater(()->{if(expected==generation){pageLoading=false;error=failure.getMessage();surface.repaint();}});}});
+        }catch(Exception failure){SwingUtilities.invokeLater(()->{if(expected==generation){pageLoading=false;error=failure.getMessage();trace.event("history.page.failed","failure",failure.getClass().getSimpleName());surface.repaint();}});}});
     }
     private static int galleryHeight(JsonNode row,int available){
         int width=0,lineHeight=0,total=16;for(var image:row.path("images")){int w=image.path("width").asInt(200)+8,h=image.path("height").asInt(120)+8;if(width>0&&width+w>available){total+=lineHeight;width=0;lineHeight=0;}width+=w;lineHeight=Math.max(lineHeight,h);}return total+lineHeight;
     }
-    private String galleryHtml(JsonNode row)throws Exception{var html=new StringBuilder("<p class='gallery'>");for(var image:row.path("images"))html.append(imageHtml(image)).append(" ");return html.append("</p>").toString();}
+    private String galleryHtml(String id,JsonNode row)throws Exception{var html=new StringBuilder("<p class='gallery'>");for(var image:row.path("images"))html.append(imageHtml(id,image)).append(" ");return html.append("</p>").toString();}
     /**
      * A link to a file on the laptop. On a Linux Remote "C:\x" is not absolute and toUri() would put the local home folder in
      * front of it, so drive paths are written as file:/C:/... directly.
@@ -151,10 +162,10 @@ final class VirtualHistory implements AutoCloseable {
         if(slashed.matches("(?i)[a-z]:/.*"))try{return new java.net.URI("file","","/"+slashed,null).toString();}catch(Exception ignored){}
         return java.nio.file.Path.of(file).toUri().toString();
     }
-    private String imageHtml(JsonNode row)throws Exception{
+    private String imageHtml(String id,JsonNode row)throws Exception{
         var folder=java.nio.file.Files.createDirectories(dev.tethium.host.AppPaths.data().resolve("chat-thumbnails"));
         String key=java.util.UUID.nameUUIDFromBytes(row.path("file").asText().getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString();var thumbnail=folder.resolve(key+".png");
-        if(!java.nio.file.Files.isRegularFile(thumbnail)){String path="/history-thumbnail.png?session="+java.net.URLEncoder.encode(session,java.nio.charset.StandardCharsets.UTF_8)+"&media="+row.path("mediaId").asLong();java.nio.file.Files.write(thumbnail,host.bytes(path));}
+        if(!java.nio.file.Files.isRegularFile(thumbnail)){String path="/history-thumbnail.png?session="+java.net.URLEncoder.encode(id,java.nio.charset.StandardCharsets.UTF_8)+"&media="+row.path("mediaId").asLong();java.nio.file.Files.write(thumbnail,host.bytes(path));}
         String target=fileLink(row.path("file").asText());
         return "<a href='"+Theme.escape(target)+"'><img src='"+thumbnail.toUri()+"' data-original='"+Theme.escape(target)+"' width='"+row.path("width").asInt(160)+"' height='"+row.path("height").asInt(100)+"' border='0'></a>";
     }

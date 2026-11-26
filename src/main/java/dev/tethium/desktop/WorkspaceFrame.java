@@ -675,6 +675,8 @@ public final class WorkspaceFrame extends JFrame {
         model.selection(preferences.path("provider").asText(null), preferences.path("model").asText(null), preferences.path("reasoningEffort").asText(null));
         model.loading(); catalogSession = null; catalogAttempt = 0;
         applying = false; renderHeader(session); requests.removeAll(); if(!cached)transcript.setText(page("<p class='muted'>Загружаем историю…</p>"));
+        // Start the selected history even while the polling thread is still waiting for another session's state.
+        pagedHistory.activate(id,scrollToLatest);scrollToLatest=false;
         showPreview(false); viewer.clear(); applying = true; artifacts.removeAllItems(); applying = false;switchingView=false;
         runStatus.update(session, conversation);
         selectTreeEntry(id);treeSignature="";input.requestFocusInWindow(); poller.execute(this::poll);

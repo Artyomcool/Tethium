@@ -144,7 +144,7 @@ tasks.register('remoteJar', Jar) {
     archiveBaseName = 'tethium-remote'
     from(sourceSets.main.output) {
         include 'dev/tethium/desktop/**', 'dev/tethium/remote/**', 'dev/tethium/json/**', 'dev/tethium/artifact/**',
-                'dev/tethium/host/HostClient*', 'dev/tethium/host/AppPaths*', 'dev/tethium/update/BuildInfo*', 'dev/tethium/core/ImageAttachments*', 'tethium-build.properties'
+                'dev/tethium/host/HostClient*', 'dev/tethium/host/AppPaths*', 'dev/tethium/update/BuildInfo*', 'dev/tethium/core/ImageAttachments*', 'org/cef/browser/TethiumOsrBrowser*', 'tethium-build.properties'
         exclude 'dev/tethium/desktop/DesktopMain*', 'dev/tethium/desktop/DesktopControl*', 'dev/tethium/desktop/MobileConnectDialog*'
     }
 }

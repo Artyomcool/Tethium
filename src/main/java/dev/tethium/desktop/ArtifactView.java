@@ -346,7 +346,7 @@ public final class ArtifactView extends JPanel implements AutoCloseable {
                 return false;
             }
         });
-        browser = client.createBrowser(url.toString(), true, false);
+        browser = new org.cef.browser.TethiumOsrBrowser(client,url.toString());
         browser.getUIComponent().addMouseListener(new MouseAdapter(){@Override public void mousePressed(MouseEvent e){e.getComponent().requestFocusInWindow();}});
         browser.createImmediately();
     }

@@ -264,22 +264,33 @@ public final class SessionStore implements AutoCloseable {
     public static final int HISTORY_CHUNK=8000;
     private record HistoryIndex(long last,long revision,List<JsonNode> entries){}
     private final Map<String,HistoryIndex> historyIndexes=new LinkedHashMap<>();
-    /** Piece boundaries of long messages, kept while the message keeps its length: an index rebuild re-reads only new ones. */
-    private final LinkedHashMap<String,List<int[]>> pieceCache=new LinkedHashMap<>(256,.75f,true);
-    private List<int[]> pieces(String session,long sequence,int length,long revision)throws SQLException{
-        String key=session+":"+sequence+":"+length+":"+revision;var cached=pieceCache.get(key);if(cached!=null)return cached;
-        var computed=HistoryChunks.split(historyText(session,sequence),HISTORY_CHUNK);pieceCache.put(key,computed);
-        while(pieceCache.size()>4000)pieceCache.remove(pieceCache.keySet().iterator().next());
+    /** Metadata belongs to a message, not the whole session revision. Editing one card must not reread every old answer. */
+    private final LinkedHashMap<Long,List<JsonNode>> historyMessages=new LinkedHashMap<>(256,.75f,true);
+    private List<JsonNode> historyMessage(String session,ResultSet row,long revision,boolean metadata)throws SQLException{
+        long sequence=row.getLong(1);
+        var cached=historyMessages.get(sequence);if(cached!=null)return cached;
+        String role=row.getString(2),provider=row.getString(3);long timestamp=row.getLong(4);
+        String text=metadata?null:historyText(session,sequence);
+        int length=metadata?row.getInt(5):text.codePointCount(0,text.length()),lines=metadata?row.getInt(6):0;
+        if(!metadata)for(int i=0;i<text.length();i++)if(text.charAt(i)=='\n')lines++;
+        String title=role.equals("user")?(metadata?row.getString(7):text.substring(0,text.offsetByCodePoints(0,Math.min(320,length)))):"";
+        var pieces=length>HISTORY_CHUNK?HistoryChunks.split(text==null?historyText(session,sequence):text,HISTORY_CHUNK):List.of(new int[]{0,length});
+        var entries=new ArrayList<JsonNode>();
+        for(var piece:pieces){
+            int offset=piece[0],count=piece[1];entries.add(Json.object("sequence",sequence,"role",role,"provider",provider,"timestamp",timestamp,"revision",revision,"offset",offset,"length",count,"lines",Math.max(1,(int)((long)lines*count/Math.max(1,length))),"title",offset==0?title:""));
+        }
+        var computed=List.copyOf(entries);historyMessages.put(sequence,computed);
+        while(historyMessages.size()>8192)historyMessages.remove(historyMessages.keySet().iterator().next());
         return computed;
     }
     public synchronized List<JsonNode> historyIndex(String id)throws SQLException{
         long last=lastSequence(id),revision=messageRevision(id);var saved=historyIndexes.get(id);if(saved!=null&&saved.last==last&&saved.revision==revision)return saved.entries;
-        var entries=new ArrayList<JsonNode>();
-        try(var q=connection.prepareStatement("SELECT sequence,role,provider,length(text),substr(text,1,320),length(text)-length(replace(text,char(10),'')),created_at FROM messages WHERE session_id=? ORDER BY sequence")){
-            q.setString(1,id);try(var r=q.executeQuery()){while(r.next()){
-                int length=r.getInt(4);var pieces=length>HISTORY_CHUNK?pieces(id,r.getLong(1),length,revision):List.of(new int[]{0,length});
-                for(var piece:pieces){int offset=piece[0],count=piece[1];entries.add(Json.object("sequence",r.getLong(1),"role",r.getString(2),"provider",r.getString(3),"timestamp",r.getLong(7),"revision",revision,"offset",offset,"length",count,"lines",Math.max(1,(int)((long)r.getInt(6)*count/Math.max(1,length))),"title",offset==0&&r.getString(2).equals("user")?r.getString(5):""));}
-            }}
+        boolean appendOnly=saved!=null&&saved.revision==revision&&last>=saved.last;
+        var entries=appendOnly?new ArrayList<>(saved.entries):new ArrayList<JsonNode>();
+        // New messages get cheap SQL metadata together; edits reuse old rows and read only the invalidated text.
+        boolean metadata=saved==null||appendOnly;
+        try(var q=connection.prepareStatement("SELECT sequence,role,provider,created_at"+(metadata?",length(text),length(text)-length(replace(text,char(10),'')),substr(text,1,320)":"")+" FROM messages WHERE session_id=? AND sequence>? ORDER BY sequence")){
+            q.setString(1,id);q.setLong(2,appendOnly?saved.last:0);try(var r=q.executeQuery()){while(r.next())entries.addAll(historyMessage(id,r,revision,metadata));}
         }
         if(historyIndexes.size()>=16)historyIndexes.remove(historyIndexes.keySet().iterator().next());historyIndexes.put(id,new HistoryIndex(last,revision,List.copyOf(entries)));return List.copyOf(entries);
     }
@@ -508,7 +519,7 @@ public final class SessionStore implements AutoCloseable {
             execute("DELETE FROM run_progress WHERE run_id=?", runId);
             if(owner)connection.commit();
         } catch (SQLException | RuntimeException failure) {
-            if(owner)connection.rollback(); throw failure;
+            if(owner)rollback(); throw failure;
         } finally { if(owner)connection.setAutoCommit(true); }
     }
     /** Call only after the host has established it owns the database and no prior executor is live. */
@@ -528,7 +539,7 @@ public final class SessionStore implements AutoCloseable {
         if(!connection.getAutoCommit())return action.call();
         connection.setAutoCommit(false);
         try { T value=action.call();connection.commit();return value; }
-        catch(Exception | Error failure){connection.rollback();throw failure;}
+        catch(Exception | Error failure){rollback();throw failure;}
         finally{connection.setAutoCommit(true);}
     }
     public synchronized WorkerRun registerWorker(String runId,String sessionId,String jobId,long through,JsonNode spec)throws SQLException{
@@ -634,13 +645,13 @@ public final class SessionStore implements AutoCloseable {
                         String text=started>0?"Контекст сжат за "+compactionDuration(Math.max(0,timestamp-started))+".":"Контекст сжат.";
                         if(sequence>0){
                             execute("UPDATE messages SET text=? WHERE sequence=? AND session_id=?",text,sequence,sessionId);
-                            execute("INSERT INTO message_revisions VALUES(?,1) ON CONFLICT(session_id) DO UPDATE SET revision=revision+1",sessionId);
+                            historyMessages.remove(sequence);messagesChanged(sessionId);
                         }else append(sessionId,"system","TETHIUM",text,timestamp);
                     }
                 }
             }
             if(owner)connection.commit();
-        }catch(SQLException|RuntimeException failure){if(owner)connection.rollback();throw failure;}
+        }catch(SQLException|RuntimeException failure){if(owner)rollback();throw failure;}
         finally{if(owner)connection.setAutoCommit(true);}
     }
     private static String compactionDuration(long millis){
@@ -791,7 +802,7 @@ public final class SessionStore implements AutoCloseable {
                 }
             }
             connection.commit(); return session;
-        } catch (Exception e) { connection.rollback(); throw e; }
+        } catch (Exception e) { rollback(); throw e; }
         finally { connection.setAutoCommit(true); }
     }
     public synchronized void rename(String id, String title) throws SQLException {
@@ -880,7 +891,7 @@ public final class SessionStore implements AutoCloseable {
         var previous=operationResult(target,requestId,"submit");if(previous!=null)return previous;
         connection.setAutoCommit(false);
         try{var result=Json.object("jobId",submit(target,prompt,separate));rememberOperation(target,requestId,"submit",result);connection.commit();return result;}
-        catch(SQLException|RuntimeException e){connection.rollback();throw e;}finally{connection.setAutoCommit(true);}
+        catch(SQLException|RuntimeException e){rollback();throw e;}finally{connection.setAutoCommit(true);}
     }
     private List<String> promptParts(String prompt, String raw) throws SQLException {
         if (raw != null) {
@@ -908,7 +919,7 @@ public final class SessionStore implements AutoCloseable {
         try {
             for (int i = 0; i < queue.size(); i++) execute("UPDATE jobs SET queue_order=? WHERE id=? AND session_id=? AND status='QUEUED'", i + 1, queue.get(i).id(), sessionId);
             connection.commit();
-        } catch (SQLException e) { connection.rollback(); throw e; }
+        } catch (SQLException e) { rollback(); throw e; }
         finally { connection.setAutoCommit(true); }
     }
     /** Atomically removes one submission and persists it in the draft. Request IDs make retry safe. */
@@ -943,7 +954,7 @@ public final class SessionStore implements AutoCloseable {
             if(updateDesktopDraft)draft(sessionId, updatedDraft);
             execute("INSERT INTO queue_returns(request_id,session_id,result) VALUES(?,?,?)", requestId, sessionId, result.toString());
             connection.commit(); return result;
-        } catch (SQLException e) { connection.rollback(); throw e; }
+        } catch (SQLException e) { rollback(); throw e; }
         finally { connection.setAutoCommit(true); }
     }
     public synchronized void jobStatus(String id, String status) throws SQLException { execute("UPDATE jobs SET status=? WHERE id=?", status, id); }
@@ -1004,7 +1015,7 @@ public final class SessionStore implements AutoCloseable {
             for(var job:chosen) if(!job.id().equals(first)) execute("UPDATE jobs SET status='MERGED' WHERE id=?",job.id());
             execute("INSERT INTO queue_merges(job_id,snapshot) VALUES(?,?) ON CONFLICT(job_id) DO UPDATE SET snapshot=excluded.snapshot",first,snapshot.toString());
             rememberOperation(sessionId,requestId,"merge",result); connection.commit(); return result;
-        } catch(SQLException|RuntimeException e) { connection.rollback(); throw e; } finally { connection.setAutoCommit(true); }
+        } catch(SQLException|RuntimeException e) { rollback(); throw e; } finally { connection.setAutoCommit(true); }
     }
     /** Restore merged rows to their original neighbours; ordinary appended submissions split in place. */
     public synchronized JsonNode splitQueued(String sessionId,String jobId,String expectedPrompt,String requestId) throws SQLException {
@@ -1039,7 +1050,7 @@ public final class SessionStore implements AutoCloseable {
                 for(int i=1;i<parts.size();i++) { String id=enqueue(sessionId,job.sourceId(),parts.get(i)); ids.add(at++,id); restored.add(id); }
             }
             renumber(sessionId,ids); var result=Json.object("jobIds",restored); rememberOperation(sessionId,requestId,"split",result); connection.commit(); return result;
-        } catch(SQLException|RuntimeException e) { connection.rollback(); throw e; } finally { connection.setAutoCommit(true); }
+        } catch(SQLException|RuntimeException e) { rollback(); throw e; } finally { connection.setAutoCommit(true); }
     }
     public synchronized List<String> resultRecipients(Job job) throws SQLException {
         var recipients=new LinkedHashSet<String>(); collectRecipients(mergeSnapshot(job.id()),job.partsCount(),recipients); if(job.sourceId()!=null)recipients.add(job.sourceId()); return List.copyOf(recipients);
@@ -1059,7 +1070,7 @@ public final class SessionStore implements AutoCloseable {
             execute("INSERT INTO queue_interruptions(job_id,affected) VALUES(?,?)",job,Json.MAPPER.valueToTree(affected).toString());
             if(updateDesktopDraft){draft(target,""); draftImages(target,Json.MAPPER.createArrayNode());}
             var result=Json.object("jobId",job,"affected",affected); rememberOperation(target,requestId,"interrupt",result); connection.commit(); return result;
-        } catch(SQLException|RuntimeException e) { connection.rollback(); throw e; } finally { connection.setAutoCommit(true); }
+        } catch(SQLException|RuntimeException e) { rollback(); throw e; } finally { connection.setAutoCommit(true); }
     }
     /** Promote the existing head atomically: keep grouped parts, attachments and delegation recipients. */
     public synchronized JsonNode interruptQueueHead(String target,List<String> affected,String requestId)throws SQLException{
@@ -1069,7 +1080,7 @@ public final class SessionStore implements AutoCloseable {
             for(String id:affected)execute("UPDATE jobs SET urgent=0 WHERE session_id=? AND status='QUEUED'",id);execute("UPDATE jobs SET urgent=1 WHERE id=?",job);
             execute("INSERT INTO queue_interruptions VALUES(?,?) ON CONFLICT(job_id) DO UPDATE SET affected=excluded.affected",job,Json.MAPPER.valueToTree(affected).toString());
             var result=Json.object("jobId",job,"affected",affected);rememberOperation(target,requestId,"interrupt",result);connection.commit();return result;
-        }catch(SQLException|RuntimeException error){connection.rollback();throw error;}finally{connection.setAutoCommit(true);}
+        }catch(SQLException|RuntimeException error){rollback();throw error;}finally{connection.setAutoCommit(true);}
     }
     /** Transient ordering barrier, independent of the user's durable queue pause. */
     public synchronized boolean interruptionBlocks(String session,String candidateJob)throws SQLException{return interruptionBlocker(session,candidateJob)!=null;}
@@ -1142,7 +1153,7 @@ public final class SessionStore implements AutoCloseable {
                 q.setString(1,target);q.setString(2,updateKey);try(var r=q.executeQuery()){if(r.next()){sequence=r.getLong(1);current=r.getString(2);}}
             }
             if(sequence==0){append(target,"session","TETHIUM",firstText);execute("INSERT INTO session_updates VALUES(?,?,?)",target,updateKey,lastSequence(target));}
-            else{execute("UPDATE messages SET text=? WHERE sequence=? AND session_id=?",current+"\n\n"+continuation,sequence,target);messagesChanged(target);}
+            else{execute("UPDATE messages SET text=? WHERE sequence=? AND session_id=?",current+"\n\n"+continuation,sequence,target);historyMessages.remove(sequence);messagesChanged(target);}
             return null;
         });
     }
@@ -1192,6 +1203,9 @@ public final class SessionStore implements AutoCloseable {
             q.executeUpdate();
         }
     }
+    private void rollback()throws SQLException{
+        try{connection.rollback();}finally{historyIndexes.clear();historyMessages.clear();}
+    }
     /** Forget the executor conversations of a session: the next run starts a fresh one while the Tethium chat stays. */
     public synchronized int unbind(String id) throws SQLException {
         get(id); try (var q = connection.prepareStatement("DELETE FROM bindings WHERE session_id=?")) { q.setString(1, id); return q.executeUpdate(); }
@@ -1209,10 +1223,11 @@ public final class SessionStore implements AutoCloseable {
     }
     private int deleteMessage(String id, long sequence) throws SQLException {
         execute("DELETE FROM compaction_messages WHERE message_sequence=?", sequence);
+        historyMessages.remove(sequence);
         try (var q = connection.prepareStatement("DELETE FROM messages WHERE session_id=? AND sequence=?")) { q.setString(1, id); q.setLong(2, sequence); return q.executeUpdate(); }
     }
     private void messagesChanged(String id) throws SQLException {
-        execute("INSERT INTO message_revisions VALUES(?,1) ON CONFLICT(session_id) DO UPDATE SET revision=revision+1", id); historyIndexes.remove(id);
+        execute("INSERT INTO message_revisions VALUES(?,1) ON CONFLICT(session_id) DO UPDATE SET revision=revision+1", id);
     }
     /** One action for everything that keeps a session busy on its own: autonomy, schedule, queue pause, attention mark and draft. */
     public synchronized void resetState(String id) throws Exception {
