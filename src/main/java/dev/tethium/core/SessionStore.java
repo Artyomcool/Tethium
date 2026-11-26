@@ -54,6 +54,7 @@ public final class SessionStore implements AutoCloseable {
             s.execute("CREATE TABLE IF NOT EXISTS run_progress(run_id TEXT PRIMARY KEY REFERENCES runs(id), session_id TEXT NOT NULL, output TEXT NOT NULL DEFAULT '')");
             s.execute("CREATE TABLE IF NOT EXISTS project_collapsed(project_id TEXT PRIMARY KEY)");
             s.execute("CREATE TABLE IF NOT EXISTS cascade_pauses(session_id TEXT PRIMARY KEY,origin TEXT NOT NULL)");
+            s.execute("CREATE TABLE IF NOT EXISTS quota_guards(provider TEXT PRIMARY KEY,threshold INTEGER NOT NULL,until INTEGER NOT NULL,tripped INTEGER NOT NULL DEFAULT 0,created_at INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS executor_failovers(session_id TEXT PRIMARY KEY,provider TEXT NOT NULL,model TEXT,effort TEXT,replacement_provider TEXT NOT NULL,replacement_model TEXT,at INTEGER NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS events(sequence INTEGER PRIMARY KEY AUTOINCREMENT, session_id TEXT NOT NULL REFERENCES sessions(id), run_id TEXT NOT NULL, type TEXT NOT NULL, payload TEXT NOT NULL)");
             s.execute("CREATE TABLE IF NOT EXISTS jobs(id TEXT PRIMARY KEY, session_id TEXT NOT NULL REFERENCES sessions(id), source_id TEXT REFERENCES sessions(id), prompt TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'QUEUED')");
@@ -181,6 +182,19 @@ public final class SessionStore implements AutoCloseable {
         }
         return result;
     }
+    /** A user's guard: until a time, an executor stops taking work once its quota falls to a threshold, until allowed again. */
+    public synchronized void quotaGuard(String provider,int threshold,long until)throws SQLException{
+        execute("INSERT INTO quota_guards VALUES(?,?,?,0,?) ON CONFLICT(provider) DO UPDATE SET threshold=excluded.threshold,until=excluded.until,tripped=0,created_at=excluded.created_at",provider,threshold,until,System.currentTimeMillis());
+    }
+    public synchronized List<JsonNode> quotaGuards()throws SQLException{
+        var result=new ArrayList<JsonNode>();
+        try(var q=connection.createStatement();var r=q.executeQuery("SELECT provider,threshold,until,tripped FROM quota_guards ORDER BY provider")){
+            while(r.next())result.add(Json.object("provider",r.getString(1),"threshold",r.getInt(2),"until",r.getLong(3),"tripped",r.getInt(4)==1));
+        }
+        return result;
+    }
+    public synchronized void tripQuotaGuard(String provider)throws SQLException{execute("UPDATE quota_guards SET tripped=1 WHERE provider=?",provider);}
+    public synchronized boolean removeQuotaGuard(String provider)throws SQLException{try(var q=connection.prepareStatement("DELETE FROM quota_guards WHERE provider=?")){q.setString(1,provider);return q.executeUpdate()>0;}}
     public synchronized void clearFailover(String session)throws SQLException{execute("DELETE FROM executor_failovers WHERE session_id=?",session);}
     public synchronized void releaseQueuedExecution(String session)throws SQLException{
         execute("DELETE FROM job_execution WHERE job_id IN (SELECT id FROM jobs WHERE session_id=? AND status='QUEUED') AND job_id NOT IN (SELECT job_id FROM backlog_tasks WHERE job_id IS NOT NULL)",session);

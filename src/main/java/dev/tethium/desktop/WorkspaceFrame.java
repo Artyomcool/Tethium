@@ -25,6 +25,7 @@ public final class WorkspaceFrame extends JFrame {
     private final JButton archiveToggle = Theme.button("› Неактивные", "Показать деактивированные сессии", this::toggleInactive);
     private final JLabel heading = new JLabel("Выберите сессию"), status = new JLabel(" ");
     private final QuotaPanel quota = new QuotaPanel(this::refreshQuota,this::resetQuota,this::showUsage,this::loginClaude);
+    { quota.guards(this::quotaGuard,this::allowQuota); }
     private ChatTranscript transcript;
     private JScrollPane history;
     private VirtualHistory pagedHistory;
@@ -1072,6 +1073,27 @@ public final class WorkspaceFrame extends JFrame {
         action(()->{Path pending=dev.tethium.host.AppPaths.data().resolve("quota-reset-pending.json");String key=Files.exists(pending)?Json.MAPPER.readTree(pending.toFile()).path("requestId").asText():UUID.randomUUID().toString();Files.createDirectories(pending.getParent());Files.writeString(pending,Json.object("requestId",key).toString());var result=host.post("/quota/reset",Json.object("requestId",key,"confirmed",true));Files.deleteIfExists(pending);SwingUtilities.invokeLater(()->JOptionPane.showMessageDialog(this,switch(result.path("outcome").asText()){case "reset","alreadyRedeemed"->"Сброс применён. Обновляем квоту.";case "nothingToReset"->"Сейчас нет подходящего лимита для сброса.";case "noCredit"->"Доступные сбросы закончились.";default->"Ответ сервиса: "+result.path("outcome").asText();}));});
     }
     private void refreshQuota() { action(() -> host.post("/quota/refresh", Json.object())); }
+    /** A quota guard: until a time, an executor stops taking any work once its quota falls to a threshold, until allowed again. */
+    private void quotaGuard(){
+        var providers=new JComboBox<>(new String[]{"Claude","Codex"});
+        var threshold=new JSpinner(new SpinnerNumberModel(10,0,99,1));var hours=new JSpinner(new SpinnerNumberModel(12,1,336,1));
+        var form=new JPanel(new GridLayout(0,2,8,6));
+        form.add(new JLabel("Исполнитель:"));form.add(providers);
+        form.add(new JLabel("Остановить при квоте, %:"));form.add(threshold);
+        form.add(new JLabel("Действует, часов:"));form.add(hours);
+        var text=new JLabel("<html><div style='width:320px'>Когда квота опустится до порога, новые запуски на этом исполнителе остановятся — и ваши, и автоматические: автономные цели, расписания, отложенные задачи. Идущие запуски доработают. Продолжить можно только вручную.</div></html>");
+        text.setForeground(Theme.MUTED);var content=new JPanel(new BorderLayout(0,10));content.add(form,BorderLayout.NORTH);content.add(text);
+        Object[] options={"Поставить","Снять стража","Отмена"};
+        int choice=JOptionPane.showOptionDialog(this,content,"Страж квоты",JOptionPane.DEFAULT_OPTION,JOptionPane.PLAIN_MESSAGE,null,options,options[0]);
+        String provider=providers.getSelectedIndex()==0?"CLAUDE":"CODEX";
+        if(choice==0)action(()->host.post("/quota/guards",Json.object("provider",provider,"threshold",(Integer)threshold.getValue(),"hours",(Integer)hours.getValue())));
+        else if(choice==1)action(()->host.post("/quota/guards/remove",Json.object("provider",provider)));
+    }
+    private void allowQuota(String provider){
+        String name=provider.equals("CLAUDE")?"Claude":"Codex";
+        if(JOptionPane.showConfirmDialog(this,"Разрешить работу "+name+" и снять стража? Ожидающие запуски продолжатся сразу.","Страж квоты",JOptionPane.YES_NO_OPTION)==JOptionPane.YES_OPTION)
+            action(()->host.post("/quota/guards/remove",Json.object("provider",provider)));
+    }
     private void loginClaude(){action(()->host.post("/claude/auth/login",Json.object()));}
     private void groupQueued(boolean merge,JsonNode selectedJobs) {
         if(selected==null||grouping||!groupingAvailable)return;String id=selected;grouping=true;refreshTakeControls();

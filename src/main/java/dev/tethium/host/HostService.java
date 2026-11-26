@@ -114,7 +114,7 @@ public final class HostService implements AutoCloseable {
             workers.submit(()->observeRestoredWorker(saved.sessionId(),run));
         }
         for (var project : store.projects()) for (var session : store.list(project.id())) schedule(session.id());
-        backlog=new Backlog(store,quota::snapshot,()->cpu==null?Json.object():cpu.machineUsage(),this::sessionBusy,this::bump,adapters.keySet(),id->modelsForBacklog(id));
+        backlog=new Backlog(store,this::guardedQuota,()->cpu==null?Json.object():cpu.machineUsage(),this::sessionBusy,this::bump,adapters.keySet(),id->modelsForBacklog(id));
         quotaMonitor.scheduleWithFixedDelay(this::observeQuota,0,15,TimeUnit.SECONDS);
         quotaMonitor.scheduleWithFixedDelay(this::pruneWorkerJournals,2,60,TimeUnit.MINUTES);
         quotaMonitor.scheduleWithFixedDelay(this::observeBacklog,15,15,TimeUnit.SECONDS);
@@ -302,6 +302,17 @@ public final class HostService implements AutoCloseable {
         }
         if(path.equals("/claude/auth/login")){if(claudeLogin==null)throw new IllegalStateException("Claude CLI не подключён");return claudeLogin.start();}
         if (path.equals("/quota/refresh")) { quota.refresh(); return quotaState(); }
+        if(path.equals("/quota/guards")){
+            var provider=AgentAdapter.Provider.of(body.path("provider").asText(null));
+            int threshold=Math.clamp(body.path("threshold").asInt(10),0,99),hours=Math.clamp(body.path("hours").asInt(12),1,24*14);
+            store.quotaGuard(provider.name(),threshold,System.currentTimeMillis()+hours*3_600_000L);bump();
+            return Json.object("ok",true);
+        }
+        if(path.equals("/quota/guards/remove")){
+            // Removing a tripped guard is the user's permission to go on: queued and automatic work resumes at once.
+            store.removeQuotaGuard(AgentAdapter.Provider.of(body.path("provider").asText(null)).name());wakeAll();
+            return Json.object("ok",true);
+        }
         if(path.equals("/project-groups")){var group=store.createProjectGroup(body.path("title").asText());return Json.object("id",group.id(),"title",group.title(),"position",group.position(),"collapsed",group.collapsed());}
         if(path.matches("/project-groups/[a-zA-Z0-9-]+/(rename|collapsed|remove)")){
             var parts=path.split("/");String id=parts[2];switch(parts[3]){
@@ -490,7 +501,7 @@ public final class HostService implements AutoCloseable {
         for (var project : projects) for (var session : store.list(project.id())) if(store.trashedAt(session.id())==0)sessions.add(sessionJson(session));
         var parents=store.projectParents();var favorites=store.favoriteProjects();var favoriteSessions=store.favoriteSessions();var backlogWaiting=store.backlogWaiting();var collapsed=store.collapsedProjects();var projectValues=new ArrayList<JsonNode>();for(var p:projects){var parent=parents.get(p.id());projectValues.add(Json.object("backlog",backlogWaiting.getOrDefault(p.id(),0),"id",p.id(),"collapsed",collapsed.contains(p.id()),"favorite",favorites.contains(p.id()),"favoriteSessionId",favoriteSessions.get(p.id()),"parentKind",parent==null?"root":parent.kind(),"parentId",parent==null?null:parent.id(),"root",p.root(),"title",p.title(),"active",store.projectActive(p.id()),"crossProject",store.crossProject(p.id()),"icon",ProjectIcons.version(Path.of(p.root())),"panel",projectPanels.read(Path.of(p.root())),"widget",projectWidgets.read(Path.of(p.root()))));}
         var groupValues=store.projectGroups().stream().map(g->Json.object("id",g.id(),"title",g.title(),"position",g.position(),"collapsed",g.collapsed())).toList();
-        var result = Json.object("machineUsage",machineUsage(),"resources",resources.snapshot(),"reminders",reminderRows(),"files",store.projectFiles(),"resourceUsage",usage.sidebar(),"revision", revision.get(), "projectGroups",groupValues,"projectTreeOrder",store.projectTreeOrder(),"favoriteOrder",store.favoriteOrder(),"projects", projectValues, "sessions", sessions, "quota", quotaState(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
+        var result = Json.object("machineUsage",machineUsage(),"resources",resources.snapshot(),"reminders",reminderRows(),"files",store.projectFiles(),"resourceUsage",usage.sidebar(),"revision", revision.get(), "projectGroups",groupValues,"projectTreeOrder",store.projectTreeOrder(),"favoriteOrder",store.favoriteOrder(),"projects", projectValues, "sessions", sessions, "quota", quotaWithGuards(), "updating", draining, "queueEditing", true, "queueGrouping", true, "priorityInterrupt", true, "imageAttachments", true);
         if (selected != null && sessions.stream().anyMatch(s -> s.path("id").asText().equals(selected))) {
             var messages = new ArrayList<SessionStore.Message>(); long cursor = 0;
             while (!window) { var page = store.messages(selected, cursor, 1000); messages.addAll(page); if (page.size() < 1000) break; cursor = page.getLast().sequence(); }
@@ -582,6 +593,8 @@ public final class HostService implements AutoCloseable {
         if (closed || draining || running.containsKey(id) || usage.waitState(id).path("waiting").asBoolean() || !store.acceptsWork(id)) return;
         store.ensureAutonomousContinuation(id);
         var queue=store.queued(id); if(queue.isEmpty() || store.queuePaused(id) && !queue.getFirst().urgent()) return;
+        // A tripped quota guard stops every start on its executor: the user's messages, autonomous goals, schedules, deferred tasks.
+        if(guardBlocks(AgentAdapter.Provider.of(store.executionPreferences(id,queue.getFirst().id()).path("provider").asText(null))))return;
         // Another session's urgent correction holds this queue, but the user's own "now" in this session outranks that hold.
         if(!queue.getFirst().urgent()&&store.interruptionBlocks(id,queue.getFirst().id()))return;
         if(queue.getFirst().urgent() && store.interruptionScope(queue.getFirst().id()).stream().anyMatch(running::containsKey)) return;
@@ -776,6 +789,7 @@ public final class HostService implements AutoCloseable {
         var snapshot=quota.snapshot();long updated=snapshot.path("updatedAt").asLong();if(updated>quotaObserved){usage.snapshot(snapshot);quotaObserved=updated;}
         if(closed||draining)return;
         returnFromFailover(snapshot);
+        expireQuotaGuards();
         for(var project:store.projects())for(var session:store.list(project.id()))releaseQuotaWait(session.id(),snapshot,false);
     }catch(Exception e){if(!closed)System.err.println("Quota monitor: "+e.getMessage());}}
     /**
@@ -783,6 +797,45 @@ public final class HostService implements AutoCloseable {
      * and any Codex quota wait released. A session whose executor the user changed since then keeps the user's choice.
      */
     private final Map<String,Long> failbackAt=new ConcurrentHashMap<>(),failbackHold=new ConcurrentHashMap<>();
+    /** The lowest remaining percent of an executor's account windows, or null while unknown. */
+    private static Integer remainingOf(JsonNode snapshot,AgentAdapter.Provider provider){
+        String id=provider==AgentAdapter.Provider.CLAUDE?"claude":"codex";Integer least=null;
+        for(var b:snapshot.path("buckets"))if(b.path("id").asText().equals(id))for(var w:b.path("windows"))if(w.path("remainingPercent").isNumber())least=least==null?w.path("remainingPercent").asInt():Math.min(least,w.path("remainingPercent").asInt());
+        return least;
+    }
+    /** A guard trips once the executor's quota is at its threshold and then stays tripped until the user allows it or it expires. */
+    private boolean guardBlocks(AgentAdapter.Provider provider)throws Exception{
+        for(var guard:store.quotaGuards()){
+            if(!guard.path("provider").asText().equals(provider.name())||guard.path("until").asLong()<=System.currentTimeMillis())continue;
+            if(guard.path("tripped").asBoolean())return true;
+            Integer left=remainingOf(quota.snapshot(),provider);
+            if(left!=null&&left<=guard.path("threshold").asInt()){store.tripQuotaGuard(provider.name());bump();return true;}
+        }
+        return false;
+    }
+    /** Deferred tasks read quota from this view: an executor stopped by a guard shows as having none left. */
+    private JsonNode guardedQuota(){
+        var snapshot=(com.fasterxml.jackson.databind.node.ObjectNode)quota.snapshot().deepCopy();
+        try{
+            for(var provider:AgentAdapter.Provider.values()){
+                if(!guardBlocks(provider))continue;
+                String prefix=provider==AgentAdapter.Provider.CLAUDE?"claude":"codex";
+                for(var b:snapshot.path("buckets"))if(b.path("id").asText().startsWith(prefix))for(var w:b.path("windows"))if(w instanceof com.fasterxml.jackson.databind.node.ObjectNode o)o.put("remainingPercent",0);
+            }
+        }catch(Exception e){System.err.println("Quota guard: "+e.getMessage());}
+        return snapshot;
+    }
+    private synchronized void expireQuotaGuards()throws Exception{
+        boolean changed=false;for(var guard:store.quotaGuards())if(guard.path("until").asLong()<=System.currentTimeMillis())changed|=store.removeQuotaGuard(guard.path("provider").asText());
+        if(changed)wakeAll();
+    }
+    private void wakeAll()throws Exception{bump();for(var project:store.projects())for(var session:store.list(project.id()))schedule(session.id());}
+    /** The quota with the guards, as the window shows it. */
+    private JsonNode quotaWithGuards()throws Exception{
+        var value=(com.fasterxml.jackson.databind.node.ObjectNode)quotaState().deepCopy();
+        var guards=Json.MAPPER.createArrayNode();for(var guard:store.quotaGuards())if(guard.path("until").asLong()>System.currentTimeMillis())guards.add(guard);
+        value.set("guards",guards);return value;
+    }
     private synchronized void returnFromFailover(JsonNode snapshot)throws Exception{
         for(var failover:store.failovers()){
             String id=failover.path("session").asText();

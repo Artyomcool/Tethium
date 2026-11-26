@@ -20,6 +20,11 @@ final class QuotaPanel extends JPanel {
     private JsonNode state = Json.object();
     private String signature = "";
     private final Runnable resetAction,claudeAuthAction;
+    private Runnable guardAction=()->{};
+    private java.util.function.Consumer<String> allowAction=p->{};
+    /** The quota guard: a header button to set one, and a line per active guard; a tripped one offers to allow the executor. */
+    void guards(Runnable setup,java.util.function.Consumer<String> allow){guardAction=setup;allowAction=allow;guardButton.setVisible(true);}
+    private final JButton guardButton=new JButton("Страж");
     private static final DateTimeFormatter RESET = DateTimeFormatter.ofPattern("dd.MM, HH:mm");
 
     QuotaPanel(Runnable refreshAction) {
@@ -47,7 +52,10 @@ final class QuotaPanel extends JPanel {
         refresh.setDisabledIcon(refresh.getIcon());
         animation = new javax.swing.Timer(60, e -> { angle += Math.PI / 12; refresh.repaint(); });
         timestamp.setName("quota.updatedAt"); timestamp.setForeground(Theme.MUTED); timestamp.setFont(timestamp.getFont().deriveFont(10f));
-        var actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, Theme.UNIT, 0)); actions.setOpaque(false); actions.add(timestamp); actions.add(refresh); header.add(actions, BorderLayout.EAST);
+        var actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, Theme.UNIT, 0)); actions.setOpaque(false); actions.add(timestamp);
+        guardButton.setName("quota.guard");guardButton.setFont(guardButton.getFont().deriveFont(10f));guardButton.setToolTipText("Остановить исполнителя, когда его квота опустится до порога");
+        Theme.toolbar(guardButton);guardButton.setVisible(false);guardButton.addActionListener(e->guardAction.run());actions.add(guardButton);
+        actions.add(refresh); header.add(actions, BorderLayout.EAST);
         add(header, BorderLayout.NORTH);add(machine,BorderLayout.SOUTH);
         windows.setOpaque(false); windows.setName("quota.windows"); add(windows);
         notice.setName("quota.notice"); notice.setFont(notice.getFont().deriveFont(11f)); notice.setForeground(Theme.MUTED);
@@ -65,6 +73,7 @@ final class QuotaPanel extends JPanel {
         refresh.setEnabled(!refreshing); refresh.setToolTipText(refreshing ? "Обновляем квоту…" : "Обновить квоты аккаунтов Codex и Claude");
         if (refreshing && isDisplayable()) animation.start(); else { animation.stop(); angle = 0; }
         int row = 0; boolean stale = stale(),authRequired=state.path("authRequired").path("claude").asBoolean(),authShown=false;
+        for(var guard:state.path("guards"))addGuard(row++,guard);
         var count = state.path("resetCredits").path("availableCount");
         for (var bucket : state.path("buckets")) {
             String id = bucket.path("id").asText(); boolean codex = id.equals("codex");
@@ -109,6 +118,18 @@ final class QuotaPanel extends JPanel {
         if (stale) tooltip += " Устаревшие данные.";
         if (!state.path("error").asText().isBlank()) tooltip += " " + state.path("error").asText();
         title.setToolTipText(tooltip); timestamp.setToolTipText(tooltip); notice.setToolTipText(tooltip); setToolTipText(tooltip); revalidate(); repaint();
+    }
+    private static final DateTimeFormatter UNTIL=DateTimeFormatter.ofPattern("dd.MM HH:mm");
+    private void addGuard(int row,JsonNode guard){
+        String provider=guard.path("provider").asText(),name=provider.equals("CLAUDE")?"Claude":"Codex";
+        boolean tripped=guard.path("tripped").asBoolean();int threshold=guard.path("threshold").asInt();
+        String until=UNTIL.format(java.time.Instant.ofEpochMilli(guard.path("until").asLong()).atZone(java.time.ZoneId.systemDefault()));
+        var line=new JLabel(tripped?name+" остановлен стражем (≤"+threshold+"%) · разрешить":"Страж "+name+": стоп при ≤"+threshold+"% до "+until);
+        line.setName("quota.guard.line");line.setFont(line.getFont().deriveFont(tripped?Font.BOLD:Font.PLAIN,11f));line.setForeground(tripped?Theme.RED:Theme.MUTED);
+        line.setToolTipText(tripped?"Новые запуски на "+name+" стоят, включая автономные цели, расписания и отложенные задачи. Нажмите, чтобы разрешить и снять стража":"Действует до "+until+". Нажмите, чтобы изменить или снять");
+        line.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        line.addMouseListener(new java.awt.event.MouseAdapter(){public void mouseClicked(java.awt.event.MouseEvent e){if(tripped)allowAction.accept(provider);else guardAction.run();}});
+        var c=cell(0,row,1);c.gridwidth=3;windows.add(line,c);
     }
     private void addClaudeAuth(int row){
         boolean running=state.path("authLogin").path("running").asBoolean();
